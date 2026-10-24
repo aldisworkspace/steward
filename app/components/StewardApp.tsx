@@ -6,6 +6,8 @@ import type { GrantTerms } from "@/lib/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { fmtRisk, fmtSentenceAmount, fmtTableAmount, relativeTime } from "../format";
+import { getDemoPasscode, hasDemoWriteAccess, initDemoPasscodeFromUrl } from "../lib/demoPasscode";
+import { messageFromConvexError } from "../lib/convexError";
 import { CaseFile } from "./CaseFile";
 import { RedPenStrike } from "./RedPenStrike";
 import { WhyDrawer } from "./WhyDrawer";
@@ -26,8 +28,11 @@ export function StewardApp() {
   const grants = useQuery(api.ui.grantsSheets);
   const ledger = useQuery(api.ui.transactionLedger);
 
+  const demoGate = useQuery(api.demoAuth.gate);
   const runAgent = useAction(api.agent.runAgent);
   const resetRun = useMutation(api.ingest.resetRunState);
+  const resetExtractErrors = useMutation(api.grants.resetExtractErrors);
+  const extractGrant = useAction(api.agent.extractGrant);
   const regenerateNarrative = useAction(api.report.regenerateNarrative);
 
   const [tab, setTab] = useState<Tab>("inbox");
@@ -41,12 +46,22 @@ export function StewardApp() {
   const [prevNeedYou, setPrevNeedYou] = useState<number | null>(null);
   const [countAnim, setCountAnim] = useState(false);
   const [riskOpen, setRiskOpen] = useState(false);
+  const [inlineError, setInlineError] = useState<string | null>(null);
+  const [statusNote, setStatusNote] = useState<string | null>(null);
+  const [passcodeReady, setPasscodeReady] = useState(false);
   const caseData = useQuery(api.ui.caseFile, selected ? { txnId: selected } : "skip");
   const grantList = useQuery(api.grants.list);
-  const bothReady = (grantList ?? []).filter((g) => g.status === "ready").length >= 2;
+  const grantsReady = (grantList ?? []).filter((g) => g.status === "ready").length >= 1;
   const showBadge = loaded || (counts && counts.transactions > 0);
   const actingAsSteward = actor === "steward";
-  const actorName = ACTORS.find((a) => a.id === actor)!.label.split(" (")[0];
+  const actorLabel = ACTORS.find((a) => a.id === actor)!.label;
+  const passcode = getDemoPasscode();
+  const canWrite = passcodeReady && hasDemoWriteAccess(demoGate?.requiresPasscode ?? false);
+
+  useEffect(() => {
+    initDemoPasscodeFromUrl();
+    setPasscodeReady(true);
+  }, []);
 
   const exceptions = queue ?? [];
   useEffect(() => {
@@ -85,30 +100,65 @@ export function StewardApp() {
   }, [onKey]);
 
   async function loadDemo(opts?: { autoRun?: boolean }) {
+    if (!canWrite) {
+      setInlineError("View-only demo — add ?key= to the URL for write access.");
+      return;
+    }
     setSeedLoading(true);
+    setInlineError(null);
     try {
-      const res = await fetch("/api/seed", { method: "POST" });
-      if (!res.ok) throw new Error("Seed failed");
+      const res = await fetch("/api/seed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passcode: getDemoPasscode() }),
+      });
+      const body = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || body.ok === false) {
+        throw new Error(body.error ?? "Seed failed");
+      }
       setLoaded(true);
       if (opts?.autoRun) {
-        await runAgent({});
+        await runAgent({ passcode: getDemoPasscode() });
       }
+    } catch (e) {
+      setInlineError(messageFromConvexError(e));
     } finally {
       setSeedLoading(false);
     }
   }
 
   async function onReset() {
-    await resetRun({});
-    setSelected(null);
+    if (!canWrite) return;
+    setInlineError(null);
+    try {
+      await resetRun({ passcode: getDemoPasscode() });
+      setSelected(null);
+    } catch (e) {
+      setInlineError(messageFromConvexError(e));
+    }
   }
 
   async function onRunSteward() {
+    if (!canWrite) return;
     setRunLoading(true);
+    setInlineError(null);
     try {
-      await runAgent({});
+      await runAgent({ passcode: getDemoPasscode() });
+    } catch (e) {
+      setInlineError(messageFromConvexError(e));
     } finally {
       setRunLoading(false);
+    }
+  }
+
+  async function retryGrant(grantDocId: string) {
+    if (!canWrite) return;
+    setInlineError(null);
+    try {
+      await resetExtractErrors({ passcode: getDemoPasscode() });
+      await extractGrant({ grantDocId: grantDocId as never, passcode: getDemoPasscode() });
+    } catch (e) {
+      setInlineError(messageFromConvexError(e));
     }
   }
 
@@ -118,9 +168,11 @@ export function StewardApp() {
       return `Steward is reviewing ${n} transactions…`;
     }
     if (!counts?.transactions) return null;
-    if (stats?.needYou === 0) return "Everything reconciles. Nothing needs you.";
+    if (stats?.needYou === 0 && counts?.transactions) return "Everything reconciles. Nothing needs you.";
     if (!stats) return "Loading review…";
-    return `Steward reviewed ${stats.total} transactions. ${stats.clean} are clean. ${stats.needYou} need you — ${fmtRisk(stats.atRiskCents)} of grant charges at risk.`;
+    const resolved = stats.resolved ?? 0;
+    const resolvedBit = resolved > 0 ? `, ${resolved} resolved` : "";
+    return `Steward reviewed ${stats.total} transactions. ${stats.clean} are clean. ${stats.needYou} need you${resolvedBit} — ${fmtRisk(stats.atRiskCents)} of grant charges at risk.`;
   }, [run, stats, counts]);
 
   const blocked = exceptions.filter((e) => e.status === "blocked");
@@ -154,6 +206,9 @@ export function StewardApp() {
           <span className="rounded-[4px] border border-pencil/30 bg-pencil-wash px-2 py-0.5 text-[13px] text-pencil">
             Synthetic demo data
           </span>
+        )}
+        {passcodeReady && demoGate?.requiresPasscode && !canWrite && (
+          <span className="text-[13px] text-ink-2">View-only demo</span>
         )}
         <div className="ml-auto flex items-center gap-2 text-[13px]">
           <label htmlFor="actor" className="text-ink-2">
@@ -205,6 +260,11 @@ export function StewardApp() {
             </span>
           )}
         </p>
+        {(inlineError || statusNote) && (
+          <p className="mt-2 text-[13px] text-redpen" role="alert">
+            {inlineError ?? statusNote}
+          </p>
+        )}
         {run?.status === "error" && run.errors.length > 0 && (
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <p className="text-[13px] text-redpen">{run.errors[0]}</p>
@@ -234,13 +294,45 @@ export function StewardApp() {
           </button>
           <button
             type="button"
-            disabled={!bothReady || runLoading || run?.status === "running"}
+            disabled={!canWrite || !grantsReady || runLoading || run?.status === "running"}
             onClick={() => void onRunSteward()}
             className="text-ledger underline disabled:opacity-40"
           >
             Run Steward
           </button>
         </div>
+        {(grantList ?? []).length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(grantList ?? []).map((g) => (
+              <span
+                key={g._id}
+                className={`inline-flex items-center gap-2 rounded-[4px] border px-2 py-1 text-[13px] ${
+                  g.status === "ready"
+                    ? "border-ledger/40 text-ledger"
+                    : g.status === "error"
+                      ? "border-redpen/40 text-redpen"
+                      : "border-rule text-ink-2"
+                }`}
+              >
+                {g.fileName.replace(".pdf", "")}: {g.status}
+                {g.status === "error" && g.error && (
+                  <span className="max-w-[200px] truncate" title={g.error}>
+                    {g.error}
+                  </span>
+                )}
+                {g.status === "error" && canWrite && (
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => void retryGrant(g._id)}
+                  >
+                    Retry
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <nav className="flex gap-6 border-b border-rule bg-sheet px-6 text-[15px]">
@@ -281,8 +373,10 @@ export function StewardApp() {
             <CaseFile
               data={caseData}
               actingAsSteward={actingAsSteward}
-              actorName={actorName}
-              onToast={() => {}}
+              actorLabel={actorLabel}
+              passcode={getDemoPasscode()}
+              canWrite={canWrite}
+              onStatusLine={setStatusNote}
               onWhy={() => setWhyOpen(true)}
               strikeKey={selected ?? ""}
             />
@@ -300,10 +394,22 @@ export function StewardApp() {
         />
       )}
       {tab === "grants" && <GrantsTab grants={grants} />}
-      {tab === "report" && <ReportTab grants={grants} regenerateNarrative={regenerateNarrative} />}
+      {tab === "report" && (
+        <ReportTab
+          grants={grants}
+          canWrite={canWrite}
+          regenerateNarrative={(args) => regenerateNarrative({ ...args, passcode: getDemoPasscode() })}
+        />
+      )}
       {tab === "proof" && <ProofTab run={run} />}
 
-      <WhyDrawer txnId={selected} open={whyOpen} onClose={() => setWhyOpen(false)} />
+      <WhyDrawer
+        txnId={selected}
+        open={whyOpen}
+        onClose={() => setWhyOpen(false)}
+        passcode={getDemoPasscode()}
+        canWrite={canWrite}
+      />
     </div>
   );
 }
@@ -583,9 +689,11 @@ function GrantsTab({
 
 function ReportTab({
   grants,
+  canWrite,
   regenerateNarrative,
 }: {
   grants: { terms: unknown }[] | undefined;
+  canWrite: boolean;
   regenerateNarrative: (args: { grantId: string }) => Promise<string>;
 }) {
   const grantIds = (grants ?? [])
@@ -594,7 +702,7 @@ function ReportTab({
   return (
     <div className="report-print space-y-10 p-6 text-[15px]">
       {grantIds.map((gid) => (
-        <GrantReportSheet key={gid} grantId={gid} regenerateNarrative={regenerateNarrative} />
+        <GrantReportSheet key={gid} grantId={gid} canWrite={canWrite} regenerateNarrative={regenerateNarrative} />
       ))}
       <button
         type="button"
@@ -609,14 +717,17 @@ function ReportTab({
 
 function GrantReportSheet({
   grantId,
+  canWrite,
   regenerateNarrative,
 }: {
   grantId: string;
+  canWrite: boolean;
   regenerateNarrative: (args: { grantId: string }) => Promise<string>;
 }) {
   const data = useQuery(api.report.grantReportData, { grantId });
   const [narrative, setNarrative] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [narrativeError, setNarrativeError] = useState<string | null>(null);
   if (!data) return null;
   const { terms, lines, excludedCount, excludedCents } = data;
   return (
@@ -628,14 +739,17 @@ function GrantReportSheet({
       <p className="mt-4 font-serif text-[16px] leading-[1.45] text-ink">
         {narrative ?? "Generate a narrative from the figures below."}
       </p>
+      {narrativeError && <p className="mt-2 text-[13px] text-redpen">{narrativeError}</p>}
       <button
         type="button"
-        disabled={busy}
+        disabled={busy || !canWrite}
         className="no-print mt-3 text-[13px] text-ledger underline disabled:opacity-40"
         onClick={() => {
           setBusy(true);
+          setNarrativeError(null);
           void regenerateNarrative({ grantId })
             .then(setNarrative)
+            .catch((e) => setNarrativeError(messageFromConvexError(e)))
             .finally(() => setBusy(false));
         }}
       >

@@ -10,10 +10,14 @@ export function WhyDrawer({
   txnId,
   open,
   onClose,
+  passcode,
+  canWrite,
 }: {
   txnId: string | null;
   open: boolean;
   onClose: () => void;
+  passcode?: string;
+  canWrite: boolean;
 }) {
   const explain = useAction(api.agent.explain);
   const [input, setInput] = useState("");
@@ -30,13 +34,13 @@ export function WhyDrawer({
   if (!open || !txnId) return null;
 
   async function ask() {
-    if (!input.trim()) return;
-    const q = input.trim();
+    if (!canWrite || !input.trim()) return;
+    const q = input.trim().slice(0, 500);
     setInput("");
     setThread((t) => [...t, { role: "user", text: q }]);
     setLoading(true);
     try {
-      const ans = await explain({ txnId: txnId!, question: q });
+      const ans = await explain({ txnId: txnId!, question: q, passcode });
       const stanceMap: Record<string, string> = {
         stand_by: "Stands by it",
         revise: "Will revise",

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
+import { messageFromConvexError } from "../lib/convexError";
 import { contractClausesFromDecision } from "@/lib/clauseText";
 import { stewardCodingLabel } from "@/lib/codingLabel";
 import type { GrantTerms } from "@/lib/types";
@@ -45,22 +46,33 @@ function lineName(grantTerms: CaseData["grantTerms"], grantId: string | null, co
 export function CaseFile({
   data,
   actingAsSteward,
-  actorName,
-  onToast,
+  actorLabel,
+  passcode,
+  canWrite,
+  onStatusLine,
   onWhy,
   strikeKey,
 }: {
   data: CaseData | null | undefined;
   actingAsSteward: boolean;
-  actorName: string;
-  onToast: (m: string) => void;
+  actorLabel: string;
+  passcode?: string;
+  canWrite: boolean;
+  onStatusLine: (m: string | null) => void;
   onWhy: () => void;
   strikeKey: string;
 }) {
   const approve = useMutation(api.approvals.approveEntry);
   const reject = useMutation(api.approvals.rejectEntry);
+  const acknowledge = useMutation(api.approvals.acknowledgeDecision);
+  const overrideDecision = useMutation(api.approvals.overrideDecision);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState("");
+  const [ackOpen, setAckOpen] = useState(false);
+  const [ackNote, setAckNote] = useState("");
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideNote, setOverrideNote] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
   const seenStrike = useRef(new Set<string>());
 
   useEffect(() => {
@@ -116,19 +128,121 @@ export function CaseFile({
   const cr = lines.reduce((a, l) => a + l.credit, 0);
   const balanced = dr === cr && lines.length > 0;
 
+  useEffect(() => {
+    setActionError(null);
+    onStatusLine(null);
+  }, [data?.txn?.txnId, onStatusLine]);
+
   async function onApprove() {
-    if (!entry || actingAsSteward) return;
-    await approve({ entryId: entry.id, by: actorName, note: "Approved in inbox review" });
-    onToast("Entry approved");
+    if (!canWrite) return;
+    setActionError(null);
+    if (entry) {
+      try {
+        await approve({
+          entryId: entry.id,
+          by: actorLabel,
+          note: "Approved in inbox review",
+          passcode,
+        });
+        onStatusLine("Entry approved");
+      } catch (e) {
+        const msg = messageFromConvexError(e);
+        setActionError(msg);
+        onStatusLine(msg);
+      }
+      return;
+    }
+    if (!ackNote.trim() && !ackOpen) {
+      setAckOpen(true);
+      return;
+    }
+    if (!ackNote.trim()) return;
+    try {
+      await acknowledge({
+        txnId: txn.txnId,
+        by: actorLabel,
+        note: ackNote.trim(),
+        passcode,
+      });
+      setAckOpen(false);
+      setAckNote("");
+      onStatusLine("Decision acknowledged");
+    } catch (e) {
+      const msg = messageFromConvexError(e);
+      setActionError(msg);
+      onStatusLine(msg);
+    }
   }
 
   async function onRejectSubmit() {
-    if (!entry || !rejectNote.trim() || actingAsSteward) return;
-    await reject({ entryId: entry.id, by: actorName, note: rejectNote.trim() });
-    setRejectOpen(false);
-    setRejectNote("");
-    onToast("Entry rejected");
+    if (!canWrite || !rejectNote.trim()) return;
+    setActionError(null);
+    if (entry) {
+      try {
+        await reject({ entryId: entry.id, by: actorLabel, note: rejectNote.trim(), passcode });
+        setRejectOpen(false);
+        setRejectNote("");
+        onStatusLine("Entry rejected");
+      } catch (e) {
+        const msg = messageFromConvexError(e);
+        setActionError(msg);
+        onStatusLine(msg);
+      }
+      return;
+    }
+    try {
+      await overrideDecision({
+        txnId: txn.txnId,
+        by: actorLabel,
+        note: rejectNote.trim(),
+        passcode,
+      });
+      setRejectOpen(false);
+      setRejectNote("");
+      onStatusLine("Override recorded");
+    } catch (e) {
+      const msg = messageFromConvexError(e);
+      setActionError(msg);
+      onStatusLine(msg);
+    }
   }
+
+  async function onOverrideSubmit() {
+    if (!canWrite || !overrideNote.trim()) return;
+    setActionError(null);
+    try {
+      await overrideDecision({
+        txnId: txn.txnId,
+        by: actorLabel,
+        note: overrideNote.trim(),
+        passcode,
+      });
+      setOverrideOpen(false);
+      setOverrideNote("");
+      onStatusLine("Override recorded");
+    } catch (e) {
+      const msg = messageFromConvexError(e);
+      setActionError(msg);
+      onStatusLine(msg);
+    }
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!canWrite || rejectOpen || ackOpen || overrideOpen) return;
+      if (e.key === "a" || e.key === "A") {
+        e.preventDefault();
+        void onApprove();
+      }
+      if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        if (entry) setRejectOpen(true);
+        else setOverrideOpen(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canWrite, rejectOpen, ackOpen, overrideOpen, entry]);
 
   const bankEv = evidence.find((e) => e.source === "bank");
   const glEv = evidence.find((e) => e.source === "gl");
@@ -237,35 +351,114 @@ export function CaseFile({
       </div>
 
       <div className="border-t border-rule px-6 py-4">
-        {actingAsSteward ? (
-          <p className="text-[13px] text-ink-2">
-            Steward can propose entries but can&apos;t approve them (segregation of duties).
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {canWrite && (
+            <span className="mr-auto text-[13px] text-ink-2">J/K queue · A approve · R reject · ? ask why</span>
+          )}
+          <button type="button" onClick={onWhy} className="text-[15px] text-ink-2 underline-offset-2 hover:underline">
+            Ask Steward why
+          </button>
+          {entry ? (
+            <>
+              <button
+                type="button"
+                disabled={!canWrite}
+                onClick={() => setRejectOpen(true)}
+                className="rounded-[4px] border border-rule px-4 py-2 text-[15px] font-medium text-ink disabled:opacity-40"
+              >
+                Reject…
+              </button>
+              <button
+                type="button"
+                disabled={!canWrite}
+                onClick={() => void onApprove()}
+                className="rounded-[4px] bg-ledger px-4 py-2 text-[15px] font-medium text-white disabled:opacity-40"
+              >
+                Approve entry
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                disabled={!canWrite}
+                onClick={() => setOverrideOpen(true)}
+                className="rounded-[4px] border border-rule px-4 py-2 text-[15px] font-medium text-ink disabled:opacity-40"
+              >
+                Override…
+              </button>
+              <button
+                type="button"
+                disabled={!canWrite}
+                onClick={() => (ackOpen ? void onApprove() : setAckOpen(true))}
+                className="rounded-[4px] bg-ledger px-4 py-2 text-[15px] font-medium text-white disabled:opacity-40"
+              >
+                Acknowledge
+              </button>
+            </>
+          )}
+        </div>
+        {actionError && (
+          <p className="mt-3 text-[13px] font-medium text-redpen" role="alert">
+            {actionError}
           </p>
-        ) : (
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <span className="mr-auto text-[13px] text-ink-2">A approve · R reject · ? ask why</span>
-            <button type="button" onClick={onWhy} className="text-[15px] text-ink-2 underline-offset-2 hover:underline">
-              Ask Steward why
-            </button>
-            <button
-              type="button"
-              disabled={!entry}
-              onClick={() => setRejectOpen(true)}
-              className="rounded-[4px] border border-rule px-4 py-2 text-[15px] font-medium text-ink disabled:opacity-40"
-            >
-              Reject…
-            </button>
-            <button
-              type="button"
-              disabled={!entry}
-              onClick={() => void onApprove()}
-              className="rounded-[4px] bg-ledger px-4 py-2 text-[15px] font-medium text-white disabled:opacity-40"
-            >
-              Approve entry
-            </button>
-          </div>
+        )}
+        {actingAsSteward && !actionError && (
+          <p className="mt-2 text-[13px] text-ink-2">
+            Acting as Steward — approvals are enforced on the server.
+          </p>
         )}
       </div>
+
+      {ackOpen && !entry && (
+        <div className="absolute bottom-20 right-8 z-10 w-72 rounded-[6px] border border-rule bg-sheet p-4 shadow-none">
+          <label className="text-[13px] text-ink-2">Note (accept Steward&apos;s call)</label>
+          <textarea
+            className="mt-2 w-full rounded-[4px] border border-rule p-2 text-[15px]"
+            rows={3}
+            value={ackNote}
+            onChange={(e) => setAckNote(e.target.value)}
+          />
+          <div className="mt-3 flex justify-end gap-2">
+            <button type="button" className="text-[13px] text-ink-2" onClick={() => setAckOpen(false)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!ackNote.trim()}
+              onClick={() => void onApprove()}
+              className="rounded-[4px] bg-ledger px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-40"
+            >
+              Acknowledge
+            </button>
+          </div>
+        </div>
+      )}
+
+      {overrideOpen && !entry && (
+        <div className="absolute bottom-20 right-8 z-10 w-72 rounded-[6px] border border-rule bg-sheet p-4 shadow-none">
+          <label className="text-[13px] text-ink-2">Override note (keep original coding)</label>
+          <textarea
+            className="mt-2 w-full rounded-[4px] border border-rule p-2 text-[15px]"
+            rows={3}
+            value={overrideNote}
+            onChange={(e) => setOverrideNote(e.target.value)}
+          />
+          <div className="mt-3 flex justify-end gap-2">
+            <button type="button" className="text-[13px] text-ink-2" onClick={() => setOverrideOpen(false)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!overrideNote.trim()}
+              onClick={() => void onOverrideSubmit()}
+              className="rounded-[4px] bg-pencil px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-40"
+            >
+              Override
+            </button>
+          </div>
+        </div>
+      )}
 
       {rejectOpen && (
         <div className="absolute bottom-20 right-8 z-10 w-72 rounded-[6px] border border-rule bg-sheet p-4 shadow-none">
