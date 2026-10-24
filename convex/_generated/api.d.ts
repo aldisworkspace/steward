@@ -20,6 +20,7 @@ import type * as passcode from "../passcode.js";
 import type * as pdfText from "../pdfText.js";
 import type * as report from "../report.js";
 import type * as runGuard from "../runGuard.js";
+import type * as settings from "../settings.js";
 import type * as ui from "../ui.js";
 
 import type {
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   pdfText: typeof pdfText;
   report: typeof report;
   runGuard: typeof runGuard;
+  settings: typeof settings;
   ui: typeof ui;
 }>;
 

@@ -18,8 +18,10 @@ export const setGrantReady = internalMutation({
   args: { grantDocId: v.id("grants"), terms: v.any(), fileName: v.string() },
   handler: async (ctx, { grantDocId, terms, fileName }) => {
     const t = terms as GrantTerms;
+    const doc = await ctx.db.get(grantDocId);
+    const needsConfirm = doc?.source === "upload";
     await ctx.db.patch(grantDocId, {
-      status: "ready",
+      status: needsConfirm ? "pending_confirm" : "ready",
       terms,
       grantId: t.grantId,
       error: undefined,

@@ -71,6 +71,20 @@ export const loadDemo = mutation({
     for (const row of args.precedents) {
       await ctx.db.insert("precedents", row);
     }
+    const settings = await ctx.db
+      .query("workspaceSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .first();
+    if (settings) await ctx.db.patch(settings._id, { dataSource: "demo" });
+    else {
+      await ctx.db.insert("workspaceSettings", {
+        key: "default",
+        organizationName: "Valencia Youth Collective",
+        approverName: "A. Okafor",
+        approverTitle: "Executive Director",
+        dataSource: "demo",
+      });
+    }
   },
 });
 
@@ -89,6 +103,58 @@ export const resetRunState = mutation({
       targetId: "run",
       why: "Demo run state reset",
       evidence: [],
+    });
+  },
+});
+
+export const startCustomWorkspace = mutation({
+  args: {
+    passcode: v.optional(v.string()),
+    transactions: v.array(txn),
+    glRows: v.array(glRow),
+    staffAllocations: v.array(staffAllocation),
+    grantDocIds: v.array(v.id("grants")),
+  },
+  handler: async (ctx, args) => {
+    assertDemoPasscode(args.passcode);
+    const keep = new Set(args.grantDocIds.map(String));
+    for (const row of await ctx.db.query("transactions").collect()) await ctx.db.delete(row._id);
+    for (const row of await ctx.db.query("glRows").collect()) await ctx.db.delete(row._id);
+    for (const row of await ctx.db.query("staffAllocations").collect()) await ctx.db.delete(row._id);
+    for (const row of await ctx.db.query("decisions").collect()) await ctx.db.delete(row._id);
+    for (const row of await ctx.db.query("proposedEntries").collect()) await ctx.db.delete(row._id);
+    for (const row of await ctx.db.query("inboxResolutions").collect()) await ctx.db.delete(row._id);
+    for (const row of await ctx.db.query("runs").collect()) await ctx.db.delete(row._id);
+    for (const g of await ctx.db.query("grants").collect()) {
+      if (!keep.has(String(g._id))) await ctx.db.delete(g._id);
+    }
+    for (const row of args.transactions) await ctx.db.insert("transactions", row);
+    for (const row of args.glRows) await ctx.db.insert("glRows", row);
+    for (const row of args.staffAllocations) await ctx.db.insert("staffAllocations", row);
+
+    const settings = await ctx.db
+      .query("workspaceSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .first();
+    if (settings) {
+      await ctx.db.patch(settings._id, { dataSource: "custom" });
+    } else {
+      await ctx.db.insert("workspaceSettings", {
+        key: "default",
+        organizationName: "Valencia Youth Collective",
+        approverName: "A. Okafor",
+        approverTitle: "Executive Director",
+        dataSource: "custom",
+      });
+    }
+
+    await ctx.db.insert("auditLog", {
+      at: new Date().toISOString(),
+      actor: "user",
+      action: "new_workspace",
+      targetId: "workspace",
+      why: "Started custom data workspace",
+      evidence: [`${args.transactions.length} bank txns`, `${args.grantDocIds.length} grants`],
     });
   },
 });

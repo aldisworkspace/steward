@@ -1,7 +1,8 @@
 import { ConvexError } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
+import { getSettingsDoc } from "./settings";
 
-export const APPROVERS = ["A. Okafor (Executive Director)", "Controller"] as const;
+const CONTROLLER = "Controller";
 
 export async function assertHumanApprover(ctx: MutationCtx, by: string, txnId: string) {
   const who = by.trim();
@@ -10,7 +11,9 @@ export async function assertHumanApprover(ctx: MutationCtx, by: string, txnId: s
       "Segregation of duties: Steward proposes entries but cannot approve or reject them.",
     );
   }
-  if (!(APPROVERS as readonly string[]).includes(who)) {
+  const settings = await getSettingsDoc(ctx);
+  const primary = `${settings.approverName} (${settings.approverTitle})`;
+  if (who !== primary && who !== CONTROLLER) {
     throw new ConvexError(`Unknown approver: ${who}`);
   }
   const gl = await ctx.db

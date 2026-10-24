@@ -44,7 +44,12 @@ async function ensureGrantPdf(
     });
     if (!uploadRes.ok) throw new Error(`Upload failed for ${fileName}`);
     const { storageId } = (await uploadRes.json()) as { storageId: Id<"_storage"> };
-    const grantDocId = await client.mutation(api.grants.registerGrant, { storageId, fileName, passcode });
+    const grantDocId = await client.mutation(api.grants.registerGrant, {
+      storageId,
+      fileName,
+      passcode,
+      source: "demo",
+    });
     await client.action(api.agent.extractGrant, { grantDocId, passcode });
     return { grantDocId, extracted: true, error: null };
   } catch (e) {

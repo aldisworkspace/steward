@@ -7,9 +7,11 @@ export default defineSchema({
     fileName: v.string(),
     grantId: v.optional(v.string()),
     terms: v.union(v.any(), v.null()),
+    source: v.optional(v.union(v.literal("demo"), v.literal("upload"))),
     status: v.union(
       v.literal("uploaded"),
       v.literal("extracting"),
+      v.literal("pending_confirm"),
       v.literal("ready"),
       v.literal("error"),
     ),
@@ -108,6 +110,14 @@ export default defineSchema({
     usageOutput: v.number(),
     errors: v.array(v.string()),
   }),
+
+  workspaceSettings: defineTable({
+    key: v.literal("default"),
+    organizationName: v.string(),
+    approverName: v.string(),
+    approverTitle: v.string(),
+    dataSource: v.union(v.literal("demo"), v.literal("custom")),
+  }).index("by_key", ["key"]),
 
   inboxResolutions: defineTable({
     txnId: v.string(),
