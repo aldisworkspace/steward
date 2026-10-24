@@ -3,6 +3,7 @@
 import { getFundLabel } from "@/lib/fundLabels";
 import type { GrantTerms } from "@/lib/types";
 import { useMemo } from "react";
+import { useNowMs } from "../hooks/useNowMs";
 import { fmtRisk, fmtTableAmount } from "../format";
 import { CountUp } from "./CountUp";
 import { GlossaryTerm } from "./GlossaryTerm";
@@ -54,6 +55,7 @@ export function OverviewTab({
   onGrantInbox: (grantId: string) => void;
   onJournalFilter: (action: string | null) => void;
 }) {
+  const nowMs = useNowMs();
   const needYou = stats?.needYou ?? 0;
   const resolved = stats?.resolved ?? 0;
   const openTotal = needYou + resolved;
@@ -69,13 +71,13 @@ export function OverviewTab({
       .filter((t) => t.reportDue)
       .map((t) => {
         const due = new Date(t.reportDue!);
-        const days = Math.ceil((due.getTime() - Date.now()) / 86400000);
+        const days = Math.ceil((due.getTime() - nowMs) / 86400000);
         return { grantId: t.grantId, days, title: getFundLabel(t.grantId, termsList).title };
       })
       .sort((a, b) => a.days - b.days)[0];
     if (!withDue) return null;
     return withDue;
-  }, [termsList]);
+  }, [termsList, nowMs]);
 
   const timeline = useMemo(() => {
     const steps = [
@@ -104,8 +106,7 @@ export function OverviewTab({
     const spentPct = budget ? (spent / budget) * 100 : 0;
     const start = new Date(t.periodStart).getTime();
     const end = new Date(t.periodEnd).getTime();
-    const now = Date.now();
-    const elapsedPct = end > start ? ((now - start) / (end - start)) * 100 : 0;
+    const elapsedPct = end > start && nowMs > 0 ? ((nowMs - start) / (end - start)) * 100 : 0;
     const burnHot = spentPct > elapsedPct + 5;
     const openForGrant = queue.filter((q) => q.grantId === gid).length;
     const topLines = [...t.budgetLines]
@@ -118,7 +119,7 @@ export function OverviewTab({
       .sort((a, b) => b.lineSpent - a.lineSpent)
       .slice(0, 3);
     const dueDays = t.reportDue
-      ? Math.ceil((new Date(t.reportDue).getTime() - Date.now()) / 86400000)
+      ? Math.ceil((new Date(t.reportDue).getTime() - nowMs) / 86400000)
       : null;
     const hue = gid.startsWith("GA") ? "var(--navy)" : "var(--money)";
     return (
@@ -195,7 +196,7 @@ export function OverviewTab({
         <div className="lg:col-span-5">
           <p className="font-display text-[40px] font-semibold leading-[1.15] text-ink">
             <span className="tabular text-redpen">
-              $<CountUp value={clawDollars} />
+              $<CountUp value={clawDollars} durationMs={300} />
             </span>{" "}
             of <GlossaryTerm term="restricted funds">grant spending</GlossaryTerm> could be clawed back.
           </p>

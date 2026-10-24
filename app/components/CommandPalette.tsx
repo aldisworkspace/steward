@@ -2,7 +2,7 @@
 
 import { getFundLabel } from "@/lib/fundLabels";
 import type { GrantTerms } from "@/lib/types";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export type Command = {
   id: string;
@@ -33,6 +33,12 @@ export function CommandPalette({
 }) {
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
+
+  const dismiss = useCallback(() => {
+    setQ("");
+    setIdx(0);
+    onClose();
+  }, [onClose]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -67,18 +73,11 @@ export function CommandPalette({
   }, [commands, q, transactions, grantTerms, onJumpTxn]);
 
   useEffect(() => {
-    if (!open) {
-      setQ("");
-      setIdx(0);
-    }
-  }, [open]);
-
-  useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        dismiss();
       }
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -91,18 +90,18 @@ export function CommandPalette({
       if (e.key === "Enter" && filtered[idx]) {
         e.preventDefault();
         filtered[idx].run();
-        onClose();
+        dismiss();
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, filtered, idx, onClose]);
+  }, [open, filtered, idx, dismiss]);
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-navy/40 pt-[15vh]">
-      <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
+      <button type="button" className="absolute inset-0" aria-label="Close" onClick={dismiss} />
       <div className="relative w-full max-w-lg rounded-[10px] border border-rule bg-sheet p-2 shadow-none">
         <input
           autoFocus
@@ -125,7 +124,7 @@ export function CommandPalette({
                 onMouseEnter={() => setIdx(i)}
                 onClick={() => {
                   c.run();
-                  onClose();
+                  dismiss();
                 }}
               >
                 {c.label}

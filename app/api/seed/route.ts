@@ -6,6 +6,8 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { parseBank, parseGl, parseStaff } from "@/lib/parse";
 import type { Precedent } from "@/lib/types";
 
+export const maxDuration = 300;
+
 const DEMO_GRANTS = [
   "grant_A_federal_passthrough.pdf",
   "grant_B_harbor_light_foundation.pdf",

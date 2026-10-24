@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   Upload,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { AppTab } from "../hooks/useAppUrlState";
 
 const ITEMS: { id: AppTab; label: string; Icon: typeof Inbox }[] = [
@@ -32,17 +32,16 @@ export function NavRail({
   onTab: (t: AppTab) => void;
   inboxCount: number;
 }) {
-  const [pinned, setPinned] = useState(false);
+  const [pinned, setPinned] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem("steward-nav-pinned") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [hover, setHover] = useState(false);
   const wide = pinned || hover;
-
-  useEffect(() => {
-    try {
-      setPinned(localStorage.getItem("steward-nav-pinned") === "1");
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   function togglePin() {
     setPinned((p) => {
@@ -87,7 +86,7 @@ export function NavRail({
                 type="button"
                 title={!wide ? label : undefined}
                 onClick={() => onTab(id)}
-                className={`flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-[14px] ${
+                className={`relative flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-[14px] transition-colors duration-180 ${
                   active ? "bg-money-tint font-medium text-ink" : "text-ink-2 hover:bg-paper"
                 }`}
               >
@@ -100,6 +99,12 @@ export function NavRail({
                   )}
                 </span>
                 {wide && <span className="truncate">{label}</span>}
+                {active && (
+                  <span
+                    className="nav-tab-underline absolute bottom-0 left-3 right-3 h-0.5 rounded-full bg-money"
+                    aria-hidden
+                  />
+                )}
               </button>
             </li>
           );

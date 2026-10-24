@@ -23,8 +23,14 @@ const bricolage = Bricolage_Grotesque({
 });
 
 export const metadata: Metadata = {
-  title: "Steward",
-  description: "Autonomous grants accountant for small nonprofits",
+  title: "Steward — the grants accountant that reads the contract",
+  description:
+    "Steward checks bank transactions against grant agreements, catches clawback risk, and proposes corrections for human approval.",
+  openGraph: {
+    title: "Steward — the grants accountant that reads the contract",
+    description:
+      "Autonomous grants accountant for small nonprofits. Synthetic demo · Real Claude · Cal Hacks 13.0",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

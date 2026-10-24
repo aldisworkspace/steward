@@ -9,7 +9,7 @@ import type { GrantTerms } from "@/lib/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { fmtRisk, fmtSentenceAmount, fmtTableAmount, relativeTime } from "../format";
-import { getDemoPasscode, hasDemoWriteAccess, initDemoPasscodeFromUrl } from "../lib/demoPasscode";
+import { getDemoPasscode, hasDemoWriteAccess } from "../lib/demoPasscode";
 import { messageFromConvexError } from "../lib/convexError";
 import { CaseFile } from "./CaseFile";
 import { CaseSkeleton } from "./CaseSkeleton";
@@ -27,6 +27,7 @@ import { KeyboardHelp } from "./KeyboardHelp";
 import { TransactionsVirtualTable } from "./TransactionsVirtualTable";
 import { YourDataTab } from "./YourDataTab";
 import { useAppUrlState } from "../hooks/useAppUrlState";
+import { useClientPasscodeReady } from "../hooks/useClientPasscodeReady";
 import { useAdminMode } from "../hooks/useAdminMode";
 import { useConvexConnection } from "../hooks/useConvexConnection";
 import { AppLoadingShell } from "./AppLoadingShell";
@@ -84,7 +85,6 @@ export function StewardApp() {
   const [runLoading, setRunLoading] = useState(false);
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [statusNote, setStatusNote] = useState<string | null>(null);
-  const [passcodeReady, setPasscodeReady] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [statusToast, setStatusToast] = useState<{
     message: string;
@@ -108,15 +108,11 @@ export function StewardApp() {
   const actorLabel = actor === "steward" ? STEWARD_ACTOR.label : approverLabel;
   const orgDisplay = workspace?.organizationName ?? "Valencia Youth Collective";
   const isCustomData = workspace?.dataSource === "custom";
+  const passcodeReady = useClientPasscodeReady();
   const passcode = getDemoPasscode();
   const canWrite = passcodeReady && hasDemoWriteAccess(demoGate?.requiresPasscode ?? false);
   const adminMode = useAdminMode();
   const offline = useConvexConnection();
-
-  useEffect(() => {
-    initDemoPasscodeFromUrl();
-    setPasscodeReady(true);
-  }, []);
 
   useEffect(() => {
     const open = inboxBadge?.open ?? 0;

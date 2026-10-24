@@ -9,11 +9,12 @@ import {
 } from "@/lib/inboxFilters";
 import { groupInboxRows, type QueueRow } from "@/lib/inboxGroups";
 import { getFundLabel } from "@/lib/fundLabels";
-import { queueIconForRule } from "@/lib/queueIcon";
+import { QueueRuleIcon } from "@/lib/queueIcon";
 import type { GrantTerms } from "@/lib/types";
 import { displayVendor } from "@/lib/displayVendor";
 import { queueLine2 } from "@/lib/queueLine2";
 import { fmtRisk, fmtTableAmount } from "../format";
+import { CountUp } from "./CountUp";
 import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -79,7 +80,8 @@ export function InboxQueue({
     <aside className="flex h-full flex-col border-r border-rule bg-paper" role="listbox" aria-label="Inbox queue">
       <div className="border-b border-rule px-3 py-3">
         <p className="text-[14px] font-semibold text-ink">
-          {openCount} items · {fmtRisk(atRiskCents).replace(".00", "")} a funder could ask you to repay
+          {openCount} items · $
+          <CountUp value={Math.round(atRiskCents / 100)} durationMs={300} /> a funder could ask you to repay
         </p>
       </div>
       {fundBanner && (
@@ -135,7 +137,9 @@ export function InboxQueue({
         {filtered.length === 0 && emptyMessage && (
           <p className="p-4 text-[14px] text-ink-2">{emptyMessage}</p>
         )}
-        {groupInboxRows(filtered).map((g) => {
+        {(() => {
+          let stagger = 0;
+          return groupInboxRows(filtered).map((g) => {
           if (g.kind === "group") {
             const open = expanded[g.key];
             return (
@@ -160,16 +164,35 @@ export function InboxQueue({
                   )}
                 </div>
                 {open &&
-                  g.rows.map((r) => (
-                    <QueueRowButton key={r.txnId} r={r} grants={grants} selected={selected} onSelect={onSelect} />
-                  ))}
+                  g.rows.map((r) => {
+                    const si = stagger++;
+                    return (
+                    <QueueRowButton
+                      key={r.txnId}
+                      r={r}
+                      grants={grants}
+                      selected={selected}
+                      onSelect={onSelect}
+                      staggerIndex={si}
+                    />
+                    );
+                  })}
               </div>
             );
           }
+          const si = stagger++;
           return (
-            <QueueRowButton key={g.row.txnId} r={g.row} grants={grants} selected={selected} onSelect={onSelect} />
+            <QueueRowButton
+              key={g.row.txnId}
+              r={g.row}
+              grants={grants}
+              selected={selected}
+              onSelect={onSelect}
+              staggerIndex={si}
+            />
           );
-        })}
+        });
+        })()}
       </div>
     </aside>
   );
@@ -207,13 +230,14 @@ function QueueRowButton({
   grants,
   selected,
   onSelect,
+  staggerIndex,
 }: {
   r: QueueRow;
   grants: GrantTerms[];
   selected: string | null;
   onSelect: (id: string) => void;
+  staggerIndex?: number;
 }) {
-  const Icon = queueIconForRule(r.ruleId);
   const fund = r.grantId != null ? getFundLabel(r.grantId, grants) : null;
   const statusWord = r.status === "blocked" ? "Not allowed" : "Needs you";
   return (
@@ -223,12 +247,13 @@ function QueueRowButton({
       aria-selected={selected === r.txnId}
       aria-current={selected === r.txnId ? "true" : undefined}
       onClick={() => onSelect(r.txnId)}
-      className={`flex min-h-16 w-full items-stretch border-b border-rule border-l-4 text-left hover:bg-sheet/60 ${
+      style={staggerIndex != null ? { animationDelay: `${staggerIndex * 40}ms` } : undefined}
+      className={`inbox-row-enter flex min-h-16 w-full items-stretch border-b border-rule border-l-4 text-left hover:bg-sheet/60 ${
         r.status === "blocked" ? "border-l-redpen" : "border-l-attention"
       } ${selected === r.txnId ? "bg-sheet font-semibold" : ""}`}
     >
       <span className="flex w-10 shrink-0 items-center justify-center text-ink-2">
-        <Icon size={16} strokeWidth={1.75} aria-hidden />
+        <QueueRuleIcon ruleId={r.ruleId} />
       </span>
       <span className="flex min-w-0 flex-1 flex-col justify-center pr-3">
         <span className="truncate text-[14px]" title={r.description}>

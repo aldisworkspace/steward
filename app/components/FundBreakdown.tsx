@@ -1,7 +1,6 @@
 "use client";
 
 import type { BreakdownSegment, FundBreakdownResult, FundBreakdownRow } from "@/lib/fundBreakdown";
-import { useEffect, useRef, useState } from "react";
 import { fmtRisk } from "../format";
 
 export type FundBreakdownNavigate = {
@@ -51,11 +50,9 @@ const SEGMENT_STYLE: Record<
 
 function SegmentBar({
   row,
-  animate,
   onNavigate,
 }: {
   row: FundBreakdownRow;
-  animate: boolean;
   onNavigate: (nav: FundBreakdownNavigate) => void;
 }) {
   const total = row.totalOutflowCents;
@@ -85,7 +82,7 @@ function SegmentBar({
             key={s.key}
             type="button"
             style={{ flex: s.cents, minWidth: s.cents > 0 ? 4 : 0 }}
-            className={`group/seg relative h-full ${style.bg} ${style.hover} ${animate ? "fund-bar-grow" : ""} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sky`}
+            className={`group/seg relative h-full ${style.bg} ${style.hover} fund-bar-grow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sky`}
             aria-label={`${row.title}: ${pctLabel}. Open in inbox.`}
             onClick={() =>
               onNavigate({
@@ -111,16 +108,6 @@ export function FundBreakdown({
   data: FundBreakdownResult | null | undefined;
   onNavigate: (nav: FundBreakdownNavigate) => void;
 }) {
-  const [animate, setAnimate] = useState(false);
-  const mounted = useRef(false);
-
-  useEffect(() => {
-    if (!data || mounted.current) return;
-    mounted.current = true;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!reduced) setAnimate(true);
-  }, [data]);
-
   if (!data) {
     return (
       <div className="rounded-[8px] border border-rule bg-sheet p-6 text-[14px] text-ink-2">
@@ -176,7 +163,7 @@ export function FundBreakdown({
               </div>
               <p className="mt-0.5 text-[13px] text-ink-2">{row.subtitle}</p>
               <div className="mt-3">
-                <SegmentBar row={row} animate={animate} onNavigate={onNavigate} />
+                <SegmentBar row={row} onNavigate={onNavigate} />
               </div>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[13px]">
                 <span className={summary.money ? "text-money" : "text-ink-2"}>{summary.text}</span>

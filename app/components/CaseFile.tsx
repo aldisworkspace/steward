@@ -133,7 +133,9 @@ function CaseFileInner({
   const [precedentScope, setPrecedentScope] = useState<"txn" | "vendor">("txn");
   const [rulingType, setRulingType] = useState<RulingType>("allow");
   const [entryStamp, setEntryStamp] = useState<"approved" | "returned" | null>(null);
-  const [stampAnimate, setStampAnimate] = useState(false);
+  const [stampAnimate] = useState(
+    () => typeof window === "undefined" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -143,10 +145,6 @@ function CaseFileInner({
   }, []);
   const stampDate = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const stampBy = actorLabel.replace(/\s*\(.*\)$/, "");
-
-  useEffect(() => {
-    setStampAnimate(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  }, []);
 
   function defaultRuling(ruleId: string | null | undefined): RulingType {
     if (ruleId === "R-PRIOR-APPROVAL") return "prior_approval_granted";

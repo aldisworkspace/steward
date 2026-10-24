@@ -11,8 +11,8 @@ export function CountUp({
   durationMs?: number;
   className?: string;
 }) {
-  const [display, setDisplay] = useState(0);
-  const ran = useRef(false);
+  const [display, setDisplay] = useState(value);
+  const fromRef = useRef(value);
   const reduced = useRef(false);
 
   useEffect(() => {
@@ -20,16 +20,22 @@ export function CountUp({
   }, []);
 
   useEffect(() => {
-    if (reduced.current || ran.current) {
+    if (reduced.current) {
+      setDisplay(value);
+      fromRef.current = value;
+      return;
+    }
+    const from = fromRef.current;
+    fromRef.current = value;
+    if (from === value) {
       setDisplay(value);
       return;
     }
-    ran.current = true;
     const start = performance.now();
     let frame = 0;
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / durationMs);
-      setDisplay(Math.round(value * t));
+      setDisplay(Math.round(from + (value - from) * t));
       if (t < 1) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
