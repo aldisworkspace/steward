@@ -39,11 +39,9 @@ async function blocksToUserText(content: UserContent): Promise<string> {
   return parts.join("\n\n");
 }
 
-export function grokClient(
-  apiKey: string | undefined = process.env.GROK_API_KEY ?? process.env.ANTHROPIC_API_KEY,
-): ModelClient {
+export function grokClient(apiKey: string | undefined = process.env.XAI_API_KEY): ModelClient {
   if (!apiKey) {
-    throw new Error("GROK_API_KEY is not set (set it via `npx convex env set GROK_API_KEY ...`).");
+    throw new Error("XAI_API_KEY is not set (set it via `npx convex env set XAI_API_KEY ...`).");
   }
   return {
     async json({ model, system, content, schema, toolName, toolDescription, maxTokens = 8000 }) {

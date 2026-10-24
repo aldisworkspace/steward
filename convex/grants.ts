@@ -49,3 +49,19 @@ export const getByFileName = query({
   handler: async (ctx, { fileName }) =>
     ctx.db.query("grants").withIndex("by_fileName", (q) => q.eq("fileName", fileName)).first(),
 });
+
+/** Clear error state so extractGrant can retry (PDF already in storage). */
+export const resetExtractErrors = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const grants = await ctx.db.query("grants").collect();
+    let n = 0;
+    for (const g of grants) {
+      if (g.status === "error") {
+        await ctx.db.patch(g._id, { status: "uploaded", error: undefined });
+        n += 1;
+      }
+    }
+    return { reset: n };
+  },
+});

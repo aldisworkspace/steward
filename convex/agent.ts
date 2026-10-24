@@ -1,42 +1,61 @@
 "use node";
+// bundled with ../lib/* for Claude structured outputs
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { grokClient } from "../lib/grok";
+import { getModelClient, getModelProvider } from "../lib/model";
 import { MODELS } from "../lib/llm";
 import { EXTRACT_SYSTEM } from "../lib/prompts";
-import { defendDecision, runPipeline } from "../lib/pipeline";
+import { defendDecision, extractGrantTerms, runPipeline } from "../lib/pipeline";
 import type { GrantTerms } from "../lib/types";
 import { GrantTermsZ } from "../lib/types";
 import { pdfToText } from "./pdfText";
 
 export const extractGrant = action({
   args: { grantDocId: v.id("grants") },
-  handler: async (ctx, { grantDocId }) => {
+  handler: async (
+    ctx,
+    { grantDocId },
+  ): Promise<{ grantId: string; budgetLines: number; skipped: boolean }> => {
     const grant = await ctx.runQuery(internal.agentInternal.getGrant, { grantDocId });
     if (!grant) throw new Error("Grant not found");
+    if (grant.status === "ready" && grant.terms) {
+      const t = grant.terms as GrantTerms;
+      return { grantId: t.grantId, budgetLines: t.budgetLines.length, skipped: true };
+    }
     await ctx.runMutation(internal.agentInternal.setGrantExtracting, { grantDocId });
     try {
       const blob = await ctx.storage.get(grant.storageId);
       if (!blob) throw new Error("PDF missing from storage");
-      const buf = Buffer.from(await blob.arrayBuffer());
-      const pdfText = await pdfToText(buf);
-      const { data: terms } = await grokClient().json({
-        model: MODELS.judgment,
-        system: EXTRACT_SYSTEM,
-        toolName: "record_grant_terms",
-        toolDescription: "Record the financial terms of this grant agreement.",
-        schema: GrantTermsZ,
-        content: [{ type: "text", text: `Extract the grant terms.\n\n${pdfText}` }],
-      });
+      const buf: Buffer = Buffer.from(await blob.arrayBuffer());
+      const b64 = buf.toString("base64");
+      const model = getModelClient();
+      const terms: GrantTerms =
+        getModelProvider() === "xai"
+          ? (
+              await model.json({
+                model: MODELS.judgment,
+                system: EXTRACT_SYSTEM,
+                toolName: "record_grant_terms",
+                toolDescription: "Record the financial terms of this grant agreement.",
+                schema: GrantTermsZ,
+                content: [
+                  {
+                    type: "text",
+                    text: `Extract the grant terms.\n\n${await pdfToText(buf)}`,
+                  },
+                ],
+              })
+            ).data
+          : await extractGrantTerms(model, b64);
       await ctx.runMutation(internal.agentInternal.setGrantReady, {
         grantDocId,
         terms,
         fileName: grant.fileName,
       });
-      return { grantId: terms.grantId, budgetLines: terms.budgetLines.length };
+      return { grantId: terms.grantId, budgetLines: terms.budgetLines.length, skipped: false };
     } catch (e) {
       const message = (e as Error).message;
       await ctx.runMutation(internal.agentInternal.setGrantError, { grantDocId, message });
@@ -65,7 +84,7 @@ export const runAgent = action({
     let usageOutput = 0;
     const errors: string[] = [];
     try {
-      const result = await runPipeline(grokClient(), input, async (done, total) => {
+      const result = await runPipeline(getModelClient(), input, async (done, total) => {
         await ctx.runMutation(internal.agentInternal.updateRun, {
           runId,
           progress: `Coding transactions ${done}/${total}`,
@@ -114,7 +133,7 @@ export const explain = action({
       why: question,
       evidence: [],
     });
-    const answer = await defendDecision(grokClient(), {
+    const answer = await defendDecision(getModelClient(), {
       question,
       decision: decision as Parameters<typeof defendDecision>[1]["decision"],
       grants: grants as GrantTerms[],

@@ -17,11 +17,11 @@ async function ensureGrantPdf(
   fileName: string,
 ) {
   const existing = await client.query(api.grants.getByFileName, { fileName });
-  if (existing?.status === "ready") {
-    return { grantDocId: existing._id as Id<"grants">, extracted: false };
+  if (existing?.status === "ready" && existing.terms) {
+    return { grantDocId: existing._id as Id<"grants">, extracted: false, skipped: true, error: null };
   }
   try {
-    if (existing?.storageId && existing.status !== "uploaded") {
+    if (existing?.storageId) {
       await client.action(api.agent.extractGrant, { grantDocId: existing._id as Id<"grants"> });
       return { grantDocId: existing._id as Id<"grants">, extracted: true, error: null };
     }
