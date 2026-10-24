@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { assertDemoPasscode } from "./passcode";
 
@@ -45,6 +45,37 @@ async function clearTable(ctx: MutationCtx, table: DemoTable) {
   }
 }
 
+async function allGrantsReadyForPipeline(ctx: MutationCtx) {
+  const grants = await ctx.db.query("grants").collect();
+  if (grants.length === 0) return false;
+  const active = grants.filter((g) => g.status !== "error");
+  if (active.length === 0) return false;
+  return active.every((g) => g.status === "ready" && g.terms);
+}
+
+export const tryAutoRunPipeline = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const txn = await ctx.db.query("transactions").first();
+    if (!txn) return;
+    const extracting = await ctx.db
+      .query("grants")
+      .filter((q) => q.eq(q.field("status"), "extracting"))
+      .first();
+    if (extracting) return;
+    if (!(await allGrantsReadyForPipeline(ctx))) return;
+    await ctx.runMutation(internal.autonomy.enqueueAgentRun, {});
+  },
+});
+
+export const maybeAutoRunPipeline = mutation({
+  args: { passcode: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    assertDemoPasscode(args.passcode);
+    await ctx.runMutation(internal.ingest.tryAutoRunPipeline, {});
+  },
+});
+
 export const loadDemo = mutation({
   args: {
     passcode: v.optional(v.string()),
@@ -86,7 +117,7 @@ export const loadDemo = mutation({
         dataSource: "demo",
       });
     }
-    await ctx.runMutation(internal.autonomy.enqueueAgentRun, {});
+    await ctx.runMutation(internal.ingest.tryAutoRunPipeline, {});
   },
 });
 

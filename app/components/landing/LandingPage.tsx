@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { RedPenStrike } from "../RedPenStrike";
+import { ApproveDemo, DefendDemo, SourcesDisagreeDemo } from "./LandingBentoDemos";
 
 const GITHUB = "https://github.com/aldisworkspace/steward";
-const BLACK_CAT_CASE = "T0065";
+const BLACK_CAT_CASE = "black-cat";
 
 function demoPath(query: string): string {
   const q = query.startsWith("?") ? query : `?${query}`;
@@ -61,6 +62,12 @@ export function LandingPage() {
         <Link href="/" className="font-display text-[18px] font-semibold">
           Steward
         </Link>
+        <Link
+          href={demoPath("?tab=overview")}
+          className="rounded-[6px] bg-money px-4 py-2 text-[14px] font-semibold text-white hover:brightness-95 md:hidden"
+        >
+          Open live demo
+        </Link>
         <nav className="hidden items-center gap-6 text-[14px] md:flex">
           <a href="#how" className="text-ink-2 hover:text-ink">
             How it works
@@ -73,7 +80,7 @@ export function LandingPage() {
           </a>
           <Link
             href={demoPath("?tab=overview")}
-            className="rounded-[6px] bg-saffron px-4 py-2 text-[14px] font-semibold text-ink"
+            className="rounded-[6px] bg-money px-4 py-2 text-[14px] font-semibold text-white hover:brightness-95"
           >
             Open live demo
           </Link>
@@ -93,7 +100,7 @@ export function LandingPage() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href={demoPath(`?tab=inbox&case=${BLACK_CAT_CASE}`)}
-                className="rounded-[6px] bg-saffron px-4 py-2.5 text-[14px] font-semibold text-ink"
+                className="rounded-[6px] bg-money px-4 py-2.5 text-[14px] font-semibold text-white hover:brightness-95"
               >
                 Watch it catch a $482 bar tab
               </Link>
@@ -129,23 +136,13 @@ export function LandingPage() {
             </BentoCell>
             <BentoCell title="When sources disagree" className="col-span-12 lg:col-span-5">
               <p>Bank, books, and contract are shown side by side; disagreements get a red-pen underline.</p>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[12px]">
-                <div className="rounded-[6px] border border-rule p-2">Bank</div>
-                <div className="rounded-[6px] border border-redpen p-2 underline decoration-redpen">Books</div>
-                <div className="rounded-[6px] border border-rule p-2">Contract</div>
-              </div>
+              <SourcesDisagreeDemo />
             </BentoCell>
             <BentoCell title="Defends its calls" className="col-span-12 md:col-span-4">
-              <p className="rounded-[6px] bg-paper p-3">“Could this be team building?”</p>
-              <p className="mt-2 text-[13px] text-ink">Stands by it — cites §4.7 and prior rulings.</p>
+              <DefendDemo />
             </BentoCell>
             <BentoCell title="Can't approve its own work" className="col-span-12 md:col-span-4">
-              <button type="button" disabled className="rounded-[6px] bg-rule px-3 py-2 text-[13px] opacity-50">
-                Approve
-              </button>
-              <p className="mt-2 text-[13px]">
-                Segregation of duties: Steward proposes entries but cannot approve them.
-              </p>
+              <ApproveDemo />
             </BentoCell>
             <BentoCell title="Works while you're away" className="col-span-12 md:col-span-4">
               <ol className="space-y-2 text-[13px]">
@@ -211,7 +208,7 @@ export function LandingPage() {
               </Link>
               <Link
                 href={demoPath("?tab=overview")}
-                className="rounded-[6px] bg-saffron px-4 py-2.5 text-[14px] font-semibold text-ink"
+                className="rounded-[6px] bg-money px-4 py-2.5 text-[14px] font-semibold text-white hover:brightness-95"
               >
                 Open live demo
               </Link>

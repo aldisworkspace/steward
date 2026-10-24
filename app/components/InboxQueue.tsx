@@ -16,7 +16,7 @@ import { queueLine2 } from "@/lib/queueLine2";
 import { fmtRisk, fmtTableAmount } from "../format";
 import { CountUp } from "./CountUp";
 import { ChevronDown } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export function InboxQueue({
   rows,
@@ -51,6 +51,16 @@ export function InboxQueue({
     fundFilter != null ? getFundLabel(fundFilter === "general" ? null : fundFilter, grants) : null;
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [moreOpen]);
 
   const openRows = rows.filter((r) => !r.resolved);
   const filtered = rows.filter((r) => matchesInboxFilter(r.ruleId, r.status, filter, r.resolved));
@@ -94,33 +104,35 @@ export function InboxQueue({
         </div>
       )}
       <div
-        className="flex flex-nowrap items-center gap-2 overflow-x-auto border-b border-rule px-3 py-2"
+        className="relative flex flex-nowrap items-center gap-2 overflow-x-auto overflow-y-visible border-b border-rule px-3 py-2"
         role="tablist"
       >
         {PRIMARY_FILTERS.map((f) => (
           <FilterChip key={f} f={f} count={counts[f]} active={filter === f} onSelect={() => setFilter(f)} />
         ))}
-        <div className="relative">
+        <div className="relative shrink-0" ref={moreRef}>
           <button
             type="button"
             role="tab"
+            aria-expanded={moreOpen}
+            aria-haspopup="listbox"
             aria-selected={MORE_FILTERS.includes(filter)}
-            className={`flex shrink-0 items-center gap-1 rounded-[6px] border px-2 py-1 text-[13px] ${
+            className={`chip-button flex shrink-0 items-center gap-1 rounded-[6px] border px-2 py-1 text-[13px] ${
               MORE_FILTERS.includes(filter)
                 ? "border-ink bg-sheet font-semibold text-ink"
                 : "border-rule text-ink-2"
             }`}
             onClick={() => setMoreOpen((o) => !o)}
           >
-            More <ChevronDown size={14} />
+            More <ChevronDown size={14} className={moreOpen ? "rotate-180 transition-transform" : "transition-transform"} />
           </button>
           {moreOpen && (
-            <div className="absolute left-0 top-full z-20 mt-1 min-w-[160px] rounded-[8px] border border-rule bg-sheet py-1 shadow-[0_8px_24px_rgba(14,27,44,0.12)]">
+            <div className="absolute left-0 top-full z-30 mt-1 min-w-[180px] rounded-[8px] border border-rule bg-sheet py-1 shadow-[0_8px_24px_rgba(14,27,44,0.12)]">
               {MORE_FILTERS.map((f) => (
                 <button
                   key={f}
                   type="button"
-                  className="block w-full px-3 py-2 text-left text-[13px] hover:bg-paper"
+                  className="chip-button block w-full px-3 py-2 text-left text-[13px] hover:bg-paper"
                   onClick={() => {
                     setFilter(f);
                     setMoreOpen(false);
@@ -216,7 +228,7 @@ function FilterChip({
       role="tab"
       aria-selected={active}
       onClick={onSelect}
-      className={`shrink-0 rounded-[6px] border px-2 py-1 text-[13px] tabular ${
+      className={`chip-button shrink-0 rounded-[6px] border px-2 py-1 text-[13px] tabular ${
         active ? "border-ink bg-sheet font-semibold text-ink" : "border-rule text-ink-2"
       } ${dim ? "opacity-60" : ""}`}
     >

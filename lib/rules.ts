@@ -32,14 +32,10 @@ function daysBetween(a: string, b: string) {
 export const UNALLOWABLE_TERM_PATTERNS: { id: string; txn: RegExp; termRule: RegExp; label: string }[] = [
   { id: "fines", txn: /citation|violation|penalt|\bfine[sd]?\b|late fee/i, termRule: /fine|penalt|violation/i, label: "fines and penalties" },
   { id: "fundraising", txn: /gala|benefit|fundrais|donor (event|dinner)|auction/i, termRule: /fundrais/i, label: "fundraising" },
-  { id: "alcohol_staff", txn: /\bbar\b|brewery|brewing|wine|liquor|happy hour|appreciation|bottle & barrel/i,
+  { id: "alcohol_staff", txn: /\bbar\b|brewery|winery|wine|liquor|happy hour/i,
     termRule: /alcohol|hospitality|staff (meals|appreciation)/i, label: "alcohol / staff entertainment" },
-  { id: "staff_entertainment", txn: /giants|team outing|ticket(ing)?/i,
-    termRule: /entertainment|social activities for staff/i, label: "staff entertainment" },
-  { id: "lobbying", txn: /lobby|advocacy|appropriations|capitol strategies/i,
+  { id: "lobbying", txn: /lobby|lobbying/i,
     termRule: /lobby|legislat|advocacy|appropriations|influence/i, label: "lobbying" },
-  { id: "travel_out_of_state", txn: /united airlines|out-of-state|\b(chicago|denver|new york|seattle|boston)\b/i,
-    termRule: /outside the state|out-of-state|within the state of california/i, label: "out-of-state travel" },
 ];
 
 export function runRules(input: RuleInput): Finding[] {
@@ -95,21 +91,6 @@ export function runRules(input: RuleInput): Finding[] {
                      { source: "bank", ref: t.txnId, note: text(t) }],
           suggestion: [{ grantId: null, budgetLine: null, amountCents: t.amountCents }] });
         break;
-      }
-    }
-
-    // Restricted purpose: grant text vs transaction memo (e.g. youth-only grant, adult program supplies).
-    if (g && isOutflow(t) && g.restrictedPurpose) {
-      const rp = g.restrictedPurpose.toLowerCase();
-      const tx = text(t).toLowerCase();
-      if ((/teen|14-18|youth mural/.test(rp) && /adult ceramics|adult class/.test(tx)) ||
-          (/corridor arts|performances|exhibitions/.test(rp) && /adult ceramics/.test(tx))) {
-        blockedOrDup.add(t.txnId);
-        findings.push({ ruleId: "R-PURPOSE", txnId: t.txnId, status: "blocked",
-          message: `This expense looks outside ${g.grantId}'s restricted purpose (${g.restrictedPurpose}). Move to unrestricted funds.`,
-          evidence: [{ source: "contract", ref: g.grantId, note: g.restrictedPurpose },
-                     { source: "bank", ref: t.txnId, note: text(t) }],
-          suggestion: [{ grantId: null, budgetLine: null, amountCents: t.amountCents }] });
       }
     }
 

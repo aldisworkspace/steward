@@ -6,7 +6,9 @@ import { getFundLabel } from "@/lib/fundLabels";
 import { fundFilterParam, matchesFundFilter } from "@/lib/fundFilter";
 import { shouldIgnoreAppShortcut } from "@/lib/keyboardGuard";
 import type { GrantTerms } from "@/lib/types";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { resolveCaseDeepLink } from "@/lib/caseDeepLink";
 import { api } from "@/convex/_generated/api";
 import { fmtRisk, fmtSentenceAmount, fmtTableAmount, relativeTime } from "../format";
 import { getDemoPasscode, hasDemoWriteAccess } from "../lib/demoPasscode";
@@ -46,11 +48,13 @@ export function StewardApp() {
     setInboxFilter,
     setTxnFilter,
   } = useAppUrlState();
+  const searchParams = useSearchParams();
+  const deepLinkCase = caseId ?? searchParams.get("vendor");
   const counts = useQuery(api.ingest.counts);
   const inboxBadge = useQuery(api.ui.inboxBadge);
   const needsOverview = tab === "overview" || tab === "inbox";
   const stats = useQuery(api.ui.dashboardStats, needsOverview ? {} : "skip");
-  const queue = useQuery(api.ui.inboxQueue, tab === "inbox" ? {} : "skip");
+  const queue = useQuery(api.ui.inboxQueue, tab === "inbox" || deepLinkCase ? {} : "skip");
   const resolvedQueue = useQuery(api.ui.inboxResolved, tab === "inbox" && inboxFilter === "done" ? {} : "skip");
   const run = useQuery(api.dashboard.latestRun);
   const audit = useQuery(api.ui.auditFeed, tab === "overview" ? {} : "skip");
@@ -60,7 +64,7 @@ export function StewardApp() {
   );
   const ledger = useQuery(
     api.ui.transactionLedger,
-    tab === "transactions" || tab === "overview" ? {} : "skip",
+    tab === "transactions" || tab === "overview" || deepLinkCase ? {} : "skip",
   );
   const fundBreakdown = useQuery(api.ui.fundBreakdown, tab === "overview" ? {} : "skip");
 
@@ -113,6 +117,34 @@ export function StewardApp() {
   const canWrite = passcodeReady && hasDemoWriteAccess(demoGate?.requiresPasscode ?? false);
   const adminMode = useAdminMode();
   const offline = useConvexConnection();
+  const deepLinkParam = deepLinkCase;
+  const deepLinkHandled = useRef<string | null>(null);
+  const [unreachableAfterMs, setUnreachableAfterMs] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (counts !== undefined) return;
+    const t = setTimeout(() => setUnreachableAfterMs(Date.now()), 8000);
+    return () => clearTimeout(t);
+  }, [counts]);
+
+  const dataUnreachable = counts === undefined && unreachableAfterMs !== null;
+
+  useEffect(() => {
+    if (!deepLinkParam || deepLinkHandled.current === deepLinkParam) return;
+    const rows =
+      ledger?.map((r) => ({ txnId: r.txnId, description: r.description })) ??
+      [];
+    if (rows.length === 0) return;
+    const notAllowedTxnIds = (queue ?? [])
+      .filter((r) => r.status === "blocked")
+      .map((r) => r.txnId);
+    const resolved = resolveCaseDeepLink(deepLinkParam, rows, notAllowedTxnIds);
+    if (!resolved) return;
+    deepLinkHandled.current = deepLinkParam;
+    setCaseId(resolved);
+    setTab("inbox");
+    setInboxFilter("not_allowed");
+  }, [deepLinkParam, ledger, queue, setCaseId, setTab, setInboxFilter]);
 
   useEffect(() => {
     const open = inboxBadge?.open ?? 0;
@@ -336,6 +368,23 @@ export function StewardApp() {
   }, [exceptions, adminMode]);
 
   if (counts === undefined) {
+    if (dataUnreachable) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-paper p-8">
+          <div className="max-w-md text-center">
+            <h1 className="text-[22px] font-semibold text-ink">Can&apos;t reach the data server.</h1>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-6 rounded-[6px] bg-money px-5 py-2 text-[14px] font-medium text-white hover:brightness-95"
+            >
+              Retry
+            </button>
+            <p className="mt-4 text-[14px] text-ink-2">Check your connection or try again in a minute.</p>
+          </div>
+        </div>
+      );
+    }
     return <AppLoadingShell />;
   }
 

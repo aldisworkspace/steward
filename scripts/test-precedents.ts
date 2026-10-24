@@ -58,7 +58,10 @@ async function main() {
     },
   ]);
   const dDup = r1.decisions.find((x) => x.txnId === dup.txnId)!;
-  console.assert(!dDup.ruleHits.includes("R-DUPLICATE"), "not_duplicate should drop duplicate flag");
+  if (dDup.ruleHits.includes("R-DUPLICATE")) {
+    console.error("not_duplicate should drop duplicate flag");
+    process.exit(1);
+  }
 
   const r2 = await runWith([
     {
@@ -72,7 +75,10 @@ async function main() {
     },
   ]);
   const dPrior = r2.decisions.find((x) => x.txnId === prior.txnId)!;
-  console.assert(!dPrior.ruleHits.includes("R-PRIOR-APPROVAL"), "prior_approval_granted suppresses prior approval");
+  if (dPrior.ruleHits.includes("R-PRIOR-APPROVAL")) {
+    console.error("prior_approval_granted suppresses prior approval");
+    process.exit(1);
+  }
 
   const r3 = await runWith([
     {
@@ -86,7 +92,10 @@ async function main() {
     },
   ]);
   const dFine = r3.decisions.find((x) => x.txnId === fine.txnId)!;
-  console.assert(dFine.status === "blocked" && dFine.grantId === null, "disallow forces blocked unrestricted");
+  if (dFine.status !== "blocked" || dFine.grantId !== null) {
+    console.error("disallow forces blocked unrestricted");
+    process.exit(1);
+  }
 
   const r4 = await runWith([
     {
@@ -101,10 +110,10 @@ async function main() {
   ]);
   const costco = input.txns.find((t) => t.description.includes("COSTCO"))!;
   const dCostco = r4.decisions.find((x) => x.txnId === costco.txnId)!;
-  console.assert(
-    dCostco.checks?.some((c) => c.message.includes("Applied ruling")),
-    "allow adds applied ruling check",
-  );
+  if (!dCostco.checks?.some((c) => c.message.includes("Applied ruling"))) {
+    console.error("allow adds applied ruling check");
+    process.exit(1);
+  }
 
   console.log("test-precedents: all assertions passed");
 }

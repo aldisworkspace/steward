@@ -91,7 +91,12 @@ async function main() {
     `Dollars: clean=${totals.cleanCents} needs_you=${totals.needsYouCents} not_allowed=${totals.notAllowedCents} total=${totals.totalOutflowCents}`,
   );
   const sum = totals.cleanCents + totals.needsYouCents + totals.notAllowedCents;
-  console.log(`Dollar sum check: ${sum === totals.totalOutflowCents ? "OK" : "MISMATCH"}`);
+  const sumOk = sum === totals.totalOutflowCents;
+  console.log(`Dollar sum check: ${sumOk ? "OK" : "MISMATCH"}`);
+  if (!part.ok || !sumOk) process.exit(1);
 }
 
-main();
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

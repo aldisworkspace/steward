@@ -12,7 +12,7 @@ import { runPipeline } from "../lib/pipeline";
 import type { Precedent } from "../lib/types";
 import { FIXTURE_GRANTS } from "./fixtures";
 
-const D = process.argv[2] ?? "../steward-data";
+const D = process.argv[2] ?? "steward-data";
 const input = {
   txns: parseBank(readFileSync(`${D}/bank_transactions_q3_2026.csv`, "utf8")),
   gl: parseGl(readFileSync(`${D}/gl_export_bookkeeper.csv`, "utf8")),
@@ -90,5 +90,6 @@ async function main() {
     console.log(`  ${e.memo}`);
     for (const l of e.lines) console.log(`     ${l.debitCents ? "Dr" : "  Cr"} ${l.account} [${l.class ?? "unrestricted"}${l.budgetLine ? ":" + l.budgetLine : ""}] ${((l.debitCents || l.creditCents) / 100).toFixed(2)}`);
   }
+  if (wrong.length > 0 || res.errors.length > 0) process.exit(1);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

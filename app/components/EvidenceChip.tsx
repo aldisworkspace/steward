@@ -14,14 +14,23 @@ export function EvidenceChip({
   source,
   label,
   body,
+  highlighted = false,
+  id,
 }: {
   source: string;
   label: string;
   body: ReactNode;
+  highlighted?: boolean;
+  id?: string;
 }) {
   const style = STYLES[source] ?? "border border-rule bg-sheet text-ink";
   return (
-    <div className={`rounded-[6px] p-3 ${style}`}>
+    <div
+      id={id}
+      className={`rounded-[6px] p-3 transition-shadow ${style} ${
+        highlighted ? "ring-2 ring-ink ring-offset-2 ring-offset-sheet" : ""
+      }`}
+    >
       <p className="text-[12px] font-semibold text-ink-2">{label}</p>
       <div className="mt-2 text-[13px] leading-snug">{body}</div>
     </div>

@@ -120,6 +120,8 @@ export async function POST(req: Request) {
       grantResults.push(await ensureGrantPdf(client, dataDir, fileName, passcode));
     }
 
+    await client.mutation(api.ingest.maybeAutoRunPipeline, { passcode });
+
     const grantFailed = grantResults.some((g) => g.error);
     const [counts, grants] = await Promise.all([
       client.query(api.ingest.counts, {}),

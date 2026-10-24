@@ -70,14 +70,28 @@ export function OverviewTab({
     const withDue = termsList
       .filter((t) => t.reportDue)
       .map((t) => {
-        const due = new Date(t.reportDue!);
+        const due = new Date(t.reportDue! + "T12:00:00");
         const days = Math.ceil((due.getTime() - nowMs) / 86400000);
-        return { grantId: t.grantId, days, title: getFundLabel(t.grantId, termsList).title };
+        const dueLabel = due.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        return { grantId: t.grantId, days, title: getFundLabel(t.grantId, termsList).title, dueLabel };
       })
+      .filter((x) => x.days <= 21 && x.days >= 0)
       .sort((a, b) => a.days - b.days)[0];
     if (!withDue) return null;
     return withDue;
   }, [termsList, nowMs]);
+
+  const deadlineHeadline = useMemo(() => {
+    if (!reportLine) return null;
+    const inDays =
+      reportLine.days === 0
+        ? "today"
+        : reportLine.days === 1
+          ? "in 1 day"
+          : `in ${reportLine.days} days`;
+    const items = needYou;
+    return `${reportLine.title} report due ${reportLine.dueLabel} · ${inDays} · ${items} item${items === 1 ? "" : "s"} still need you`;
+  }, [reportLine, needYou]);
 
   const timeline = useMemo(() => {
     const steps = [
@@ -192,6 +206,14 @@ export function OverviewTab({
 
   return (
     <div className="mx-auto max-w-[1280px] px-6 py-8">
+      {deadlineHeadline && (
+        <p
+          className="mb-6 rounded-[6px] border border-attention/40 bg-attention-tint px-4 py-2.5 text-[14px] text-ink"
+          role="status"
+        >
+          {deadlineHeadline}
+        </p>
+      )}
       <div className="grid gap-8 lg:grid-cols-12">
         <div className="lg:col-span-5">
           <p className="font-display text-[40px] font-semibold leading-[1.15] text-ink">

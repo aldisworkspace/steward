@@ -11,7 +11,7 @@ import { runRules } from "../lib/rules";
 import type { Candidate, Precedent } from "../lib/types";
 import { FIXTURE_GRANTS } from "./fixtures";
 
-const D = process.argv[2] ?? "../steward-data";
+const D = process.argv[2] ?? "steward-data";
 const txns = parseBank(readFileSync(`${D}/bank_transactions_q3_2026.csv`, "utf8"));
 const gl = parseGl(readFileSync(`${D}/gl_export_bookkeeper.csv`, "utf8"));
 const staff = parseStaff(readFileSync(`${D}/staff_allocation.csv`, "utf8"));
@@ -51,5 +51,7 @@ for (const f of findings) {
 }
 const missed = [...expected].filter((id) => !flagged.has(id));
 const tp = [...flagged].filter((id) => expected.has(id)).length;
+const fp = [...flagged].filter((id) => !expected.has(id)).length;
 console.log(`\nRecall ${tp}/${expected.size}  Precision ${tp}/${flagged.size}`);
 console.log(`Missed (left for the model): ${missed.map((id) => `${id} ${txns.find((t) => t.txnId === id)?.description}`).join(", ") || "none"}`);
+if (fp > 1) process.exit(1);

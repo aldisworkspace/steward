@@ -81,10 +81,50 @@ button:not(:disabled):hover {
   box-shadow: 0 2px 10px rgba(14, 27, 44, 0.1);
 }
 
-button.bg-saffron:not(:disabled):hover,
-button[class*="bg-saffron"]:not(:disabled):hover {
-  filter: brightness(1.08);
-  box-shadow: 0 2px 12px rgba(14, 27, 44, 0.14);
+button.chip-button:not(:disabled):hover,
+button.chip-button:not(:disabled):active {
+  transform: none;
+  box-shadow: none;
+  filter: brightness(1.04);
+}
+
+@keyframes bento-send-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.bento-send-pop {
+  animation: bento-send-pop 400ms ease-out;
+}
+
+@keyframes bento-approve-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-3px);
+  }
+  40%,
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+.bento-approve-shake {
+  animation: bento-approve-shake 400ms ease-in-out;
+}
+
+button.bg-money:not(:disabled):hover {
+  filter: brightness(0.95);
 }
 
 button:not(:disabled):active {

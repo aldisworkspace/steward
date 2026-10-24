@@ -119,6 +119,22 @@ function CaseFileInner({
   const [evidenceOpen, setEvidenceOpen] = useState(
     () => data.decision.status === "blocked" || data.decision.status === "needs_review",
   );
+  type EvidenceFocus = "bank" | "gl" | "contract" | "time_record" | "precedent";
+  const [evidenceFocus, setEvidenceFocus] = useState<EvidenceFocus | null>(null);
+
+  function focusEvidence(source: EvidenceFocus) {
+    setEvidenceOpen(true);
+    setEvidenceFocus((prev) => (prev === source ? null : source));
+    requestAnimationFrame(() => {
+      document.getElementById(`evidence-${source}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
+
+  function evidenceChipClass(source: EvidenceFocus) {
+    return `chip-button rounded-[6px] border px-2 py-1 text-[13px] ${
+      evidenceFocus === source ? "border-ink bg-sheet font-semibold text-ink" : "border-rule text-ink-2 hover:border-ink-2"
+    }`;
+  }
   const approve = useMutation(api.approvals.approveEntry);
   const reject = useMutation(api.approvals.rejectEntry);
   const acknowledge = useMutation(api.approvals.acknowledgeDecision);
@@ -163,6 +179,7 @@ function CaseFileInner({
   useEffect(() => {
     seenStrikeKeys.add(strikeKey);
   }, [strikeKey]);
+
   const vendorLabel = vendorKey(txn.description);
   const terms = grantTermsList(grantTerms);
   const ln = (gid: string | null, code: string | null) => lineName(grantTerms, gid, code);
@@ -447,13 +464,15 @@ function CaseFileInner({
           </p>
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div className="mt-6 text-[14px] text-ink">
+          <span className="text-ink-2">Books say: </span>
           {bkLabel ? (
-            <RedPenStrike text={bkLabel} className="text-[14px]" animate={strikeAnimate} />
+            <RedPenStrike text={bkLabel} className="inline text-[14px]" animate={strikeAnimate} />
           ) : (
-            <span className="text-[14px] text-ink-2">Not yet coded</span>
+            <span className="text-ink-2">not coded yet</span>
           )}
-          <span className="text-[17px] font-semibold text-money">{stewardLabel}</span>
+          <span className="text-ink-2"> → Steward says: </span>
+          <span className="font-semibold text-money">{stewardLabel}</span>
         </div>
 
         <div className="mt-8">
@@ -462,8 +481,8 @@ function CaseFileInner({
             {bankEv && (
               <button
                 type="button"
-                className="rounded-full border border-navy/30 bg-navy px-2 py-1 text-[12px] text-white"
-                onClick={() => setEvidenceOpen(true)}
+                className={evidenceChipClass("bank")}
+                onClick={() => focusEvidence("bank")}
                 title={bankEv.note}
               >
                 Bank
@@ -472,8 +491,8 @@ function CaseFileInner({
             {glEv && (
               <button
                 type="button"
-                className="rounded-full border border-slate/30 bg-slate px-2 py-1 text-[12px] text-white"
-                onClick={() => setEvidenceOpen(true)}
+                className={evidenceChipClass("gl")}
+                onClick={() => focusEvidence("gl")}
                 title={glEv.note}
               >
                 Ledger
@@ -482,20 +501,20 @@ function CaseFileInner({
             {clauses.length > 0 && (
               <button
                 type="button"
-                className="rounded-full border-2 border-money px-2 py-1 font-serif text-[12px] text-money"
-                onClick={() => setEvidenceOpen(true)}
+                className={evidenceChipClass("contract")}
+                onClick={() => focusEvidence("contract")}
                 title={clauses[0]?.rule}
               >
-                Contract §
+                Contract
               </button>
             )}
             {timeEv && (
               <button
                 type="button"
-                className="rounded-full border border-sky/40 bg-sky/15 px-2 py-1 text-[12px]"
-                onClick={() => setEvidenceOpen(true)}
+                className={evidenceChipClass("time_record")}
+                onClick={() => focusEvidence("time_record")}
               >
-                Time record
+                Time sheet
               </button>
             )}
             {evidence
@@ -504,18 +523,28 @@ function CaseFileInner({
                 <button
                   key={`${e.ref}-${eIdx}`}
                   type="button"
-                  className="rounded-full border border-attention/50 bg-attention-tint px-2 py-1 text-[12px]"
-                  onClick={() => setEvidenceOpen(true)}
+                  className={evidenceChipClass("precedent")}
+                  onClick={() => focusEvidence("precedent")}
                 >
-                  Precedent {e.ref}
+                  Past ruling
                 </button>
               ))}
           </div>
           {evidenceOpen && (
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-          {bankEv && <EvidenceChip source="bank" label="Bank record" body={bankEv.note} />}
+          {bankEv && (
+            <EvidenceChip
+              id="evidence-bank"
+              highlighted={evidenceFocus === "bank"}
+              source="bank"
+              label="Bank record"
+              body={bankEv.note}
+            />
+          )}
           {glEv && (
             <EvidenceChip
+              id="evidence-gl"
+              highlighted={evidenceFocus === "gl"}
               source="gl"
               label="Bookkeeper's entry"
               body={
@@ -530,6 +559,8 @@ function CaseFileInner({
           )}
           {clauses.length > 0 && (
             <EvidenceChip
+              id="evidence-contract"
+              highlighted={evidenceFocus === "contract"}
               source="contract"
               label="Grant agreement"
               body={
@@ -544,11 +575,26 @@ function CaseFileInner({
               }
             />
           )}
-          {timeEv && <EvidenceChip source="time_record" label="Time sheet" body={timeEv.note} />}
+          {timeEv && (
+            <EvidenceChip
+              id="evidence-time_record"
+              highlighted={evidenceFocus === "time_record"}
+              source="time_record"
+              label="Time sheet"
+              body={timeEv.note}
+            />
+          )}
           {evidence
             .filter((e) => e.source === "precedent")
             .map((e, eIdx) => (
-              <EvidenceChip key={`${e.ref}-${eIdx}`} source="precedent" label="Past ruling" body={e.note} />
+              <EvidenceChip
+                key={`${e.ref}-${eIdx}`}
+                id={eIdx === 0 ? "evidence-precedent" : undefined}
+                highlighted={evidenceFocus === "precedent"}
+                source="precedent"
+                label="Past ruling"
+                body={e.note}
+              />
             ))}
         </div>
           )}
@@ -651,7 +697,7 @@ function CaseFileInner({
                 type="button"
                 disabled={!canWrite}
                 onClick={() => void onApprove()}
-                className="rounded-[6px] bg-saffron px-4 py-2 text-[14px] font-semibold text-ink disabled:opacity-50"
+                className="rounded-[6px] bg-money px-4 py-2 text-[14px] font-semibold text-white hover:brightness-95 disabled:opacity-50"
               >
                 Approve correction
               </button>
@@ -670,7 +716,7 @@ function CaseFileInner({
                 type="button"
                 disabled={!canWrite}
                 onClick={() => (ackOpen ? void onApprove() : setAckOpen(true))}
-                className="rounded-[6px] bg-saffron px-4 py-2 text-[14px] font-semibold text-ink disabled:opacity-50"
+                className="rounded-[6px] bg-money px-4 py-2 text-[14px] font-semibold text-white hover:brightness-95 disabled:opacity-50"
               >
                 Agree
               </button>

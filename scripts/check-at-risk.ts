@@ -71,4 +71,7 @@ async function main() {
   console.log("Live app: Overview at-risk = Inbox header = sum of queue row atRiskCents (open items).");
 }
 
-main();
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

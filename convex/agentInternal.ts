@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Decision, GlRow, GrantTerms, Precedent, StaffAllocation, Txn, TypedPrecedent } from "../lib/types";
 
 export const getGrant = internalQuery({
@@ -34,6 +35,7 @@ export const setGrantReady = internalMutation({
       why: `Steward extracted terms from ${fileName}`,
       evidence: [fileName, t.grantId],
     });
+    await ctx.runMutation(internal.ingest.tryAutoRunPipeline, {});
   },
 });
 
