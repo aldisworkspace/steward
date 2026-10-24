@@ -1,12 +1,18 @@
 "use client";
 
-import { getFundLabel, grantTermsList } from "@/lib/fundLabels";
+import {
+  buildSankeyAggregates,
+  grantIdFromKey,
+  OUTCOME_COLOR,
+  OUTCOME_HINT,
+  type Outcome,
+  type SankeyLinkMeta,
+  type SankeyNodeMeta,
+} from "@/lib/sankeyData";
 import type { GrantTerms } from "@/lib/types";
 import { sankey, sankeyLinkHorizontal, sankeyRight } from "d3-sankey";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fmtRisk } from "../format";
-
-type Outcome = "clean" | "needs_you" | "disallowed";
 
 type LedgerRow = {
   amountCents: number;
@@ -18,43 +24,157 @@ export type SankeyNavigate =
   | { kind: "fund"; grantId: string | null }
   | { kind: "status"; outcome: Outcome; grantId: string | null };
 
-type NodeMeta = {
+const MIN_CHART_WIDTH = 720;
+const LEFT_LANE = 170;
+const RIGHT_LANE = 190;
+const CHART_HEIGHT = 280;
+const TOP_PAD = 24;
+const BOTTOM_PAD = 16;
+const FUND_BLOCK_W = 168;
+const LABEL_BLOCK_H = 36;
+const LABEL_GAP = 8;
+const MIN_NODE_HIT = 6;
+
+type LayoutNode = SankeyNodeMeta & { x0?: number; x1?: number; y0?: number; y1?: number };
+type LayoutLink = {
+  source: number | LayoutNode;
+  target: number | LayoutNode;
+  value: number;
   id: string;
-  layer: number;
+  grantKey: string | null;
+  outcome: Outcome;
+  count: number;
+};
+
+type LaneLabel = {
+  id: string;
+  title: string;
+  amount: string;
+  x: number;
+  anchor: "end" | "start";
+  y: number;
+  nodeCy: number;
+  nodeCx: number;
+  leader: boolean;
+  kind: SankeyNodeMeta["kind"];
+  grantKey: string | null;
+  outcome?: Outcome;
+  subtitle: string;
+  count: number;
+  cents: number;
+};
+
+function stackLaneLabels(
+  items: Omit<LaneLabel, "y" | "leader">[],
+  chartTop: number,
+  chartBottom: number,
+): LaneLabel[] {
+  const sorted = [...items].sort((a, b) => a.nodeCy - b.nodeCy);
+  const placed: LaneLabel[] = [];
+  let cursor = chartTop;
+  for (const item of sorted) {
+    let y = item.nodeCy - LABEL_BLOCK_H / 2;
+    if (y < cursor) y = cursor;
+    const leader = Math.abs(y + LABEL_BLOCK_H / 2 - item.nodeCy) > 6;
+    placed.push({ ...item, y, leader });
+    cursor = y + LABEL_BLOCK_H + LABEL_GAP;
+  }
+  const overflow = cursor - LABEL_GAP - chartBottom;
+  if (overflow > 0) {
+    for (const p of placed) p.y -= overflow;
+  }
+  return placed;
+}
+
+function runLayout(width: number, agg: NonNullable<ReturnType<typeof buildSankeyAggregates>>) {
+  const idx = (id: string) => agg.nodeList.findIndex((n) => n.id === id);
+  const nodesCopy: LayoutNode[] = agg.nodeList.map((d) => ({ ...d }));
+  const linksCopy: LayoutLink[] = agg.linkList.map((d) => ({
+    source: idx(d.sourceId),
+    target: idx(d.targetId),
+    value: d.value,
+    id: d.id,
+    grantKey: d.grantKey,
+    outcome: d.outcome,
+    count: d.count,
+  }));
+
+  const layout = sankey<LayoutNode, LayoutLink>()
+    .nodeWidth(10)
+    .nodePadding(18)
+    .extent([
+      [LEFT_LANE, TOP_PAD],
+      [width - RIGHT_LANE, CHART_HEIGHT - BOTTOM_PAD],
+    ])
+    .nodeAlign(sankeyRight);
+
+  const graph = layout({ nodes: nodesCopy, links: linksCopy });
+  for (const node of graph.nodes) {
+    if (node.kind === "fund") {
+      const cx = ((node.x0 ?? 0) + (node.x1 ?? 0)) / 2;
+      node.x0 = cx - FUND_BLOCK_W / 2;
+      node.x1 = cx + FUND_BLOCK_W / 2;
+    }
+  }
+  layout.update(graph);
+  const { nodes, links } = graph;
+
+  const chartBottom = CHART_HEIGHT - BOTTOM_PAD;
+  const leftItems: Omit<LaneLabel, "y" | "leader">[] = [];
+  const rightItems: Omit<LaneLabel, "y" | "leader">[] = [];
+
+  for (const node of nodes) {
+    const cy = ((node.y0 ?? 0) + (node.y1 ?? 0)) / 2;
+    const cx = ((node.x0 ?? 0) + (node.x1 ?? 0)) / 2;
+    if (node.kind === "bank") {
+      leftItems.push({
+        id: node.id,
+        title: node.title,
+        amount: fmtRisk(node.cents),
+        x: LEFT_LANE - 12,
+        anchor: "end",
+        nodeCy: cy,
+        nodeCx: cx,
+        kind: node.kind,
+        grantKey: node.grantKey,
+        outcome: node.outcome,
+        subtitle: node.subtitle,
+        count: node.count,
+        cents: node.cents,
+      });
+    }
+    if (node.kind === "status") {
+      rightItems.push({
+        id: node.id,
+        title: node.title,
+        amount: fmtRisk(node.cents),
+        x: (node.x1 ?? width - RIGHT_LANE) + 12,
+        anchor: "start",
+        nodeCy: cy,
+        nodeCx: cx,
+        kind: node.kind,
+        grantKey: node.grantKey,
+        outcome: node.outcome,
+        subtitle: node.subtitle,
+        count: node.count,
+        cents: node.cents,
+      });
+    }
+  }
+
+  const leftLabels = stackLaneLabels(leftItems, TOP_PAD, chartBottom);
+  const rightLabels = stackLaneLabels(rightItems, TOP_PAD, chartBottom);
+
+  return { nodes, links, leftLabels, rightLabels, width, height: CHART_HEIGHT };
+}
+
+type HitPayload = {
   title: string;
   subtitle: string;
   cents: number;
   count: number;
-  grantKey: string | null;
-  outcome?: Outcome;
-  kind: "bank" | "fund" | "status";
+  hint?: string;
 };
-
-const OUTCOME_LABEL: Record<Outcome, string> = {
-  clean: "Clean",
-  needs_you: "Needs you",
-  disallowed: "Disallowed",
-};
-
-const OUTCOME_COLOR: Record<Outcome, string> = {
-  clean: "var(--money)",
-  needs_you: "var(--attention)",
-  disallowed: "var(--redpen)",
-};
-
-const OUTCOME_HINT: Record<Outcome, string> = {
-  clean: "Coded and verified against grant rules; no action required.",
-  needs_you: "Steward needs your approval or judgment before books are final.",
-  disallowed: "Costs the grant agreement prohibits; Steward moved them to general funds.",
-};
-
-function grantKeyFromId(grantId: string | null): string {
-  return grantId ?? "general";
-}
-
-function grantIdFromKey(key: string): string | null {
-  return key === "general" ? null : key;
-}
 
 export function MoneyFlowSankey({
   ledger,
@@ -65,163 +185,122 @@ export function MoneyFlowSankey({
   grants: GrantTerms[] | { terms: unknown }[] | undefined;
   onNavigate: (nav: SankeyNavigate) => void;
 }) {
-  const terms = grantTermsList(grants);
-  const [hover, setHover] = useState<{
-    title: string;
-    subtitle: string;
-    cents: number;
-    count: number;
-    hint?: string;
-  } | null>(null);
-  const [focusId, setFocusId] = useState<string | null>(null);
-  const [hoverLink, setHoverLink] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<SVGSVGElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const animatedRef = useRef(false);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const onNavigateRef = useRef(onNavigate);
+  onNavigateRef.current = onNavigate;
 
-  const graph = useMemo(() => {
-    const outflows = (ledger ?? []).filter((r) => r.amountCents < 0);
-    const totalOut = outflows.reduce((a, r) => a + Math.abs(r.amountCents), 0);
-    const bankGrant = new Map<string, number>();
-    const grantOutcome = new Map<string, number>();
-    const grantCount = new Map<string, number>();
-    const outcomeCount = new Map<string, number>();
-    const linkCounts = new Map<string, number>();
+  const agg = useMemo(() => buildSankeyAggregates(ledger, grants), [ledger, grants]);
 
-    for (const r of outflows) {
-      const cents = Math.abs(r.amountCents);
-      const gk = grantKeyFromId(r.grantId);
-      const outcome: Outcome =
-        r.status === "auto" ? "clean" : r.status === "blocked" ? "disallowed" : "needs_you";
-      const bg = `${gk}|${outcome}`;
-      bankGrant.set(gk, (bankGrant.get(gk) ?? 0) + cents);
-      grantOutcome.set(bg, (grantOutcome.get(bg) ?? 0) + cents);
-      grantCount.set(gk, (grantCount.get(gk) ?? 0) + 1);
-      outcomeCount.set(outcome, (outcomeCount.get(outcome) ?? 0) + 1);
-      linkCounts.set(bg, (linkCounts.get(bg) ?? 0) + 1);
-    }
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setContainerWidth(el.getBoundingClientRect().width);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-    const nodeList: NodeMeta[] = [
-      {
-        id: "bank",
-        layer: 0,
-        title: "Bank outflows",
-        subtitle: "All charges on the feed",
-        cents: totalOut,
-        count: outflows.length,
-        grantKey: null,
-        kind: "bank",
-      },
-    ];
+  const layoutWidth = Math.max(MIN_CHART_WIDTH, containerWidth || MIN_CHART_WIDTH);
 
-    const fundKeys = [...bankGrant.keys()].sort();
-    for (const gk of fundKeys) {
-      const gid = grantIdFromKey(gk);
-      const fund = getFundLabel(gid, terms);
-      nodeList.push({
-        id: `fund-${gk}`,
-        layer: 1,
-        title: fund.title,
-        subtitle: fund.subtitle,
-        cents: bankGrant.get(gk) ?? 0,
-        count: grantCount.get(gk) ?? 0,
-        grantKey: gid,
-        kind: "fund",
-      });
-    }
+  const layoutStable = useMemo(() => {
+    if (!agg) return null;
+    return runLayout(layoutWidth, agg);
+  }, [agg, layoutWidth]);
 
-    for (const o of ["clean", "needs_you", "disallowed"] as Outcome[]) {
-      const cents = [...grantOutcome.entries()]
-        .filter(([k]) => k.endsWith(`|${o}`))
-        .reduce((a, [, v]) => a + v, 0);
-      if (cents <= 0) continue;
-      nodeList.push({
-        id: `status-${o}`,
-        layer: 2,
-        title: OUTCOME_LABEL[o],
-        subtitle: OUTCOME_HINT[o].split(";")[0] ?? "",
-        cents,
-        count: outcomeCount.get(o) ?? 0,
-        grantKey: null,
-        outcome: o,
-        kind: "status",
-      });
-    }
+  useEffect(() => {
+    if (!chartRef.current || animatedRef.current) return;
+    animatedRef.current = true;
+    chartRef.current.querySelectorAll(".sankey-band").forEach((p) => p.classList.add("sankey-band-animate"));
+  }, [layoutStable]);
 
-    const idx = (id: string) => nodeList.findIndex((n) => n.id === id);
-    const linkList: { source: string; target: string; value: number; count: number; grantKey: string | null; outcome: Outcome }[] = [];
+  const clearHover = useCallback(() => {
+    chartRef.current?.removeAttribute("data-hovered");
+    chartRef.current?.querySelectorAll(".is-hovered").forEach((el) => el.classList.remove("is-hovered"));
+    if (tooltipRef.current) tooltipRef.current.style.visibility = "hidden";
+  }, []);
 
-    for (const [gk, cents] of bankGrant) {
-      linkList.push({
-        source: "bank",
-        target: `fund-${gk}`,
-        value: cents,
-        count: grantCount.get(gk) ?? 0,
-        grantKey: grantIdFromKey(gk),
-        outcome: "clean",
-      });
-    }
-    for (const [key, cents] of grantOutcome) {
-      const [gk, outcome] = key.split("|") as [string, Outcome];
-      linkList.push({
-        source: `fund-${gk}`,
-        target: `status-${outcome}`,
-        value: cents,
-        count: linkCounts.get(key) ?? 0,
-        grantKey: grantIdFromKey(gk),
-        outcome,
-      });
-    }
+  const positionTooltip = useCallback((clientX: number, clientY: number, payload: HitPayload) => {
+    const container = containerRef.current;
+    const tip = tooltipRef.current;
+    if (!container || !tip) return;
+    const rect = container.getBoundingClientRect();
+    let left = clientX - rect.left + 14;
+    let top = clientY - rect.top + 14;
+    tip.style.visibility = "visible";
+    tip.querySelector("[data-tip-title]")!.textContent = payload.title;
+    tip.querySelector("[data-tip-sub]")!.textContent = payload.subtitle;
+    tip.querySelector("[data-tip-amt]")!.textContent = fmtRisk(payload.cents);
+    tip.querySelector("[data-tip-count]")!.textContent = `${payload.count} transaction${payload.count === 1 ? "" : "s"}`;
+    const hintEl = tip.querySelector("[data-tip-hint]") as HTMLElement;
+    if (payload.hint) {
+      hintEl.textContent = payload.hint;
+      hintEl.style.display = "block";
+    } else hintEl.style.display = "none";
+    const tipW = tip.offsetWidth;
+    const tipH = tip.offsetHeight;
+    if (left + tipW > rect.width - 8) left = clientX - rect.left - tipW - 14;
+    if (top + tipH > rect.height - 8) top = clientY - rect.top - tipH - 14;
+    if (left < 8) left = 8;
+    if (top < 8) top = 8;
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+  }, []);
 
-    type N = NodeMeta & { x0?: number; x1?: number; y0?: number; y1?: number };
-    type L = { source: number | N; target: number | N; value: number; grantKey: string | null; outcome: Outcome; count: number };
-
-    const nodesCopy: N[] = nodeList.map((d) => ({ ...d }));
-    const linksCopy: L[] = linkList.map((d) => ({
-      source: idx(d.source),
-      target: idx(d.target),
-      value: d.value,
-      grantKey: d.grantKey,
-      outcome: d.outcome,
-      count: d.count,
-    }));
-
-    const layout = sankey<N, L>()
-      .nodeWidth(14)
-      .nodePadding(14)
-      .extent([
-        [12, 12],
-        [528, 228],
-      ])
-      .nodeAlign(sankeyRight);
-
-    const laid = layout({ nodes: nodesCopy, links: linksCopy });
-
-    let cleanC = 0;
-    let problemC = 0;
-    const problemByGrant = new Map<string, number>();
-    for (const r of outflows) {
-      const cents = Math.abs(r.amountCents);
-      const gk = grantKeyFromId(r.grantId);
-      if (r.status === "auto") cleanC += cents;
-      else {
-        problemC += cents;
-        problemByGrant.set(gk, (problemByGrant.get(gk) ?? 0) + cents);
+  const setHoverTarget = useCallback(
+    (hitId: string | null, payload: HitPayload | null, clientX?: number, clientY?: number) => {
+      if (hideTimer.current) {
+        clearTimeout(hideTimer.current);
+        hideTimer.current = null;
       }
-    }
+      const svg = chartRef.current;
+      if (!svg) return;
+      svg.querySelectorAll(".is-hovered").forEach((el) => el.classList.remove("is-hovered"));
+      if (!hitId || !payload) {
+        hideTimer.current = setTimeout(clearHover, 100);
+        return;
+      }
+      svg.setAttribute("data-hovered", hitId);
+      svg.querySelector(`[data-sankey-hit="${hitId}"]`)?.classList.add("is-hovered");
+      if (clientX != null && clientY != null) positionTooltip(clientX, clientY, payload);
+    },
+    [clearHover, positionTooltip],
+  );
 
-    let caption: string;
-    if (problemC === 0) {
-      caption = "All spending on the bank feed is coded clean.";
-    } else {
-      const top = [...problemByGrant.entries()].sort((a, b) => b[1] - a[1])[0];
-      const topFund = getFundLabel(grantIdFromKey(top?.[0] ?? "general"), terms);
-      caption = `Most spending is clean. ${fmtRisk(problemC)} is charged to the wrong fund or not allowed${topFund.title ? `, mostly on the ${topFund.title} grant` : ""}.`;
-    }
+  const handleChartMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      const t = e.target as Element;
+      const hit = t.closest("[data-sankey-hit]") as HTMLElement | null;
+      if (!hit) {
+        if (!hideTimer.current) hideTimer.current = setTimeout(clearHover, 100);
+        return;
+      }
+      if (hideTimer.current) {
+        clearTimeout(hideTimer.current);
+        hideTimer.current = null;
+      }
+      const payload: HitPayload = {
+        title: hit.dataset.tipTitle ?? "",
+        subtitle: hit.dataset.tipSub ?? "",
+        cents: Number(hit.dataset.tipCents ?? 0),
+        count: Number(hit.dataset.tipCount ?? 0),
+        hint: hit.dataset.tipHint,
+      };
+      setHoverTarget(hit.dataset.sankeyHit ?? null, payload, e.clientX, e.clientY);
+    },
+    [clearHover, setHoverTarget],
+  );
 
-    const srSummary = `Spent from the bank ${fmtRisk(totalOut)} across ${outflows.length} charges. ${caption}`;
+  const handleChartMouseLeave = useCallback(() => {
+    hideTimer.current = setTimeout(clearHover, 100);
+  }, [clearHover]);
 
-    return { nodes: laid.nodes, links: laid.links, totalOut, caption, srSummary, outflows: outflows.length };
-  }, [ledger, terms]);
-
-  if (!ledger?.length || graph.totalOut === 0) {
+  if (!agg) {
     return (
       <div className="flex h-[280px] items-center justify-center rounded-[8px] border border-rule bg-sheet text-[15px] text-ink-2">
         No outflows to chart yet.
@@ -229,146 +308,319 @@ export function MoneyFlowSankey({
     );
   }
 
+  const useFallback = containerWidth > 0 && containerWidth < MIN_CHART_WIDTH;
+  const L = layoutStable!;
+
   return (
-    <div className="relative rounded-[8px] border border-rule bg-sheet p-4">
+    <div ref={containerRef} className="relative rounded-[8px] border border-rule bg-sheet p-4">
       <h3 className="font-display text-[17px] font-semibold text-ink">Where the money went</h3>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-[12px] font-medium text-ink-2">
+      <div className="mt-3 grid text-[12px] font-medium text-ink-2" style={{ gridTemplateColumns: `${LEFT_LANE}px 1fr ${RIGHT_LANE}px` }}>
         <span>Spent from the bank</span>
         <span className="text-center">Charged to</span>
         <span className="text-right">Status</span>
       </div>
-      <p className="sr-only">{graph.srSummary}</p>
-      {hover && (
-        <div
-          className="absolute right-4 top-14 z-10 max-w-[240px] rounded-[8px] border border-rule bg-sheet p-3 text-[13px] shadow-[0_4px_24px_rgba(14,27,44,0.12)]"
-          aria-live="polite"
-        >
-          <p className="font-semibold text-ink">{hover.title}</p>
-          {hover.subtitle && <p className="text-ink-2">{hover.subtitle}</p>}
-          <p className="tabular mt-1 font-medium">{fmtRisk(hover.cents)}</p>
-          <p className="text-ink-2">{hover.count} transaction{hover.count === 1 ? "" : "s"}</p>
-          {hover.hint && <p className="mt-2 text-ink-2">{hover.hint}</p>}
-        </div>
-      )}
-      <svg viewBox="0 0 540 260" className="mt-1 w-full max-w-[540px]" role="img" aria-label={graph.srSummary}>
-        {graph.links.map((link, i) => {
-          const target = link.target as NodeMeta;
-          const source = link.source as NodeMeta;
+      <p className="sr-only">{agg.srSummary}</p>
+      {useFallback ? (
+        <SankeyFallbackBars agg={agg} onNavigate={onNavigate} />
+      ) : (
+        <div className="min-w-[720px]">
+      <div
+        ref={tooltipRef}
+        className="pointer-events-none absolute z-20 max-w-[240px] rounded-[8px] border border-rule bg-sheet p-3 text-[13px] shadow-[0_4px_24px_rgba(14,27,44,0.12)]"
+        style={{ visibility: "hidden", left: 0, top: 0 }}
+        aria-hidden
+      >
+        <p className="font-semibold text-ink" data-tip-title />
+        <p className="text-ink-2" data-tip-sub />
+        <p className="tabular mt-1 font-medium text-ink" data-tip-amt />
+        <p className="text-ink-2" data-tip-count />
+        <p className="mt-2 text-ink-2" data-tip-hint />
+      </div>
+      <svg
+        ref={chartRef}
+        viewBox={`0 0 ${L.width} ${L.height}`}
+        width="100%"
+        height={L.height}
+        className="sankey-chart mt-1 block"
+        role="img"
+        aria-label={agg.srSummary}
+        onMouseMove={handleChartMouseMove}
+        onMouseLeave={handleChartMouseLeave}
+      >
+        {L.links.map((link) => {
+          const target = link.target as LayoutNode;
+          const source = link.source as LayoutNode;
           const color = target.outcome ? OUTCOME_COLOR[target.outcome] : "var(--navy-2)";
-          const active = hoverLink === i || focusId === target.id || focusId === source.id;
-          const dimmed = (hover || hoverLink !== null || focusId) && !active;
-          const grantKey = link.grantKey;
           const outcome = target.outcome ?? link.outcome;
+          const tipTitle = target.title;
+          const tipSub = target.subtitle;
           return (
             <path
-              key={`link-${i}`}
+              key={link.id}
               d={sankeyLinkHorizontal()(link) ?? ""}
               fill="none"
               stroke={color}
-              strokeOpacity={dimmed ? 0.15 : 0.55}
-              strokeWidth={Math.max(1, link.width ?? 1)}
-              className="sankey-band-animate cursor-pointer transition-[stroke-opacity] duration-150"
+              strokeWidth={Math.max(MIN_NODE_HIT, link.width ?? 1)}
+              className="sankey-band cursor-pointer"
+              data-sankey-hit={link.id}
+              data-tip-title={tipTitle}
+              data-tip-sub={tipSub}
+              data-tip-cents={String(link.value ?? 0)}
+              data-tip-count={String(link.count)}
+              data-tip-hint={target.outcome ? OUTCOME_HINT[target.outcome] : undefined}
               onClick={() => {
                 if (source.kind === "bank" && target.kind === "fund") {
-                  onNavigate({ kind: "fund", grantId: target.grantKey });
+                  onNavigateRef.current({ kind: "fund", grantId: target.grantKey });
                 } else if (target.kind === "status") {
-                  onNavigate({ kind: "status", outcome, grantId: grantKey });
+                  onNavigateRef.current({ kind: "status", outcome, grantId: link.grantKey });
                 }
-              }}
-              onMouseEnter={() => {
-                setHoverLink(i);
-                setHover({
-                  title: target.title,
-                  subtitle: target.subtitle,
-                  cents: link.value ?? 0,
-                  count: link.count,
-                  hint: target.outcome ? OUTCOME_HINT[target.outcome] : undefined,
-                });
-              }}
-              onMouseLeave={() => {
-                setHoverLink(null);
-                setHover(null);
               }}
             />
           );
         })}
-        {graph.nodes.map((node) => {
+
+        {L.nodes.map((node) => {
+          if (node.kind === "fund") {
+            const w = FUND_BLOCK_W;
+            const h = Math.max(MIN_NODE_HIT, (node.y1 ?? 0) - (node.y0 ?? 0));
+            const x = node.x0 ?? 0;
+            const y = (node.y0 ?? 0) + ((node.y1 ?? 0) - (node.y0 ?? 0) - h) / 2;
+            const labelInside = h >= 40;
+            return (
+              <g key={node.id}>
+                <rect
+                  x={x}
+                  y={y}
+                  width={w}
+                  height={Math.max(h, MIN_NODE_HIT)}
+                  rx={6}
+                  fill="var(--navy-2)"
+                  className="sankey-node cursor-pointer"
+                  data-sankey-hit={node.id}
+                  data-tip-title={node.title}
+                  data-tip-sub={node.subtitle}
+                  data-tip-cents={String(node.cents)}
+                  data-tip-count={String(node.count)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${node.title}, ${fmtRisk(node.cents)}`}
+                  onClick={() => onNavigateRef.current({ kind: "fund", grantId: node.grantKey })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onNavigateRef.current({ kind: "fund", grantId: node.grantKey });
+                    }
+                  }}
+                />
+                {labelInside ? (
+                  <>
+                    <text x={x + 10} y={y + 22} className="pointer-events-none fill-white font-semibold" style={{ fontSize: 14 }}>
+                      {truncate(node.title, 18)}
+                    </text>
+                    <text x={x + 10} y={y + 38} className="pointer-events-none fill-white/90 tabular" style={{ fontSize: 13 }}>
+                      {fmtRisk(node.cents)}
+                    </text>
+                  </>
+                ) : (
+                  <>
+                    <text
+                      x={x + w / 2}
+                      y={y - 10}
+                      textAnchor="middle"
+                      className="pointer-events-none fill-ink font-semibold"
+                      style={{ fontSize: 14 }}
+                    >
+                      {truncate(node.title, 22)}
+                    </text>
+                    <text
+                      x={x + w / 2}
+                      y={y + 6}
+                      textAnchor="middle"
+                      className="pointer-events-none fill-ink-2 tabular"
+                      style={{ fontSize: 13 }}
+                    >
+                      {fmtRisk(node.cents)}
+                    </text>
+                  </>
+                )}
+              </g>
+            );
+          }
+
           const w = (node.x1 ?? 0) - (node.x0 ?? 0);
-          const h = (node.y1 ?? 0) - (node.y0 ?? 0);
-          const active = focusId === node.id || hover?.title === node.title;
-          const dimmed = (hover || focusId) && !active;
+          const rawH = (node.y1 ?? 0) - (node.y0 ?? 0);
+          const h = Math.max(MIN_NODE_HIT, rawH);
+          const y = (node.y0 ?? 0) + (rawH - h) / 2;
           const fill =
             node.outcome != null
               ? OUTCOME_COLOR[node.outcome]
               : node.kind === "bank"
                 ? "var(--navy)"
                 : "var(--navy-2)";
-          const labelX = node.layer === 2 ? (node.x1 ?? 0) + 8 : (node.x0 ?? 0) - 8;
-          const anchor = node.layer === 2 ? "start" : "end";
-
-          function activate() {
-            if (node.kind === "fund") onNavigate({ kind: "fund", grantId: node.grantKey });
-            if (node.kind === "status" && node.outcome) {
-              onNavigate({ kind: "status", outcome: node.outcome, grantId: null });
-            }
-          }
 
           return (
-            <g key={node.id} transform={`translate(${node.x0 ?? 0},${node.y0 ?? 0})`}>
-              <rect
-                width={w}
-                height={h}
-                fill={fill}
-                opacity={dimmed ? 0.35 : 1}
-                rx={2}
-                className={node.kind !== "bank" ? "cursor-pointer" : undefined}
-                role={node.kind !== "bank" ? "button" : undefined}
-                tabIndex={node.kind !== "bank" ? 0 : undefined}
-                aria-label={`${node.title}, ${fmtRisk(node.cents)}, ${node.count} transactions`}
-                onClick={node.kind !== "bank" ? activate : undefined}
-                onKeyDown={(e) => {
-                  if (node.kind === "bank") return;
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    activate();
-                  }
-                }}
-                onFocus={() => setFocusId(node.id)}
-                onBlur={() => setFocusId(null)}
-                onMouseEnter={() =>
-                  setHover({
-                    title: node.title,
-                    subtitle: node.subtitle,
-                    cents: node.cents,
-                    count: node.count,
-                    hint: node.outcome ? OUTCOME_HINT[node.outcome] : undefined,
-                  })
-                }
-                onMouseLeave={() => setHover(null)}
-              />
-              <text
-                x={labelX - (node.x0 ?? 0)}
-                y={h / 2}
-                dy="-0.4em"
-                textAnchor={anchor}
-                className="fill-ink text-[14px] font-semibold pointer-events-none"
-              >
-                {node.title}
-              </text>
-              <text
-                x={labelX - (node.x0 ?? 0)}
-                y={h / 2}
-                dy="0.85em"
-                textAnchor={anchor}
-                className="fill-ink-2 tabular text-[13px] pointer-events-none"
-              >
-                {fmtRisk(node.cents)}
-              </text>
-            </g>
+            <rect
+              key={node.id}
+              x={node.x0 ?? 0}
+              y={y}
+              width={w}
+              height={h}
+              fill={fill}
+              rx={2}
+              className="sankey-node cursor-pointer"
+              data-sankey-hit={node.id}
+              data-tip-title={node.title}
+              data-tip-sub={node.subtitle}
+              data-tip-cents={String(node.cents)}
+              data-tip-count={String(node.count)}
+              data-tip-hint={node.outcome ? OUTCOME_HINT[node.outcome] : undefined}
+              role={node.kind === "status" ? "button" : undefined}
+              tabIndex={node.kind === "status" ? 0 : undefined}
+              onClick={
+                node.kind === "status" && node.outcome
+                  ? () => onNavigateRef.current({ kind: "status", outcome: node.outcome!, grantId: null })
+                  : undefined
+              }
+              onKeyDown={
+                node.kind === "status"
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        if (node.outcome) onNavigateRef.current({ kind: "status", outcome: node.outcome, grantId: null });
+                      }
+                    }
+                  : undefined
+              }
+            />
           );
         })}
+
+        {[...L.leftLabels, ...L.rightLabels].map((lab) => (
+          <g key={`lab-${lab.id}`}>
+            {lab.leader && (
+              <line
+                x1={lab.anchor === "end" ? lab.x : lab.nodeCx}
+                y1={lab.y + LABEL_BLOCK_H / 2}
+                x2={lab.anchor === "end" ? lab.nodeCx : lab.x}
+                y2={lab.nodeCy}
+                stroke="var(--rule)"
+                strokeWidth={1}
+              />
+            )}
+            <g
+              role="button"
+              tabIndex={0}
+              className="sankey-lane-label cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-sky"
+              data-sankey-hit={`label-${lab.id}`}
+              data-tip-title={lab.title}
+              data-tip-sub={lab.subtitle}
+              data-tip-cents={String(lab.cents)}
+              data-tip-count={String(lab.count)}
+              data-tip-hint={lab.outcome ? OUTCOME_HINT[lab.outcome] : undefined}
+              onClick={() => navigateFromLabel(lab, onNavigateRef.current)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  navigateFromLabel(lab, onNavigateRef.current);
+                }
+              }}
+            >
+              <rect
+                x={lab.anchor === "end" ? lab.x - 158 : lab.x}
+                y={lab.y}
+                width={158}
+                height={LABEL_BLOCK_H}
+                fill="transparent"
+              />
+              <text
+                x={lab.x}
+                y={lab.y + 14}
+                textAnchor={lab.anchor}
+                className="fill-ink font-semibold"
+                style={{ fontSize: 14 }}
+              >
+                {lab.title}
+              </text>
+              <text
+                x={lab.x}
+                y={lab.y + 30}
+                textAnchor={lab.anchor}
+                className="fill-ink-2 tabular"
+                style={{ fontSize: 13 }}
+              >
+                {lab.amount}
+              </text>
+            </g>
+          </g>
+        ))}
       </svg>
-      <p className="mt-3 max-w-[52ch] text-[14px] text-ink-2">{graph.caption}</p>
+        </div>
+      )}
+      <p className="mt-3 max-w-[65ch] text-[14px] text-ink-2">{agg.caption}</p>
     </div>
+  );
+}
+
+function navigateFromLabel(lab: LaneLabel, onNavigate: (n: SankeyNavigate) => void) {
+  if (lab.kind === "fund") onNavigate({ kind: "fund", grantId: lab.grantKey });
+  else if (lab.kind === "status" && lab.outcome) onNavigate({ kind: "status", outcome: lab.outcome, grantId: null });
+  else if (lab.kind === "bank") onNavigate({ kind: "fund", grantId: null });
+}
+
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
+}
+
+function SankeyFallbackBars({
+  agg,
+  onNavigate,
+}: {
+  agg: NonNullable<ReturnType<typeof buildSankeyAggregates>>;
+  onNavigate: (n: SankeyNavigate) => void;
+}) {
+  return (
+      <div className="mt-4 space-y-4">
+        {agg.fundBreakdown.map((f) => {
+          const total = f.total || 1;
+          const segs = (
+            [
+              { key: "clean" as Outcome, cents: f.clean, color: OUTCOME_COLOR.clean, label: "Clean" },
+              { key: "needs_you" as Outcome, cents: f.needs_you, color: OUTCOME_COLOR.needs_you, label: "Needs review" },
+              { key: "disallowed" as Outcome, cents: f.disallowed, color: OUTCOME_COLOR.disallowed, label: "Disallowed" },
+            ] as const
+          ).filter((s) => s.cents > 0);
+          return (
+            <div key={f.grantKey}>
+              <p className="text-[14px] font-semibold text-ink">{f.title}</p>
+              <div className="mt-1 flex h-8 w-full overflow-hidden rounded-[6px]">
+                {segs.map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    className="h-full min-w-[4px] cursor-pointer transition-opacity hover:opacity-90"
+                    style={{ width: `${(s.cents / total) * 100}%`, backgroundColor: s.color }}
+                    aria-label={`${s.label} ${fmtRisk(s.cents)}`}
+                    onClick={() =>
+                      onNavigate(
+                        s.key === "clean"
+                          ? { kind: "fund", grantId: f.grantId }
+                          : { kind: "status", outcome: s.key, grantId: f.grantId },
+                      )
+                    }
+                  />
+                ))}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-3 text-[12px] text-ink-2">
+                {segs.map((s) => (
+                  <span key={s.key}>
+                    <span className="mr-1 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
+                    {s.label} {fmtRisk(s.cents)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
   );
 }

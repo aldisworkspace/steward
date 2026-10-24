@@ -171,6 +171,24 @@ body {
   animation: sankey-draw 900ms ease-out forwards;
 }
 
+.sankey-chart .sankey-band {
+  stroke-opacity: 0.55;
+  transition: stroke-opacity 120ms ease-out;
+}
+
+.sankey-chart[data-hovered] .sankey-band {
+  stroke-opacity: 0.25;
+}
+
+.sankey-chart[data-hovered] .sankey-band.is-hovered,
+.sankey-chart[data-hovered] .sankey-node.is-hovered {
+  stroke-opacity: 0.85;
+}
+
+.sankey-chart[data-hovered] .sankey-node:not(.is-hovered) {
+  opacity: 0.45;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sankey-band-animate {
     animation: none;
