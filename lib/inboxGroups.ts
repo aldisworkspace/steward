@@ -5,6 +5,7 @@ export type QueueRow = {
   description: string;
   reason: string;
   ruleId?: string | null;
+  entryId?: string | null;
   resolved?: boolean;
 };
 

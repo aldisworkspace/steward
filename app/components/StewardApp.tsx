@@ -50,6 +50,7 @@ export function StewardApp() {
   const resetRun = useMutation(api.ingest.resetRunState);
   const undoApprove = useMutation(api.approvals.undoApproveEntry);
   const undoResolution = useMutation(api.approvals.undoInboxResolution);
+  const approveEntry = useMutation(api.approvals.approveEntry);
   const regenerateNarrative = useAction(api.report.regenerateNarrative);
   const triggerMorningCheck = useMutation(api.deadlines.triggerMorningCheck);
 
@@ -356,6 +357,44 @@ export function StewardApp() {
               onSelect={setSelected}
               filter={inboxFilter}
               setFilter={setInboxFilter}
+              onApproveAll={(txnIds) => {
+                if (!canWrite || actingAsSteward) return;
+                const rowsByTxn = new Map(inboxRows.map((r) => [r.txnId, r]));
+                void (async () => {
+                  const approved: { entryId: string }[] = [];
+                  try {
+                    for (const txnId of txnIds) {
+                      const entryId = rowsByTxn.get(txnId)?.entryId;
+                      if (!entryId) continue;
+                      await approveEntry({
+                        entryId,
+                        by: actorLabel,
+                        note: "Approved as part of grouped payroll review",
+                        passcode: getDemoPasscode(),
+                      });
+                      approved.push({ entryId });
+                    }
+                    if (approved.length) {
+                      setStatusToast({
+                        message: `${approved.length} entries approved`,
+                        undo: () => {
+                          for (const { entryId } of approved) {
+                            void undoApprove({
+                              entryId,
+                              by: actorLabel,
+                              passcode: getDemoPasscode(),
+                            });
+                          }
+                        },
+                      });
+                      const rest = exceptions.filter((e) => !txnIds.includes(e.txnId));
+                      setSelected(rest[0]?.txnId ?? null);
+                    }
+                  } catch (e) {
+                    setInlineError(messageFromConvexError(e));
+                  }
+                })();
+              }}
             />
           </div>
           <section className="relative col-span-12 min-h-[480px] rounded-[8px] border border-rule bg-sheet lg:col-span-8">

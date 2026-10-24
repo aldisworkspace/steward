@@ -86,6 +86,7 @@ export const inboxQueue = query({
           (d.modelRationale ?? d.rationale).split(".")[0] ??
           "Needs review";
         const hasPrecedent = precedents.some((p) => p.ruling.includes(d.txnId) || p.scope.includes(d.txnId));
+        const proposed = entryByTxn.get(d.txnId);
         return {
           txnId: d.txnId,
           status: d.status,
@@ -94,7 +95,8 @@ export const inboxQueue = query({
           description: t?.description ?? "",
           reason,
           ruleId,
-          hasEntry: !!entryByTxn.get(d.txnId),
+          hasEntry: !!proposed,
+          entryId: proposed?.id ?? null,
           hasPrecedent,
           bookkeeperGrant: g?.class ?? null,
           bookkeeperLine: g?.budgetLine ?? null,
@@ -131,6 +133,7 @@ export const inboxResolved = query({
           description: t?.description ?? "",
           reason: r.resolution === "acknowledged" ? "Acknowledged" : "Overridden",
           ruleId: d?.ruleHits[0] ?? null,
+          entryId: null,
           resolved: true as const,
           resolvedAt: r.at,
         };
