@@ -7,6 +7,7 @@
 import { readFileSync } from "node:fs";
 import type { ModelClient } from "../lib/llm";
 import { parseBank, parseGl, parseStaff } from "../lib/parse";
+import { categorizeConcern } from "../lib/categorizeConcern";
 import { runPipeline } from "../lib/pipeline";
 import type { Precedent } from "../lib/types";
 import { FIXTURE_GRANTS } from "./fixtures";
@@ -48,6 +49,19 @@ const fake: ModelClient = {
 };
 
 async function main() {
+  const cat = categorizeConcern(
+    {
+      status: "blocked",
+      reason: "Fundraising event deposit prohibited",
+      clauseRef: "HLF-26-031; §4.2",
+    },
+    FIXTURE_GRANTS,
+    { txnId: "T-TEST", date: "2026-09-01", description: "PALACE OF FINE ARTS", amountCents: -350000, memo: "" },
+  );
+  if (!cat.ruleId.startsWith("R-UNALLOWABLE") && cat.ruleId !== "R-PRIOR-APPROVAL") {
+    throw new Error(`categorizeConcern expected unallowable, got ${cat.ruleId}`);
+  }
+
   const res = await runPipeline(fake, input);
 
   const exp = JSON.parse(readFileSync(`${D}/expected_labels.json`, "utf8"));

@@ -6,6 +6,7 @@
 import { type ModelClient, MODELS, pdfBlock } from "./llm";
 import { CODING_SYSTEM, CodingZ, type Coding, DEFENSE_SYSTEM, DefenseZ, EXTRACT_SYSTEM } from "./prompts";
 import { atRiskCentsForTxn } from "./atRisk";
+import { categorizeConcern } from "./categorizeConcern";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
 import { MATERIALITY_CENTS, runRules } from "./rules";
 import { ruleLabel, tickForSource } from "./ruleLabels";
@@ -207,13 +208,22 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       else { grantId = null; budgetLine = null; splits = sug.map((s) => ({ grantId: s.grantId, budgetLine: s.budgetLine, amount: s.amountCents })); }
     }
 
-    // Materiality: an immaterial routine purchase the bookkeeper already charged to a valid grant line,
-    // where Steward only hesitated (no concern, no rule hit) → accept the bookkeeper's coding, note it.
     let note = "";
     const glLineValid = !!g?.class && !!input.grants.find((x) => x.grantId === g.class)?.budgetLines.some((l) => l.code === g.budgetLine);
     let materialityAuto = false;
-    if (g && glLineValid && !txnFindings.length && !c.concern && !splits && grantId === null && -t.amountCents < MATERIALITY_CENTS && t.amountCents < 0) {
-      grantId = g.class; budgetLine = g.budgetLine; materialityAuto = true;
+    const immaterial = Math.abs(t.amountCents) < MATERIALITY_CENTS;
+    if (
+      g &&
+      glLineValid &&
+      !txnFindings.length &&
+      !splits &&
+      grantId === null &&
+      immaterial &&
+      (!c.concern || c.concern.status === "needs_review")
+    ) {
+      grantId = g.class;
+      budgetLine = g.budgetLine;
+      materialityAuto = true;
       note = ` Immaterial (< $${MATERIALITY_CENTS / 100}); accepted the bookkeeper's coding ${g.class}:${g.budgetLine}.`;
     }
 
@@ -225,9 +235,25 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       txnFindings = findings.filter((f) => f.txnId === t.txnId);
     }
 
-    let concernForApply: { status: Status; reason: string } | null = c.concern
-      ? { status: c.concern.status, reason: c.concern.reason }
-      : null;
+    let concernForApply: { status: Status; reason: string } | null =
+      materialityAuto ? null : c.concern ? { status: c.concern.status, reason: c.concern.reason } : null;
+
+    if (c.concern && !txnFindings.length && !materialityAuto) {
+      const cat = categorizeConcern(
+        { status: c.concern.status, reason: c.concern.reason, clauseRef: c.concern.clauseRef },
+        input.grants,
+        t,
+      );
+      const derived: Finding = {
+        ruleId: cat.ruleId,
+        txnId: t.txnId,
+        status: c.concern.status,
+        message: cat.message,
+        evidence: cat.evidence,
+      };
+      findings.push(derived);
+      txnFindings = [...txnFindings, derived];
+    }
     const precedentApply = applyTypedPrecedentsForTxn({
       t,
       grantId: splits ? null : grantId,
@@ -256,7 +282,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       message: f.message,
       tick: tickForSource(f.evidence[0]?.source ?? "bank"),
     }));
-    if (concernForApply) {
+    if (concernForApply && !txnFindings.some((f) => f.ruleId === "R-MODEL-REVIEW" || f.ruleId.startsWith("R-UNALLOWABLE"))) {
       checks.push({
         ruleId: null,
         label: "Steward's judgment",

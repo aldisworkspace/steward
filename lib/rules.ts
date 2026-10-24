@@ -29,7 +29,7 @@ function daysBetween(a: string, b: string) {
 }
 
 /** Keyword heuristics for unallowable categories. The model handles anything these miss. */
-const UNALLOWABLE_PATTERNS: { id: string; txn: RegExp; termRule: RegExp; label: string }[] = [
+export const UNALLOWABLE_TERM_PATTERNS: { id: string; txn: RegExp; termRule: RegExp; label: string }[] = [
   { id: "fines", txn: /citation|violation|penalt|\bfine[sd]?\b|late fee/i, termRule: /fine|penalt|violation/i, label: "fines and penalties" },
   { id: "fundraising", txn: /gala|benefit|fundrais|donor (event|dinner)|auction/i, termRule: /fundrais/i, label: "fundraising" },
   { id: "alcohol_staff", txn: /\bbar\b|brewery|brewing|wine|liquor|happy hour|appreciation|bottle & barrel/i,
@@ -84,7 +84,7 @@ export function runRules(input: RuleInput): Finding[] {
 
     // R-UNALLOWABLE: keyword heuristics matched against the grant's own unallowable list.
     if (g && isOutflow(t)) {
-      for (const p of UNALLOWABLE_PATTERNS) {
+      for (const p of UNALLOWABLE_TERM_PATTERNS) {
         if (!p.txn.test(text(t))) continue;
         const terms = g.unallowable.filter((u) => p.termRule.test(u.rule));
         if (!terms.length) continue;
