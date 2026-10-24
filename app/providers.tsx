@@ -1,12 +1,10 @@
 "use client";
 
-import { ConvexProvider, ConvexReactClient } from "convex/react";
-import { useMemo, type ReactNode } from "react";
+import { ConvexProvider } from "convex/react";
+import { useState, type ReactNode } from "react";
+import { convexReactClient } from "@/lib/convexReactClient";
 
 export function Providers({ children }: { children: ReactNode }) {
-  const client = useMemo(
-    () => new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!),
-    [],
-  );
+  const [client] = useState(() => convexReactClient());
   return <ConvexProvider client={client}>{children}</ConvexProvider>;
 }

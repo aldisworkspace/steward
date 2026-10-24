@@ -1,9 +1,11 @@
 "use client";
 
-import { useAction, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { stewardCodingLabel } from "@/lib/codingLabel";
+import type { GrantTerms } from "@/lib/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
-import { fmtRisk, fmtSentenceAmount, fmtTableAmount, lineLabel, relativeTime } from "../format";
+import { fmtRisk, fmtSentenceAmount, fmtTableAmount, relativeTime } from "../format";
 import { CaseFile } from "./CaseFile";
 import { RedPenStrike } from "./RedPenStrike";
 import { WhyDrawer } from "./WhyDrawer";
@@ -25,6 +27,8 @@ export function StewardApp() {
   const ledger = useQuery(api.ui.transactionLedger);
 
   const runAgent = useAction(api.agent.runAgent);
+  const resetRun = useMutation(api.ingest.resetRunState);
+  const regenerateNarrative = useAction(api.report.regenerateNarrative);
 
   const [tab, setTab] = useState<Tab>("inbox");
   const [selected, setSelected] = useState<string | null>(null);
@@ -36,6 +40,7 @@ export function StewardApp() {
   const [txnFilter, setTxnFilter] = useState<"all" | "clean" | "exceptions">("all");
   const [prevNeedYou, setPrevNeedYou] = useState<number | null>(null);
   const [countAnim, setCountAnim] = useState(false);
+  const [riskOpen, setRiskOpen] = useState(false);
   const caseData = useQuery(api.ui.caseFile, selected ? { txnId: selected } : "skip");
   const grantList = useQuery(api.grants.list);
   const bothReady = (grantList ?? []).filter((g) => g.status === "ready").length >= 2;
@@ -79,15 +84,23 @@ export function StewardApp() {
     return () => window.removeEventListener("keydown", onKey);
   }, [onKey]);
 
-  async function loadDemo() {
+  async function loadDemo(opts?: { autoRun?: boolean }) {
     setSeedLoading(true);
     try {
       const res = await fetch("/api/seed", { method: "POST" });
       if (!res.ok) throw new Error("Seed failed");
       setLoaded(true);
+      if (opts?.autoRun) {
+        await runAgent({});
+      }
     } finally {
       setSeedLoading(false);
     }
+  }
+
+  async function onReset() {
+    await resetRun({});
+    setSelected(null);
   }
 
   async function onRunSteward() {
@@ -107,7 +120,7 @@ export function StewardApp() {
     if (!counts?.transactions) return null;
     if (stats?.needYou === 0) return "Everything reconciles. Nothing needs you.";
     if (!stats) return "Loading review…";
-    return `Steward reviewed ${stats.total} transactions. ${stats.clean} are clean. ${stats.needYou} need you — ${fmtRisk(stats.atRiskCents)} at risk of disallowance.`;
+    return `Steward reviewed ${stats.total} transactions. ${stats.clean} are clean. ${stats.needYou} need you — ${fmtRisk(stats.atRiskCents)} of grant charges at risk.`;
   }, [run, stats, counts]);
 
   const blocked = exceptions.filter((e) => e.status === "blocked");
@@ -125,7 +138,7 @@ export function StewardApp() {
             disabled={seedLoading}
             className="mt-6 rounded-[4px] bg-ledger px-5 py-2.5 text-[15px] font-medium text-white disabled:opacity-50"
           >
-            {seedLoading ? "Loading…" : "Load demo data"}
+            {seedLoading ? "Loading…" : "Load July–August"}
           </button>
         </div>
       </div>
@@ -166,6 +179,31 @@ export function StewardApp() {
           className={`text-[32px] font-semibold leading-[1.2] ${stats?.needYou === 0 ? "text-ledger" : "text-ink"} ${countAnim ? "count-animate" : ""}`}
         >
           {statusLine}
+          {stats && stats.atRiskCents > 0 && stats.needYou > 0 && (
+            <span className="relative ml-2 inline-block align-middle">
+              <button
+                type="button"
+                aria-label="At-risk breakdown"
+                className="text-[15px] font-normal text-ink-2 underline"
+                onClick={() => setRiskOpen((o) => !o)}
+              >
+                ⓘ
+              </button>
+              {riskOpen && (
+                <div className="absolute left-0 top-full z-20 mt-2 w-64 rounded-[6px] border border-rule bg-sheet p-3 text-[13px] font-normal text-ink shadow-none">
+                  <p className="font-medium text-ink-2">At-risk breakdown</p>
+                  <ul className="mt-2 space-y-1">
+                    {(stats.atRiskBreakdown ?? []).map((b) => (
+                      <li key={b.label} className="flex justify-between gap-2">
+                        <span>{b.label}</span>
+                        <span className="tabular">{fmtRisk(b.cents)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </span>
+          )}
         </p>
         {run?.status === "error" && run.errors.length > 0 && (
           <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -180,8 +218,19 @@ export function StewardApp() {
           </div>
         )}
         <div className="mt-3 flex flex-wrap gap-3 text-[13px]">
+          <button type="button" onClick={() => void onReset()} className="text-ink-2 underline">
+            Reset
+          </button>
           <button type="button" onClick={() => void loadDemo()} disabled={seedLoading} className="text-ink-2 underline">
-            Reload demo
+            Load July–August
+          </button>
+          <button
+            type="button"
+            onClick={() => void loadDemo({ autoRun: true })}
+            disabled={seedLoading}
+            className="text-ink-2 underline"
+          >
+            Load and run Steward
           </button>
           <button
             type="button"
@@ -243,10 +292,15 @@ export function StewardApp() {
       )}
 
       {tab === "transactions" && (
-        <TransactionsTab ledger={ledger} filter={txnFilter} setFilter={setTxnFilter} />
+        <TransactionsTab
+          ledger={ledger}
+          filter={txnFilter}
+          setFilter={setTxnFilter}
+          grantTerms={(grants ?? []).map((g) => g.terms as GrantTerms).filter(Boolean)}
+        />
       )}
       {tab === "grants" && <GrantsTab grants={grants} />}
-      {tab === "report" && <ReportTab grants={grants} />}
+      {tab === "report" && <ReportTab grants={grants} regenerateNarrative={regenerateNarrative} />}
       {tab === "proof" && <ProofTab run={run} />}
 
       <WhyDrawer txnId={selected} open={whyOpen} onClose={() => setWhyOpen(false)} />
@@ -261,7 +315,15 @@ function QueueGroup({
   onSelect,
 }: {
   title: string;
-  rows: { txnId: string; amountCents: number; description: string; reason: string; status: string; hasPrecedent?: boolean }[];
+  rows: {
+    txnId: string;
+    amountCents: number;
+    description: string;
+    reason: string;
+    ruleId?: string | null;
+    status: string;
+    hasPrecedent?: boolean;
+  }[];
   selected: string | null;
   onSelect: (id: string) => void;
 }) {
@@ -281,7 +343,7 @@ function QueueGroup({
             <span className="truncate text-[15px] font-medium">{r.description}</span>
             <span className="tabular shrink-0 text-[15px] font-semibold">{fmtTableAmount(r.amountCents)}</span>
           </div>
-          <p className="truncate text-[13px] text-ink-2">
+          <p className="line-clamp-2 text-[13px] text-ink-2" title={r.ruleId ?? undefined}>
             {r.reason}
             {r.hasPrecedent ? " Ⓟ" : ""}
           </p>
@@ -306,10 +368,11 @@ function JournalPanel({
       )}
       <ul className="mt-3 space-y-3">
         {(audit ?? []).map((a, i) => (
-          <li key={`${a.at}-${i}`} className={i === 0 ? "journal-item-new text-[13px]" : "text-[13px]"}>
-            <span className={a.actor === "steward" ? "text-ink-2" : "text-ink"}>
-              {formatAudit(a)}
-            </span>
+          <li
+            key={`${a.at}-${i}`}
+            className={`${i === 0 ? "journal-item-new" : ""} whitespace-normal text-[13px] leading-[1.45]`}
+          >
+            <span className={a.actor === "steward" ? "text-ink-2" : "text-ink"}>{formatAudit(a)}</span>
             <span className="text-ink-2"> · {relativeTime(a.at)}</span>
           </li>
         ))}
@@ -319,11 +382,11 @@ function JournalPanel({
 }
 
 function formatAudit(a: { actor: string; action: string; why: string; targetId: string }) {
+  if (a.action === "run_summary") return a.why;
   if (a.action === "extract_grant_terms") return `Extracted terms from ${a.targetId}.`;
-  if (a.action === "decision") return a.why.slice(0, 120);
   if (a.action === "approve_entry") return `${a.actor} approved the reclass for ${a.targetId}.`;
   if (a.action === "precedent_recorded") return "Precedent recorded.";
-  if (a.action === "defend_decision") return a.why.slice(0, 100);
+  if (a.action === "defend_decision") return a.why;
   return a.why || a.action;
 }
 
@@ -331,6 +394,7 @@ function TransactionsTab({
   ledger,
   filter,
   setFilter,
+  grantTerms,
 }: {
   ledger:
     | {
@@ -341,11 +405,13 @@ function TransactionsTab({
         amountCents: number;
         grantId: string | null;
         budgetLine: string | null;
+        splits?: unknown;
         status: string;
       }[]
     | undefined;
   filter: "all" | "clean" | "exceptions";
   setFilter: (f: "all" | "clean" | "exceptions") => void;
+  grantTerms: GrantTerms[];
 }) {
   const rows = (ledger ?? []).filter((r) => {
     if (filter === "clean") return r.status === "auto";
@@ -387,9 +453,27 @@ function TransactionsTab({
                 <td className="tabular px-3 py-2 text-right">{fmtTableAmount(r.amountCents)}</td>
                 <td className="px-3 py-2">
                   {r.status === "blocked" && r.grantId ? (
-                    <RedPenStrike text={lineLabel(r.grantId, r.budgetLine)} className="text-[13px]" />
+                    <RedPenStrike
+                      text={stewardCodingLabel({
+                        amountCents: r.amountCents,
+                        grantId: r.grantId,
+                        budgetLine: r.budgetLine,
+                        grants: grantTerms,
+                        description: r.description,
+                        memo: r.memo,
+                      })}
+                      className="text-[13px]"
+                    />
                   ) : (
-                    lineLabel(r.grantId, r.budgetLine)
+                    stewardCodingLabel({
+                      amountCents: r.amountCents,
+                      grantId: r.grantId,
+                      budgetLine: r.budgetLine,
+                      splits: r.splits as { grantId: string | null; budgetLine: string | null; amount: number }[] | undefined,
+                      grants: grantTerms,
+                      description: r.description,
+                      memo: r.memo,
+                    })
                   )}
                 </td>
                 <td className="px-3 py-2">
@@ -408,7 +492,17 @@ function TransactionsTab({
   );
 }
 
-function GrantsTab({ grants }: { grants: { terms: unknown; spentByLine: Record<string, number> }[] | undefined }) {
+function GrantsTab({
+  grants,
+}: {
+  grants:
+    | {
+        terms: unknown;
+        spentByLine: Record<string, number>;
+        lineMeta?: Record<string, { overCents: number; overPct: number }>;
+      }[]
+    | undefined;
+}) {
   return (
     <div className="space-y-8 p-6">
       {(grants ?? []).map((g, i) => {
@@ -433,9 +527,11 @@ function GrantsTab({ grants }: { grants: { terms: unknown; spentByLine: Record<s
               {t.budgetLines.map((bl) => {
                 const spent = g.spentByLine[`${t.grantId}:${bl.code}`] ?? 0;
                 const budget = bl.amount * 100;
-                const pct = Math.min(100, (spent / budget) * 100);
-                const over = spent > budget;
                 const cap = t.lineVarianceLimitPct ? budget * (1 + t.lineVarianceLimitPct / 100) : budget;
+                const spentPct = budget ? Math.min(100, (spent / budget) * 100) : 0;
+                const capPct = budget ? Math.min(100, (cap / budget) * 100) : 100;
+                const overMeta = g.lineMeta?.[`${t.grantId}:${bl.code}`];
+                const overBarPct = budget && spent > budget ? Math.min(100, ((spent - budget) / budget) * 100) : 0;
                 return (
                   <div key={bl.code}>
                     <div className="flex justify-between text-[13px]">
@@ -447,21 +543,31 @@ function GrantsTab({ grants }: { grants: { terms: unknown; spentByLine: Record<s
                       </span>
                     </div>
                     <div className="relative mt-1 h-1.5 bg-rule">
-                      <div className="h-full bg-ink" style={{ width: `${pct}%` }} />
-                      {over && <div className="absolute right-0 top-0 h-full w-2 bg-redpen" />}
+                      <div className="h-full bg-ink" style={{ width: `${spentPct}%` }} />
+                      {overBarPct > 0 && (
+                        <div
+                          className="absolute top-0 h-full bg-redpen"
+                          style={{ left: `${Math.min(100, 100 - overBarPct)}%`, width: `${overBarPct}%` }}
+                        />
+                      )}
                       {t.lineVarianceLimitPct && (
                         <div
                           className="absolute top-0 h-full w-px bg-ink-2"
-                          style={{ left: `${Math.min(100, (cap / budget) * 100)}%` }}
+                          style={{ left: `${capPct}%` }}
                         />
                       )}
                     </div>
+                    {overMeta && (
+                      <p className="mt-1 text-[13px] text-redpen">
+                        Over by {fmtRisk(overMeta.overCents)} ({overMeta.overPct}%) — needs program officer approval
+                      </p>
+                    )}
                   </div>
                 );
               })}
             </div>
             <ul className="mt-6 space-y-2 border-t border-rule pt-4">
-              {t.unallowable.map((u) => (
+              {(t.unallowable ?? []).map((u) => (
                 <li key={u.clauseRef} className="text-[15px]">
                   <span className="font-serif text-[16px]">{u.rule}</span>
                   <span className="mt-1 block text-[13px] text-ink-2">{u.clauseRef}</span>
@@ -475,31 +581,116 @@ function GrantsTab({ grants }: { grants: { terms: unknown; spentByLine: Record<s
   );
 }
 
-function ReportTab({ grants }: { grants: { terms: unknown }[] | undefined }) {
+function ReportTab({
+  grants,
+  regenerateNarrative,
+}: {
+  grants: { terms: unknown }[] | undefined;
+  regenerateNarrative: (args: { grantId: string }) => Promise<string>;
+}) {
+  const grantIds = (grants ?? [])
+    .map((g) => (g.terms as { grantId?: string } | null)?.grantId)
+    .filter(Boolean) as string[];
   return (
-    <div className="max-w-[75ch] p-6 text-[15px]">
-      <h2 className="text-[22px] font-semibold">Budget vs actual (draft)</h2>
-      <p className="mt-2 text-ink-2">Funder report body uses grant terms and coded spend from Steward decisions.</p>
-      {(grants ?? []).map((g, i) => {
-        const t = g.terms as { grantId: string; program: string } | null;
-        if (!t) return null;
-        return (
-          <p key={i} className="mt-4 font-serif text-[16px]">
-            {t.program} ({t.grantId}) — figures reconcile to the transactions tab.
-          </p>
-        );
-      })}
+    <div className="report-print space-y-10 p-6 text-[15px]">
+      {grantIds.map((gid) => (
+        <GrantReportSheet key={gid} grantId={gid} regenerateNarrative={regenerateNarrative} />
+      ))}
+      <button
+        type="button"
+        className="no-print rounded-[4px] border border-rule px-4 py-2 text-[15px]"
+        onClick={() => window.print()}
+      >
+        Print / Save PDF
+      </button>
     </div>
   );
 }
 
+function GrantReportSheet({
+  grantId,
+  regenerateNarrative,
+}: {
+  grantId: string;
+  regenerateNarrative: (args: { grantId: string }) => Promise<string>;
+}) {
+  const data = useQuery(api.report.grantReportData, { grantId });
+  const [narrative, setNarrative] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (!data) return null;
+  const { terms, lines, excludedCount, excludedCents } = data;
+  return (
+    <article className="border border-rule bg-sheet p-6">
+      <h2 className="text-[22px] font-semibold">Funder report — draft</h2>
+      <p className="mt-1 text-[13px] text-ink-2">
+        {terms.grantId} · {terms.funder}
+      </p>
+      <p className="mt-4 font-serif text-[16px] leading-[1.45] text-ink">
+        {narrative ?? "Generate a narrative from the figures below."}
+      </p>
+      <button
+        type="button"
+        disabled={busy}
+        className="no-print mt-3 text-[13px] text-ledger underline disabled:opacity-40"
+        onClick={() => {
+          setBusy(true);
+          void regenerateNarrative({ grantId })
+            .then(setNarrative)
+            .finally(() => setBusy(false));
+        }}
+      >
+        Regenerate
+      </button>
+      <table className="mt-6 w-full border-collapse text-[13px]">
+        <thead>
+          <tr className="border-b border-rule text-left text-ink-2">
+            <th className="py-2 font-medium">Line</th>
+            <th className="py-2 text-right font-medium">Budget</th>
+            <th className="py-2 text-right font-medium">Actual this period</th>
+            <th className="py-2 text-right font-medium">Remaining</th>
+            <th className="py-2 text-right font-medium">% used</th>
+            <th className="py-2 font-medium">Variance flag</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((l) => (
+            <tr key={l.code} className="border-b border-rule">
+              <td className="py-2">
+                {l.code} {l.name}
+              </td>
+              <td className="tabular py-2 text-right">{fmtTableAmount(l.budget)}</td>
+              <td className="tabular py-2 text-right">{fmtTableAmount(l.actual)}</td>
+              <td className="tabular py-2 text-right">{fmtTableAmount(l.remaining)}</td>
+              <td className="tabular py-2 text-right">{Math.round(l.pct)}%</td>
+              <td className="py-2">{l.over ? "Over variance cap" : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {excludedCount > 0 && (
+        <p className="mt-4 text-[13px] text-ink-2">
+          Excluded pending your review: {excludedCount} items, {fmtRisk(excludedCents)}
+        </p>
+      )}
+      <p className="mt-6 text-[13px] text-ink-2">
+        Prepared by Steward · Reviewed by: ________________ (requires approver)
+      </p>
+    </article>
+  );
+}
+
 function ProofTab({ run }: { run: { usageInput: number; usageOutput: number } | null | undefined }) {
-  const [evalData, setEvalData] = useState<Record<string, unknown> | null>(null);
+  const [demoEval, setDemoEval] = useState<Record<string, unknown> | null>(null);
+  const [holdout, setHoldout] = useState<Record<string, unknown> | null>(null);
   useEffect(() => {
     fetch("/eval-result.json")
       .then((r) => (r.ok ? r.json() : null))
-      .then(setEvalData)
-      .catch(() => setEvalData(null));
+      .then(setDemoEval)
+      .catch(() => setDemoEval(null));
+    fetch("/eval-result-holdout.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setHoldout)
+      .catch(() => setHoldout(null));
   }, []);
   return (
     <div className="max-w-[75ch] space-y-6 p-6 text-[15px]">
@@ -520,26 +711,29 @@ function ProofTab({ run }: { run: { usageInput: number; usageOutput: number } | 
         <tbody>
           <tr className="border-b border-rule">
             <td className="py-2">Demo set</td>
-            <td className="py-2">{(evalData?.issueRecall as string) ?? "—"}</td>
-            <td className="py-2">{(evalData?.issuePrecision as string) ?? "—"}</td>
-            <td className="py-2">{(evalData?.codingAccuracy as string) ?? "—"}</td>
+            <td className="py-2">{(demoEval?.issueRecall as string) ?? "—"}</td>
+            <td className="py-2">{(demoEval?.issuePrecision as string) ?? "—"}</td>
+            <td className="py-2">{(demoEval?.codingAccuracy as string) ?? "—"}</td>
             <td className="py-2">
               {run ? `${run.usageInput} in / ${run.usageOutput} out` : "—"}
             </td>
           </tr>
-          <tr>
+          <tr className="border-b border-rule">
             <td className="py-2">Hold-out set</td>
-            <td colSpan={4} className="py-2 text-ink-2">
-              {evalData?.holdout ? String(evalData.holdout) : "No hold-out eval-result.json yet."}
+            <td className="py-2">{(holdout?.issueRecall as string) ?? "—"}</td>
+            <td className="py-2">{(holdout?.issuePrecision as string) ?? "—"}</td>
+            <td className="py-2">{(holdout?.codingAccuracy as string) ?? "—"}</td>
+            <td className="py-2 text-ink-2">
+              {holdout?.usage ? String(holdout.usage) : "No hold-out eval yet."}
             </td>
           </tr>
         </tbody>
       </table>
-      {Array.isArray(evalData?.misses) && (evalData!.misses as string[]).length > 0 ? (
+      {Array.isArray(demoEval?.misses) && (demoEval!.misses as string[]).length > 0 ? (
         <div>
           <p className="text-[13px] font-medium text-ink-2">Misses</p>
           <ul className="mt-2 list-disc pl-5 text-[13px] text-ink-2">
-            {(evalData!.misses as string[]).slice(0, 8).map((m) => (
+            {(demoEval!.misses as string[]).slice(0, 8).map((m) => (
               <li key={m}>{m}</li>
             ))}
           </ul>

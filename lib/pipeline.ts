@@ -5,8 +5,10 @@
  */
 import { type ModelClient, MODELS, pdfBlock } from "./llm";
 import { CODING_SYSTEM, CodingZ, type Coding, DEFENSE_SYSTEM, DefenseZ, EXTRACT_SYSTEM } from "./prompts";
+import { atRiskCentsForTxn } from "./atRisk";
 import { MATERIALITY_CENTS, runRules } from "./rules";
-import { type Candidate, type Decision, type Evidence, type Finding, type GlRow, type GrantTerms, GrantTermsZ,
+import { ruleLabel, tickForSource } from "./ruleLabels";
+import { type Candidate, type Decision, type DecisionCheck, type Evidence, type Finding, type GlRow, type GrantTerms, GrantTermsZ,
   type Precedent, type StaffAllocation, type Status, type Txn } from "./types";
 
 export interface PipelineInput {
@@ -175,20 +177,60 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     if (g && !fs.length && (g.class ?? null) !== (splits ? null : grantId) && !splits) {
       status = worst(status, "needs_review");
       findings.push({ ruleId: "R-GL-DISAGREE", txnId: t.txnId, status: "needs_review",
-        message: `Bookkeeper charged ${g.class ?? "unrestricted"}${g.budgetLine ? ":" + g.budgetLine : ""}; Steward proposes ${grantId ?? "unrestricted"}${budgetLine ? ":" + budgetLine : ""}. ${c.rationale}`,
+        message: `Bookkeeper charged ${g.class ?? "unrestricted"}${g.budgetLine ? ":" + g.budgetLine : ""}; Steward proposes ${grantId ?? "unrestricted"}${budgetLine ? ":" + budgetLine : ""}.`,
         evidence: [{ source: "gl", ref: t.txnId, note: `${g.account} / ${g.class ?? "-"} / ${g.budgetLine ?? "-"} by ${g.enteredBy}` }] });
     }
+
+    const txnFindings = findings.filter((f) => f.txnId === t.txnId);
+    const checks: DecisionCheck[] = txnFindings.map((f) => ({
+      ruleId: f.ruleId,
+      label: ruleLabel(f.ruleId),
+      message: f.message,
+      tick: tickForSource(f.evidence[0]?.source ?? "bank"),
+    }));
+    if (c.concern) {
+      checks.push({
+        ruleId: null,
+        label: "Steward's judgment",
+        message: c.concern.reason,
+        tick: "Ⓑ",
+      });
+    }
+
+    const clauseNote = (ref: string) => {
+      for (const gr of input.grants) {
+        for (const u of [...gr.unallowable, ...gr.priorApproval.map((p) => ({ rule: p.rule, clauseRef: p.clauseRef }))]) {
+          if (ref.startsWith(u.clauseRef.split(";")[0]!) || u.clauseRef.startsWith(ref.split(";")[0]!)) return u.rule;
+        }
+      }
+      return ref;
+    };
 
     const evidence: Evidence[] = [
       { source: "bank", ref: t.txnId, note: `${t.date} ${t.description} ${(t.amountCents / 100).toFixed(2)}${t.memo ? ` — "${t.memo}"` : ""}` },
       ...(g ? [{ source: "gl" as const, ref: t.txnId, note: `bookkeeper: ${g.class ?? "unrestricted"}${g.budgetLine ? ":" + g.budgetLine : ""}` }] : []),
-      ...c.clauseRefs.map((r) => ({ source: "contract" as const, ref: r, note: "cited by Steward" })),
-      ...(c.concern ? [{ source: "rule" as const, ref: c.concern.clauseRef ?? "model-concern", note: c.concern.reason }] : []),
-      ...fs.flatMap((f) => f.evidence),
+      ...c.clauseRefs.map((r) => ({ source: "contract" as const, ref: r, note: clauseNote(r) })),
+      ...(c.concern?.clauseRef
+        ? [{ source: "contract" as const, ref: c.concern.clauseRef, note: clauseNote(c.concern.clauseRef) }]
+        : []),
+      ...txnFindings.flatMap((f) => f.evidence),
     ];
-    return { txnId: t.txnId, grantId, budgetLine, splits, status, confidence: c.confidence,
-      rationale: [c.rationale + note, ...findings.filter((f) => f.txnId === t.txnId).map((f) => f.message)].join(" "),
-      evidence, ruleHits: findings.filter((f) => f.txnId === t.txnId).map((f) => f.ruleId) };
+
+    const modelRationale = c.rationale + note;
+    const atRiskCents = atRiskCentsForTxn(t, {
+      txnId: t.txnId, grantId, budgetLine, splits, status, confidence: c.confidence,
+      rationale: modelRationale, evidence, ruleHits: txnFindings.map((f) => f.ruleId),
+    }, g, txnFindings, input.staff, input.grants);
+
+    return {
+      txnId: t.txnId, grantId, budgetLine, splits, status, confidence: c.confidence,
+      rationale: modelRationale,
+      modelRationale,
+      checks,
+      atRiskCents,
+      evidence,
+      ruleHits: txnFindings.map((f) => f.ruleId),
+    };
   });
 
   return { decisions, findings, entries: proposeEntries(input, decisions, findings) };

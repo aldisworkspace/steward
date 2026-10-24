@@ -4,7 +4,10 @@ import type { ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
-import { fmtSentenceAmount, fmtTableAmount, lineLabel } from "../format";
+import { contractClausesFromDecision } from "@/lib/clauseText";
+import { stewardCodingLabel } from "@/lib/codingLabel";
+import type { GrantTerms } from "@/lib/types";
+import { fmtSentenceAmount, fmtTableAmount } from "../format";
 import { RedPenStrike } from "./RedPenStrike";
 
 type CaseData = {
@@ -16,6 +19,8 @@ type CaseData = {
     splits?: unknown;
     status: string;
     rationale: string;
+    modelRationale?: string;
+    checks?: { ruleId: string | null; label: string; message: string; tick: string }[];
     evidence?: unknown;
     ruleHits: string[];
   } | null;
@@ -24,6 +29,10 @@ type CaseData = {
   grantTerms: { fileName: string; terms: unknown }[];
 };
 
+function grantTermsList(rows: CaseData["grantTerms"]): GrantTerms[] {
+  return rows.map((g) => g.terms as GrantTerms).filter(Boolean);
+}
+
 function lineName(grantTerms: CaseData["grantTerms"], grantId: string | null, code: string | null) {
   if (!grantId || !code) return undefined;
   for (const g of grantTerms) {
@@ -31,17 +40,6 @@ function lineName(grantTerms: CaseData["grantTerms"], grantId: string | null, co
     if (t?.grantId === grantId) return t.budgetLines?.find((l) => l.code === code)?.name;
   }
   return undefined;
-}
-
-function stewardCorrection(d: CaseData["decision"], grantTerms: CaseData["grantTerms"]) {
-  if (!d) return "—";
-  if (d.splits && Array.isArray(d.splits)) {
-    const parts = (d.splits as { grantId: string | null; budgetLine: string | null; amount: number }[]).map(
-      (s) => lineLabel(s.grantId, s.budgetLine, lineName(grantTerms, s.grantId, s.budgetLine)),
-    );
-    return parts.join(" / ");
-  }
-  return lineLabel(d.grantId, d.budgetLine, lineName(grantTerms, d.grantId, d.budgetLine));
 }
 
 export function CaseFile({
@@ -78,11 +76,34 @@ export function CaseFile({
   }
 
   const { txn, decision, gl, entry, grantTerms } = data;
+  const terms = grantTermsList(grantTerms);
+  const ln = (gid: string | null, code: string | null) => lineName(grantTerms, gid, code);
+
   const bkLabel = gl?.class
-    ? lineLabel(gl.class, gl.budgetLine, lineName(grantTerms, gl.class, gl.budgetLine))
+    ? stewardCodingLabel({
+        amountCents: txn.amountCents,
+        grantId: gl.class,
+        budgetLine: gl.budgetLine,
+        lineName: ln,
+        grants: terms,
+        description: txn.description,
+        memo: txn.memo,
+      })
     : null;
-  const stewardLabel = stewardCorrection(decision, grantTerms);
+
+  const stewardLabel = stewardCodingLabel({
+    amountCents: txn.amountCents,
+    grantId: decision.grantId,
+    budgetLine: decision.budgetLine,
+    splits: decision.splits as { grantId: string | null; budgetLine: string | null; amount: number }[] | undefined,
+    lineName: ln,
+    grants: terms,
+    description: txn.description,
+    memo: txn.memo,
+  });
+
   const evidence = (decision.evidence ?? []) as { source: string; ref: string; note: string }[];
+  const clauses = contractClausesFromDecision(terms, evidence);
 
   const lines = (entry?.lines ?? []) as {
     account: string;
@@ -109,10 +130,11 @@ export function CaseFile({
     onToast("Entry rejected");
   }
 
-  const contractEv = evidence.filter((e) => e.source === "contract");
   const bankEv = evidence.find((e) => e.source === "bank");
   const glEv = evidence.find((e) => e.source === "gl");
   const timeEv = evidence.find((e) => e.source === "time_record");
+  const whyText = decision.modelRationale ?? decision.rationale;
+  const checks = decision.checks ?? [];
 
   return (
     <div className="flex h-full flex-col">
@@ -137,20 +159,22 @@ export function CaseFile({
         </div>
 
         <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-          {bankEv && (
-            <Cell label="Bank Ⓑ" body={bankEv.note} disagree={false} />
-          )}
+          {bankEv && <Cell label="Bank Ⓑ" body={bankEv.note} disagree={false} />}
           {glEv && (
             <Cell label="Books Ⓛ" body={glEv.note} disagree={stewardLabel !== bkLabel && !!bkLabel} />
           )}
-          {contractEv.length > 0 && (
+          {clauses.length > 0 && (
             <Cell
               label="Contract Ⓒ"
               body={
-                <>
-                  <p className="font-serif text-[16px] text-ink">{contractEv[0].note}</p>
-                  <p className="mt-1 text-[13px] text-ink-2">{contractEv[0].ref}</p>
-                </>
+                <div className="space-y-3">
+                  {clauses.map((c) => (
+                    <div key={c.ref}>
+                      <p className="font-serif text-[16px] text-ink">{c.rule}</p>
+                      <p className="mt-1 text-[13px] text-ink-2">{c.ref}</p>
+                    </div>
+                  ))}
+                </div>
               }
               disagree={decision.status === "blocked"}
             />
@@ -158,7 +182,18 @@ export function CaseFile({
           {timeEv && <Cell label="Time record Ⓣ" body={timeEv.note} disagree={false} />}
         </div>
 
-        <p className="mt-8 max-w-[75ch] text-[15px] text-ink">{decision.rationale.slice(0, 500)}</p>
+        <div className="mt-8 max-w-[75ch]">
+          <p className="text-[15px] text-ink">{whyText}</p>
+          {checks.length > 0 && (
+            <ul className="mt-4 space-y-2 text-[15px] text-ink">
+              {checks.map((c, i) => (
+                <li key={i} title={c.ruleId ?? undefined}>
+                  <span className="text-ink-2">{c.tick}</span> {c.label}: {c.message}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         {entry && lines.length > 0 && (
           <div className="mt-8">

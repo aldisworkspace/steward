@@ -8,6 +8,7 @@ import type { Id } from "./_generated/dataModel";
 import { getModelClient, getModelProvider } from "../lib/model";
 import { MODELS } from "../lib/llm";
 import { EXTRACT_SYSTEM } from "../lib/prompts";
+import { buildRunJournalLines } from "../lib/journalSummary";
 import { defendDecision, extractGrantTerms, runPipeline } from "../lib/pipeline";
 import type { GrantTerms } from "../lib/types";
 import { GrantTermsZ } from "../lib/types";
@@ -93,9 +94,16 @@ export const runAgent = action({
       usageInput = result.usage.input;
       usageOutput = result.usage.output;
       errors.push(...result.errors);
+      const journalLines = buildRunJournalLines({
+        txns: input.txns,
+        decisions: result.decisions,
+        findings: result.findings,
+        entries: result.entries,
+      });
       await ctx.runMutation(internal.agentInternal.savePipelineResults, {
         decisions: result.decisions,
         entries: result.entries,
+        journalLines,
       });
       await ctx.runMutation(internal.agentInternal.finishRun, {
         runId,

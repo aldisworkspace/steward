@@ -15,6 +15,7 @@ import type * as dashboard from "../dashboard.js";
 import type * as grants from "../grants.js";
 import type * as ingest from "../ingest.js";
 import type * as pdfText from "../pdfText.js";
+import type * as report from "../report.js";
 import type * as ui from "../ui.js";
 
 import type {
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   grants: typeof grants;
   ingest: typeof ingest;
   pdfText: typeof pdfText;
+  report: typeof report;
   ui: typeof ui;
 }>;
 

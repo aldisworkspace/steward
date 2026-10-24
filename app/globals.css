@@ -110,3 +110,18 @@ body {
     animation: none;
   }
 }
+
+@media print {
+  header,
+  nav,
+  .no-print,
+  aside {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+  .report-print {
+    padding: 0;
+  }
+}

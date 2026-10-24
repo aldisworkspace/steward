@@ -26,6 +26,14 @@ export type GrantTerms = z.infer<typeof GrantTermsZ>;
 export const EvidenceZ = z.object({ source: SourceZ, ref: z.string(), note: z.string() });
 export type Evidence = z.infer<typeof EvidenceZ>;
 
+export const DecisionCheckZ = z.object({
+  ruleId: z.string().nullable(),
+  label: z.string(),
+  message: z.string(),
+  tick: z.string(),
+});
+export type DecisionCheck = z.infer<typeof DecisionCheckZ>;
+
 export const DecisionZ = z.object({
   txnId: z.string(),
   grantId: z.string().nullable(),
@@ -34,6 +42,9 @@ export const DecisionZ = z.object({
   status: StatusZ,
   confidence: z.number().min(0).max(1),
   rationale: z.string(),
+  modelRationale: z.string().optional(),
+  checks: z.array(DecisionCheckZ).optional(),
+  atRiskCents: z.number().optional(),
   evidence: z.array(EvidenceZ),
   ruleHits: z.array(z.string()),
 });

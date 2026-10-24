@@ -133,8 +133,9 @@ export const savePipelineResults = internalMutation({
   args: {
     decisions: v.array(v.any()),
     entries: v.array(v.any()),
+    journalLines: v.array(v.string()),
   },
-  handler: async (ctx, { decisions, entries }) => {
+  handler: async (ctx, { decisions, entries, journalLines }) => {
     for (const d of await ctx.db.query("decisions").collect()) {
       await ctx.db.delete(d._id);
     }
@@ -147,19 +148,24 @@ export const savePipelineResults = internalMutation({
         status: d.status,
         confidence: d.confidence,
         rationale: d.rationale,
+        modelRationale: d.modelRationale ?? d.rationale,
+        checks: d.checks,
+        atRiskCents: d.atRiskCents,
         evidence: d.evidence,
         ruleHits: d.ruleHits,
       });
-      if (d.status !== "auto") {
-        await ctx.db.insert("auditLog", {
-          at: new Date().toISOString(),
-          actor: "steward",
-          action: "decision",
-          targetId: d.txnId,
-          why: d.rationale,
-          evidence: d.evidence.map((e) => `${e.source}:${e.ref}`),
-        });
-      }
+    }
+
+    const runAt = new Date().toISOString();
+    for (const line of journalLines) {
+      await ctx.db.insert("auditLog", {
+        at: runAt,
+        actor: "steward",
+        action: "run_summary",
+        targetId: "run",
+        why: line,
+        evidence: [],
+      });
     }
 
     for (const e of await ctx.db.query("proposedEntries").collect()) {

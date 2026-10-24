@@ -71,6 +71,16 @@ export const loadDemo = mutation({
   },
 });
 
+export const resetRunState = mutation({
+  args: {},
+  handler: async (ctx) => {
+    for (const row of await ctx.db.query("decisions").collect()) await ctx.db.delete(row._id);
+    for (const row of await ctx.db.query("proposedEntries").collect()) await ctx.db.delete(row._id);
+    for (const row of await ctx.db.query("runs").collect()) await ctx.db.delete(row._id);
+    for (const row of await ctx.db.query("auditLog").collect()) await ctx.db.delete(row._id);
+  },
+});
+
 export const counts = query({
   args: {},
   handler: async (ctx) => {
