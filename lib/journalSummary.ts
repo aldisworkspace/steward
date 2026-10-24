@@ -1,6 +1,6 @@
 import { ruleLabel } from "./ruleLabels";
 import type { ProposedEntryDraft } from "./pipeline";
-import type { Decision, Finding, Txn } from "./types";
+import type { Decision, Finding, GlRow, StaffAllocation, Txn } from "./types";
 
 function usd(cents: number) {
   return `$${(Math.abs(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -16,13 +16,21 @@ function shortReason(ruleId: string): string {
   return l.split(" ")[0] ?? ruleId;
 }
 
+function employeeFromMemo(memo: string): string | null {
+  const m = memo.match(/\(([^)]+)\)/);
+  return m?.[1] ?? null;
+}
+
 export function buildRunJournalLines(args: {
   txns: Txn[];
+  gl: GlRow[];
+  staff: StaffAllocation[];
   decisions: Decision[];
   findings: Finding[];
   entries: ProposedEntryDraft[];
 }): string[] {
-  const { txns, decisions, findings, entries } = args;
+  const { txns, gl, staff, decisions, findings, entries } = args;
+  const glByRef = new Map(gl.map((r) => [r.bankRef, r]));
   const lines: string[] = [];
   lines.push(`Picked up ${txns.length} bank transactions.`);
 
@@ -33,7 +41,8 @@ export function buildRunJournalLines(args: {
   const byGrant = new Map<string, { txnId: string; ruleId: string }[]>();
   for (const d of blocked) {
     const f = findings.find((x) => x.txnId === d.txnId && x.status === "blocked");
-    const grant = d.grantId ?? "grant";
+    const glRow = glByRef.get(d.txnId);
+    const grant = d.grantId ?? glRow?.class ?? "unrestricted";
     const list = byGrant.get(grant) ?? [];
     list.push({ txnId: d.txnId, ruleId: f?.ruleId ?? "blocked" });
     byGrant.set(grant, list);
@@ -46,33 +55,39 @@ export function buildRunJournalLines(args: {
   const effortTxns = decisions.filter((d) => d.ruleHits.includes("R-EFFORT") && d.splits);
   if (effortTxns.length) {
     let moved = 0;
-    let grantOff: string | null = null;
+    const grantsOff = new Set<string>();
     for (const d of effortTxns) {
       const t = txns.find((x) => x.txnId === d.txnId);
       if (!t) continue;
       const splits = d.splits ?? [];
       const onGrant = splits.filter((s) => s.grantId).reduce((a, s) => a + Math.abs(s.amount), 0);
-      const full = Math.abs(t.amountCents);
-      moved += full - onGrant;
-      grantOff = d.grantId ?? splits.find((s) => s.grantId)?.grantId ?? grantOff;
+      moved += Math.abs(t.amountCents) - onGrant;
+      for (const s of splits) {
+        if (s.grantId) grantsOff.add(s.grantId);
+      }
+      const glRow = glByRef.get(d.txnId);
+      if (glRow?.class) grantsOff.add(glRow.class);
     }
+    const first = effortTxns[0]!;
+    const t0 = txns.find((x) => x.txnId === first.txnId);
+    const person =
+      employeeFromMemo(t0?.memo ?? "") ??
+      staff.find((s) => t0?.memo.includes(`(${s.employee})`))?.employee ??
+      "payroll";
+    const grantList = [...grantsOff].join(", ") || "grant";
     lines.push(
-      `Split ${effortTxns.length} M. Chen paycheck${effortTxns.length === 1 ? "" : "s"} per time records — ${usd(moved)} moved off ${grantOff ?? "GA-2026-114"}.`,
+      `Split ${effortTxns.length} ${person} paycheck${effortTxns.length === 1 ? "" : "s"} per time records — ${usd(moved)} moved off ${grantList}.`,
     );
   }
 
-  const deposit = findings.filter((f) => f.ruleId === "R-DEPOSIT-MISMATCH");
-  for (const f of deposit) {
+  for (const f of findings.filter((x) => x.ruleId === "R-DEPOSIT-MISMATCH")) {
     const t = txns.find((x) => x.txnId === f.txnId);
-    const g = f.evidence.find((e) => e.source === "gl");
-    const b = f.evidence.find((e) => e.source === "bank");
-    if (t && g && b) {
-      const glC = parseFloat(g.note.replace(/[^0-9.-]/g, "")) * 100;
-      const bankC = Math.abs(t.amountCents);
-      const gap = Math.abs(glC - bankC) / 100;
-      const label = t.description.includes("GGRWA") ? "GGRWA advance" : t.description.slice(0, 40);
-      lines.push(`Flagged a ${usd(gap * 100)} gap between ledger and bank on the ${label}.`);
-    }
+    const glRow = glByRef.get(f.txnId);
+    if (!t || !glRow) continue;
+    const gapCents = Math.abs(glRow.amountCents - t.amountCents);
+    if (!gapCents) continue;
+    const label = (t.memo || t.description).slice(0, 48);
+    lines.push(`Flagged a ${usd(gapCents)} gap between ledger and bank on the ${label}.`);
   }
 
   const waiting = entries.length;

@@ -52,8 +52,14 @@ const BATCH = 25;
 function codePayroll(t: Txn, staff: StaffAllocation[]): (Coding & { splits?: Decision["splits"] }) | null {
   const person = staff.find((s) => t.memo.includes(`(${s.employee})`));
   if (!person) return null;
-  const parts = person.allocation.map((a) => {
+  const parts = person.allocation.map((a, idx) => {
     const [grantId, budgetLine] = a.key === "UNRESTRICTED" ? [null, null] : a.key.split(":");
+    if (idx === person.allocation.length - 1) {
+      const prior = person.allocation
+        .slice(0, idx)
+        .reduce((sum, x) => sum + Math.round(t.amountCents * x.pct), 0);
+      return { grantId, budgetLine, amount: t.amountCents - prior };
+    }
     return { grantId, budgetLine, amount: Math.round(t.amountCents * a.pct) };
   });
   const single = parts.length === 1 ? parts[0] : null;
@@ -76,7 +82,10 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
     if (p) codings.set(t.txnId, p); else forModel.push(t);
   }
 
-  const context = JSON.stringify({
+  const jsonForModel = (value: unknown) =>
+    JSON.stringify(value).replace(/</g, "\\u003c");
+
+  const context = jsonForModel({
     grants: input.grants.map((g) => ({ grantId: g.grantId, program: g.program, restrictedPurpose: g.restrictedPurpose,
       period: [g.periodStart, g.periodEnd], budgetLines: g.budgetLines, unallowable: g.unallowable, priorApproval: g.priorApproval })),
     precedents: input.precedents,
@@ -91,39 +100,75 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
     history.set(k, [...(history.get(k) ?? []), { class: r.class, budgetLine: r.budgetLine, memo: memoByTxn.get(r.bankRef) ?? "", txnId: r.bankRef }]);
   }
 
-  for (let i = 0; i < forModel.length; i += BATCH) {
-    const batch = forModel.slice(i, i + BATCH);
-    const rows = batch.map((t) => {
-      const g = glByRef.get(t.txnId);
-      const vendorHistory = (history.get(vendorKey(t.description)) ?? []).filter((h) => h.txnId !== t.txnId).slice(-3)
-        .map(({ class: c, budgetLine, memo }) => ({ grantId: c, budgetLine, memo }));
-      return { txnId: t.txnId, date: t.date, description: t.description, amountUsd: t.amountCents / 100, memo: t.memo,
-        gl: g ? { class: g.class, budgetLine: g.budgetLine, enteredBy: g.enteredBy } : null, vendorHistory };
-    });
-    try {
-      const { data, usage: u } = await model.json({
-        model: MODELS.bulk, system: CODING_SYSTEM, schema: CodingZ, toolName: "record_codings",
-        toolDescription: "Record one coding per transaction.",
-        content: [{ type: "text", text: `<context>${context}</context>\n<transactions>${JSON.stringify(rows)}</transactions>` }],
+  const validGrants = new Map(input.grants.map((g) => [g.grantId, new Set(g.budgetLines.map((l) => l.code))]));
+  const batchStarts: number[] = [];
+  for (let i = 0; i < forModel.length; i += BATCH) batchStarts.push(i);
+
+  const batchResults = await Promise.all(
+    batchStarts.map(async (i) => {
+      const batch = forModel.slice(i, i + BATCH);
+      const rows = batch.map((t) => {
+        const g = glByRef.get(t.txnId);
+        const vendorHistory = (history.get(vendorKey(t.description)) ?? []).filter((h) => h.txnId !== t.txnId).slice(-3)
+          .map(({ class: c, budgetLine, memo }) => ({ grantId: c, budgetLine, memo }));
+        return { txnId: t.txnId, date: t.date, description: t.description, amountUsd: t.amountCents / 100, memo: t.memo,
+          gl: g ? { class: g.class, budgetLine: g.budgetLine, enteredBy: g.enteredBy } : null, vendorHistory };
       });
+      try {
+        const { data, usage: u } = await model.json({
+          model: MODELS.bulk, system: CODING_SYSTEM, schema: CodingZ, toolName: "record_codings",
+          toolDescription: "Record one coding per transaction.",
+          content: [{ type: "text", text: `<context>${context}</context>\n<transactions>${jsonForModel(rows)}</transactions>` }],
+        });
+        return { i, batch, data, u, err: null as string | null };
+      } catch (e) {
+        return { i, batch, data: null, u: null, err: (e as Error).message };
+      }
+    }),
+  );
+
+  batchResults.sort((a, b) => a.i - b.i);
+  let done = 0;
+  for (const { i, batch, data, u, err } of batchResults) {
+    if (err) errors.push(`Batch ${i / BATCH + 1}: ${err}`);
+    else if (data && u) {
       usage = { input: usage.input + u.input, output: usage.output + u.output };
-      const validGrants = new Map(input.grants.map((g) => [g.grantId, new Set(g.budgetLines.map((l) => l.code))]));
       for (const c of data.codings) {
-        if (!batch.some((t) => t.txnId === c.txnId)) continue; // ignore hallucinated ids
-        // Guard: unknown grant/line → unrestricted + review (model output never decides by itself)
-        if (c.grantId && (!validGrants.has(c.grantId) || (c.budgetLine && !validGrants.get(c.grantId)!.has(c.budgetLine)))) {
-          codings.set(c.txnId, { ...c, grantId: null, budgetLine: null, confidence: 0,
-            concern: { status: "needs_review", reason: `Model proposed unknown grant/line ${c.grantId}:${c.budgetLine}`, clauseRef: null } });
+        if (!batch.some((t) => t.txnId === c.txnId)) continue;
+        const unknownGrant = c.grantId && !validGrants.has(c.grantId);
+        const unknownLine =
+          c.grantId &&
+          (!c.budgetLine || !validGrants.get(c.grantId)!.has(c.budgetLine));
+        if (unknownGrant || unknownLine) {
+          codings.set(c.txnId, {
+            ...c,
+            grantId: null,
+            budgetLine: null,
+            confidence: 0,
+            concern: {
+              status: "needs_review",
+              reason: `Model proposed unknown grant/line ${c.grantId ?? "?"}:${c.budgetLine ?? "?"}`,
+              clauseRef: null,
+            },
+          });
         } else codings.set(c.txnId, c);
       }
-    } catch (e) {
-      errors.push(`Batch ${i / BATCH + 1}: ${(e as Error).message}`);
     }
-    for (const t of batch) if (!codings.has(t.txnId)) {
-      codings.set(t.txnId, { txnId: t.txnId, grantId: null, budgetLine: null, confidence: 0, rationale: "Not coded: model call failed or skipped this row.",
-        clauseRefs: [], concern: { status: "needs_review", reason: "No model coding available", clauseRef: null } });
+    for (const t of batch) {
+      if (!codings.has(t.txnId)) {
+        codings.set(t.txnId, {
+          txnId: t.txnId,
+          grantId: null,
+          budgetLine: null,
+          confidence: 0,
+          rationale: "Not coded: model call failed or skipped this row.",
+          clauseRefs: [],
+          concern: { status: "needs_review", reason: "No model coding available", clauseRef: null },
+        });
+      }
     }
-    onProgress?.(Math.min(i + BATCH, forModel.length), forModel.length);
+    done += batch.length;
+    onProgress?.(Math.min(done, forModel.length), forModel.length);
   }
   return { codings, usage, errors };
 }
@@ -197,7 +242,30 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       });
     }
 
+    const knownClauseRefs: string[] = [];
+    for (const gr of input.grants) {
+      for (const u of gr.unallowable) knownClauseRefs.push(u.clauseRef);
+      for (const p of gr.priorApproval) knownClauseRefs.push(p.clauseRef);
+    }
+    const clauseRefOk = (ref: string) => {
+      if (!ref.trim()) return false;
+      const p = ref.split(";")[0]!;
+      return knownClauseRefs.some(
+        (k) => k.startsWith(p) || p.startsWith(k.split(";")[0]!),
+      );
+    };
+    const keptClauseRefs = c.clauseRefs.filter(clauseRefOk);
+    if (keptClauseRefs.length < c.clauseRefs.length) {
+      checks.push({
+        ruleId: null,
+        label: "Verification",
+        message: "Dropped an unverified clause reference.",
+        tick: "Ⓒ",
+      });
+    }
+
     const clauseNote = (ref: string) => {
+      if (!ref.trim()) return ref;
       for (const gr of input.grants) {
         for (const u of [...gr.unallowable, ...gr.priorApproval.map((p) => ({ rule: p.rule, clauseRef: p.clauseRef }))]) {
           if (ref.startsWith(u.clauseRef.split(";")[0]!) || u.clauseRef.startsWith(ref.split(";")[0]!)) return u.rule;
@@ -209,7 +277,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     const evidence: Evidence[] = [
       { source: "bank", ref: t.txnId, note: `${t.date} ${t.description} ${(t.amountCents / 100).toFixed(2)}${t.memo ? ` — "${t.memo}"` : ""}` },
       ...(g ? [{ source: "gl" as const, ref: t.txnId, note: `bookkeeper: ${g.class ?? "unrestricted"}${g.budgetLine ? ":" + g.budgetLine : ""}` }] : []),
-      ...c.clauseRefs.map((r) => ({ source: "contract" as const, ref: r, note: clauseNote(r) })),
+      ...keptClauseRefs.map((r) => ({ source: "contract" as const, ref: r, note: clauseNote(r) })),
       ...(c.concern?.clauseRef
         ? [{ source: "contract" as const, ref: c.concern.clauseRef, note: clauseNote(c.concern.clauseRef) }]
         : []),
