@@ -12,11 +12,14 @@ import { CaseFile } from "./CaseFile";
 import { CaseSkeleton } from "./CaseSkeleton";
 import { CommandPalette, type Command } from "./CommandPalette";
 import { ContextPanel, type PanelMode } from "./ContextPanel";
+import { StatusBar } from "./StatusBar";
 import { InboxQueue } from "./InboxQueue";
 import { NavRail } from "./NavRail";
 import { OverviewTab } from "./OverviewTab";
 import { RedPenStrike } from "./RedPenStrike";
 import { TopBar } from "./TopBar";
+import { KeyboardHelp } from "./KeyboardHelp";
+import { TransactionsVirtualTable } from "./TransactionsVirtualTable";
 import { YourDataTab } from "./YourDataTab";
 import { useAppUrlState } from "../hooks/useAppUrlState";
 
@@ -45,6 +48,8 @@ export function StewardApp() {
   const demoGate = useQuery(api.demoAuth.gate);
   const runAgent = useAction(api.agent.runAgent);
   const resetRun = useMutation(api.ingest.resetRunState);
+  const undoApprove = useMutation(api.approvals.undoApproveEntry);
+  const undoResolution = useMutation(api.approvals.undoInboxResolution);
   const regenerateNarrative = useAction(api.report.regenerateNarrative);
   const triggerMorningCheck = useMutation(api.deadlines.triggerMorningCheck);
 
@@ -59,6 +64,11 @@ export function StewardApp() {
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [statusNote, setStatusNote] = useState<string | null>(null);
   const [passcodeReady, setPasscodeReady] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [statusToast, setStatusToast] = useState<{
+    message: string;
+    undo?: () => void;
+  } | null>(null);
   const caseData = useQuery(
     api.ui.caseFile,
     tab === "inbox" && selected ? { txnId: selected } : "skip",
@@ -84,6 +94,12 @@ export function StewardApp() {
     setPasscodeReady(true);
   }, []);
 
+  useEffect(() => {
+    if (!statusToast) return;
+    const t = setTimeout(() => setStatusToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [statusToast]);
+
   const exceptions = queue ?? [];
   useEffect(() => {
     if (tab !== "inbox" || inboxFilter === "resolved") return;
@@ -103,7 +119,7 @@ export function StewardApp() {
         setSelected(exceptions[Math.max(idx - 1, 0)]?.txnId ?? selected);
       }
       if (e.key === "?" && selected) setPanelMode("why");
-      if (e.key === "?" && !selected) setCmdOpen(true);
+      else if (e.key === "?") setHelpOpen(true);
     },
     [tab, exceptions, selected],
   );
@@ -359,6 +375,29 @@ export function StewardApp() {
                   const rest = exceptions.filter((e) => e.txnId !== selected);
                   setSelected(rest[0]?.txnId ?? null);
                 }}
+                onActionDone={(info) => {
+                  if (info.kind === "approve") {
+                    setStatusToast({
+                      message: "Entry approved",
+                      undo: () =>
+                        void undoApprove({
+                          entryId: info.entryId,
+                          by: actorLabel,
+                          passcode: getDemoPasscode(),
+                        }),
+                    });
+                  } else {
+                    setStatusToast({
+                      message: "Decision recorded",
+                      undo: () =>
+                        void undoResolution({
+                          txnId: info.txnId,
+                          by: actorLabel,
+                          passcode: getDemoPasscode(),
+                        }),
+                    });
+                  }
+                }}
                 strikeKey={selected ?? ""}
               />
             )}
@@ -407,6 +446,12 @@ export function StewardApp() {
         passcode={getDemoPasscode()}
         canWrite={canWrite}
       />
+      <StatusBar
+        message={statusToast?.message ?? ""}
+        undoLabel={statusToast?.undo ? "Undo" : undefined}
+        onUndo={statusToast?.undo}
+      />
+      <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }
@@ -514,62 +559,68 @@ function TransactionsTab({
           </button>
         ))}
       </div>
-      <div className="max-h-[70vh] overflow-auto border border-rule bg-sheet">
-        <table className="w-full border-collapse text-[13px]">
-          <thead className="sticky top-0 bg-sheet">
-            <tr className="border-b border-rule text-left text-ink-2">
-              <th className="px-3 py-2 font-medium">Date</th>
-              <th className="px-3 py-2 font-medium">Description</th>
-              <th className="px-3 py-2 font-medium">Memo</th>
-              <th className="px-3 py-2 text-right font-medium">Amount</th>
-              <th className="px-3 py-2 font-medium">Steward&apos;s coding</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.txnId} className="h-10 border-b border-rule">
-                <td className="px-3 py-2">{r.date}</td>
-                <td className="max-w-[200px] truncate px-3 py-2">{r.description}</td>
-                <td className="max-w-[120px] truncate px-3 py-2 text-ink-2">{r.memo}</td>
-                <td className="tabular px-3 py-2 text-right">{fmtTableAmount(r.amountCents)}</td>
-                <td className="px-3 py-2">
-                  {r.status === "blocked" && r.grantId ? (
-                    <RedPenStrike
-                      text={stewardCodingLabel({
+      {rows.length > 150 ? (
+        <TransactionsVirtualTable rows={rows} grantTerms={grantTerms} />
+      ) : (
+        <div className="max-h-[70vh] overflow-auto border border-rule bg-sheet">
+          <table className="w-full border-collapse text-[13px]">
+            <thead className="sticky top-0 bg-sheet">
+              <tr className="border-b border-rule text-left text-ink-2">
+                <th className="px-3 py-2 font-medium">Date</th>
+                <th className="px-3 py-2 font-medium">Description</th>
+                <th className="px-3 py-2 font-medium">Memo</th>
+                <th className="px-3 py-2 text-right font-medium">Amount</th>
+                <th className="px-3 py-2 font-medium">Steward&apos;s coding</th>
+                <th className="px-3 py-2 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.txnId} className="h-10 border-b border-rule">
+                  <td className="px-3 py-2">{r.date}</td>
+                  <td className="max-w-[200px] truncate px-3 py-2">{r.description}</td>
+                  <td className="max-w-[120px] truncate px-3 py-2 text-ink-2">{r.memo}</td>
+                  <td className="tabular px-3 py-2 text-right">{fmtTableAmount(r.amountCents)}</td>
+                  <td className="px-3 py-2">
+                    {r.status === "blocked" && r.grantId ? (
+                      <RedPenStrike
+                        text={stewardCodingLabel({
+                          amountCents: r.amountCents,
+                          grantId: r.grantId,
+                          budgetLine: r.budgetLine,
+                          grants: grantTerms,
+                          description: r.description,
+                          memo: r.memo,
+                        })}
+                        className="text-[13px]"
+                      />
+                    ) : (
+                      stewardCodingLabel({
                         amountCents: r.amountCents,
                         grantId: r.grantId,
                         budgetLine: r.budgetLine,
+                        splits: r.splits as { grantId: string | null; budgetLine: string | null; amount: number }[] | undefined,
                         grants: grantTerms,
                         description: r.description,
                         memo: r.memo,
-                      })}
-                      className="text-[13px]"
-                    />
-                  ) : (
-                    stewardCodingLabel({
-                      amountCents: r.amountCents,
-                      grantId: r.grantId,
-                      budgetLine: r.budgetLine,
-                      splits: r.splits as { grantId: string | null; budgetLine: string | null; amount: number }[] | undefined,
-                      grants: grantTerms,
-                      description: r.description,
-                      memo: r.memo,
-                    })
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  {r.status === "auto" ? (
-                    <span className="text-ledger">✓</span>
-                  ) : (
-                    <span className={r.status === "blocked" ? "text-redpen" : "text-pencil"}>{r.status.replace("_", " ")}</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                      })
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {r.status === "auto" ? (
+                      <span className="text-money">✓</span>
+                    ) : (
+                      <span className={r.status === "blocked" ? "text-redpen" : "text-attention"}>
+                        {r.status.replace("_", " ")}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

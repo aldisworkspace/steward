@@ -146,6 +146,50 @@ export const acknowledgeDecision = mutation({
   },
 });
 
+export const undoApproveEntry = mutation({
+  args: { entryId: v.string(), by: v.string(), passcode: v.optional(v.string()) },
+  handler: async (ctx, { entryId, by, passcode }) => {
+    assertDemoPasscode(passcode);
+    const entry = (await ctx.db.query("proposedEntries").collect()).find((e) => e.id === entryId);
+    if (!entry) throw new Error("Entry not found");
+    await assertHumanApprover(ctx, by, entry.txnId);
+    if (entry.state !== "approved") throw new Error("Only approved entries can be undone");
+    await ctx.db.patch(entry._id, { state: "proposed", approvedBy: undefined });
+    const at = new Date().toISOString();
+    await ctx.db.insert("auditLog", {
+      at,
+      actor: by,
+      action: "undo_approve_entry",
+      targetId: entryId,
+      why: `Undone by ${by}`,
+      evidence: [entry.txnId],
+    });
+  },
+});
+
+export const undoInboxResolution = mutation({
+  args: { txnId: v.string(), by: v.string(), passcode: v.optional(v.string()) },
+  handler: async (ctx, { txnId, by, passcode }) => {
+    assertDemoPasscode(passcode);
+    await assertHumanApprover(ctx, by, txnId);
+    const row = await ctx.db
+      .query("inboxResolutions")
+      .withIndex("by_txnId", (q) => q.eq("txnId", txnId))
+      .first();
+    if (!row) throw new Error("No resolution to undo");
+    await ctx.db.delete(row._id);
+    const at = new Date().toISOString();
+    await ctx.db.insert("auditLog", {
+      at,
+      actor: by,
+      action: "undo_resolution",
+      targetId: txnId,
+      why: `Undone by ${by}`,
+      evidence: [],
+    });
+  },
+});
+
 export const overrideDecision = mutation({
   args: {
     txnId: v.string(),

@@ -135,9 +135,21 @@ body {
   animation: stamp-drop 220ms ease-out forwards;
 }
 
+@keyframes queue-exit {
+  to {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+
+.queue-exit {
+  animation: queue-exit 220ms ease-out forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .presence-dot-running,
-  .stamp-animate {
+  .stamp-animate,
+  .queue-exit {
     animation: none;
   }
   .stamp-animate {

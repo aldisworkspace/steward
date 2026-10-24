@@ -52,6 +52,7 @@ type CaseFileProps = {
   onStatusLine: (m: string | null) => void;
   onWhy: () => void;
   onResolved?: () => void;
+  onActionDone?: (info: { kind: "approve"; entryId: string } | { kind: "ack" | "reject"; txnId: string }) => void;
   spentByLine?: Record<string, number>;
   strikeKey: string;
 };
@@ -94,6 +95,7 @@ function CaseFileInner({
   onStatusLine,
   onWhy,
   onResolved,
+  onActionDone,
   spentByLine = {},
   strikeKey,
 }: CaseFileProps & { data: CaseDataLoaded }) {
@@ -182,6 +184,8 @@ function CaseFileInner({
     if (!canWrite) return;
     setActionError(null);
     if (entry) {
+      onResolved?.();
+      onActionDone?.({ kind: "approve", entryId: entry.id });
       try {
         await approve({
           entryId: entry.id,
@@ -191,7 +195,6 @@ function CaseFileInner({
         });
         setEntryStamp("approved");
         onStatusLine("Entry approved");
-        onResolved?.();
       } catch (e) {
         const msg = messageFromConvexError(e);
         setActionError(msg);
@@ -204,6 +207,8 @@ function CaseFileInner({
       return;
     }
     if (!ackNote.trim()) return;
+    onResolved?.();
+    onActionDone?.({ kind: "ack", txnId: txn.txnId });
     try {
       await acknowledge({
         txnId: txn.txnId,
@@ -217,7 +222,6 @@ function CaseFileInner({
       setAckOpen(false);
       setAckNote("");
       onStatusLine("Decision acknowledged");
-      onResolved?.();
     } catch (e) {
       const msg = messageFromConvexError(e);
       setActionError(msg);
