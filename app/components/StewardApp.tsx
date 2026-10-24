@@ -4,6 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { lineNameFromGrants, stewardCodingLabel } from "@/lib/codingLabel";
 import { getFundLabel } from "@/lib/fundLabels";
 import { fundFilterParam, matchesFundFilter } from "@/lib/fundFilter";
+import { shouldIgnoreAppShortcut } from "@/lib/keyboardGuard";
 import type { GrantTerms } from "@/lib/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
@@ -131,8 +132,19 @@ export function StewardApp() {
     if (!selected && inboxRows.length) setSelected(inboxRows[0].txnId);
   }, [tab, inboxFilter, inboxRows, selected, setSelected]);
 
+  const panelOpen = panelMode !== null;
+
   const onKey = useCallback(
     (e: KeyboardEvent) => {
+      if (
+        shouldIgnoreAppShortcut(e, {
+          cmdOpen,
+          panelOpen,
+          helpOpen,
+        })
+      ) {
+        return;
+      }
       if (tab !== "inbox" || !inboxRows.length) return;
       const idx = inboxRows.findIndex((x) => x.txnId === selected);
       if (e.key === "j" || e.key === "J") {
@@ -146,7 +158,7 @@ export function StewardApp() {
       if (e.key === "?" && selected) setPanelMode("why");
       else if (e.key === "?") setHelpOpen(true);
     },
-    [tab, inboxRows, selected, setSelected],
+    [tab, inboxRows, selected, setSelected, cmdOpen, panelOpen, helpOpen, setPanelMode],
   );
 
   useEffect(() => {
@@ -445,6 +457,9 @@ export function StewardApp() {
                 actorLabel={actorLabel}
                 passcode={getDemoPasscode()}
                 canWrite={canWrite}
+                cmdOpen={cmdOpen}
+                helpOpen={helpOpen}
+                panelOpen={panelOpen}
                 onStatusLine={setStatusNote}
                 onWhy={() => setPanelMode("why")}
                 onResolved={() => {

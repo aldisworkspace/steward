@@ -18,6 +18,7 @@ import { StatusPill } from "./StatusPill";
 import { FundLabelDisplay, BudgetLineDisplay } from "./FundLabelDisplay";
 import { GlossaryTerm } from "./GlossaryTerm";
 import { getFundLabel } from "@/lib/fundLabels";
+import { shouldIgnoreAppShortcut } from "@/lib/keyboardGuard";
 
 type CaseData = {
   txn: { txnId: string; date: string; description: string; amountCents: number; memo: string } | null;
@@ -58,6 +59,9 @@ type CaseFileProps = {
   onActionDone?: (info: { kind: "approve"; entryId: string } | { kind: "ack" | "reject"; txnId: string }) => void;
   spentByLine?: Record<string, number>;
   strikeKey: string;
+  cmdOpen?: boolean;
+  helpOpen?: boolean;
+  panelOpen?: boolean;
 };
 
 export function CaseFile(props: CaseFileProps) {
@@ -101,6 +105,9 @@ function CaseFileInner({
   onActionDone,
   spentByLine = {},
   strikeKey,
+  cmdOpen = false,
+  helpOpen = false,
+  panelOpen = false,
 }: CaseFileProps & { data: CaseDataLoaded }) {
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const approve = useMutation(api.approvals.approveEntry);
@@ -303,7 +310,18 @@ function CaseFileInner({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (!canWrite || rejectOpen || ackOpen || overrideOpen) return;
+      const popoverOpen = rejectOpen || ackOpen || overrideOpen;
+      if (
+        shouldIgnoreAppShortcut(e, {
+          cmdOpen,
+          panelOpen,
+          helpOpen,
+          popoverOpen,
+        })
+      ) {
+        return;
+      }
+      if (!canWrite) return;
       if (e.key === "a" || e.key === "A") {
         e.preventDefault();
         void onApprove();
@@ -320,7 +338,7 @@ function CaseFileInner({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canWrite, rejectOpen, ackOpen, overrideOpen, entry]);
+  }, [canWrite, rejectOpen, ackOpen, overrideOpen, entry, cmdOpen, helpOpen, panelOpen]);
 
   const bankEv = evidence.find((e) => e.source === "bank");
   const glEv = evidence.find((e) => e.source === "gl");
