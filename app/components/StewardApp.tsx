@@ -82,6 +82,7 @@ export function StewardApp() {
     message: string;
     undo?: () => void;
   } | null>(null);
+  const [approveAllBusy, setApproveAllBusy] = useState(false);
   const caseData = useQuery(
     api.ui.caseFile,
     tab === "inbox" && selected ? { txnId: selected } : "skip",
@@ -406,41 +407,70 @@ export function StewardApp() {
               onSelect={setSelected}
               filter={inboxFilter}
               setFilter={(f) => setInboxFilter(f, fundFilter)}
+              approveAllBusy={approveAllBusy}
               onApproveAll={(txnIds) => {
-                if (!canWrite || actingAsSteward) return;
+                if (!canWrite || actingAsSteward || approveAllBusy) return;
                 const rowsByTxn = new Map(inboxRows.map((r) => [r.txnId, r]));
+                const entryIds = txnIds
+                  .map((id) => rowsByTxn.get(id)?.entryId)
+                  .filter(Boolean) as string[];
+                if (!entryIds.length) return;
+                setApproveAllBusy(true);
+                setInlineError(null);
+                const rest = exceptions.filter((e) => !txnIds.includes(e.txnId));
+                setSelected(rest[0]?.txnId ?? null);
                 void (async () => {
-                  const approved: { entryId: string }[] = [];
+                  const approved: { entryId: string; txnId: string }[] = [];
+                  let failedAt: string | null = null;
                   try {
                     for (const txnId of txnIds) {
                       const entryId = rowsByTxn.get(txnId)?.entryId;
                       if (!entryId) continue;
-                      await approveEntry({
-                        entryId,
-                        by: actorLabel,
-                        note: "Approved as part of grouped payroll review",
-                        passcode: getDemoPasscode(),
-                      });
-                      approved.push({ entryId });
+                      try {
+                        await approveEntry({
+                          entryId,
+                          by: actorLabel,
+                          note: "Approved as part of grouped payroll review",
+                          passcode: getDemoPasscode(),
+                        });
+                        approved.push({ entryId, txnId });
+                      } catch (e) {
+                        failedAt = txnId;
+                        throw e;
+                      }
                     }
                     if (approved.length) {
                       setStatusToast({
                         message: `${approved.length} entries approved`,
                         undo: () => {
-                          for (const { entryId } of approved) {
-                            void undoApprove({
-                              entryId,
-                              by: actorLabel,
-                              passcode: getDemoPasscode(),
-                            });
-                          }
+                          void (async () => {
+                            try {
+                              for (const { entryId } of approved) {
+                                await undoApprove({
+                                  entryId,
+                                  by: actorLabel,
+                                  passcode: getDemoPasscode(),
+                                });
+                              }
+                              setStatusToast(null);
+                              setSelected(approved[0]?.txnId ?? null);
+                            } catch (err) {
+                              setInlineError(messageFromConvexError(err));
+                            }
+                          })();
                         },
                       });
-                      const rest = exceptions.filter((e) => !txnIds.includes(e.txnId));
-                      setSelected(rest[0]?.txnId ?? null);
                     }
                   } catch (e) {
-                    setInlineError(messageFromConvexError(e));
+                    const msg = messageFromConvexError(e);
+                    const failedTxn = failedAt ?? txnIds[0];
+                    setInlineError(
+                      `${approved.length} of ${entryIds.length} approved — 1 failed: ${msg}`,
+                    );
+                    setStatusToast(null);
+                    setSelected(failedTxn ?? null);
+                  } finally {
+                    setApproveAllBusy(false);
                   }
                 })();
               }}
@@ -466,26 +496,46 @@ export function StewardApp() {
                   const rest = exceptions.filter((e) => e.txnId !== selected);
                   setSelected(rest[0]?.txnId ?? null);
                 }}
+                onRollback={(txnId) => {
+                  setSelected(txnId);
+                  setStatusToast(null);
+                }}
+                onActionFailed={(msg) => {
+                  setStatusToast(null);
+                  setInlineError(msg);
+                }}
                 onActionDone={(info) => {
                   if (info.kind === "approve") {
                     setStatusToast({
                       message: "Entry approved",
-                      undo: () =>
+                      undo: () => {
                         void undoApprove({
                           entryId: info.entryId,
                           by: actorLabel,
                           passcode: getDemoPasscode(),
-                        }),
+                        })
+                          .then(() => {
+                            setStatusToast(null);
+                            setSelected(info.txnId);
+                          })
+                          .catch((err) => setInlineError(messageFromConvexError(err)));
+                      },
                     });
                   } else {
                     setStatusToast({
                       message: "Decision recorded",
-                      undo: () =>
+                      undo: () => {
                         void undoResolution({
                           txnId: info.txnId,
                           by: actorLabel,
                           passcode: getDemoPasscode(),
-                        }),
+                        })
+                          .then(() => {
+                            setStatusToast(null);
+                            setSelected(info.txnId);
+                          })
+                          .catch((err) => setInlineError(messageFromConvexError(err)));
+                      },
                     });
                   }
                 }}

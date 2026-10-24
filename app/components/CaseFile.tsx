@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation } from "convex/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { messageFromConvexError } from "../lib/convexError";
 import { contractClausesFromDecision } from "@/lib/clauseText";
@@ -56,7 +56,11 @@ type CaseFileProps = {
   onStatusLine: (m: string | null) => void;
   onWhy: () => void;
   onResolved?: () => void;
-  onActionDone?: (info: { kind: "approve"; entryId: string } | { kind: "ack" | "reject"; txnId: string }) => void;
+  onRollback?: (txnId: string) => void;
+  onActionFailed?: (message: string) => void;
+  onActionDone?: (
+    info: { kind: "approve"; entryId: string; txnId: string } | { kind: "ack" | "reject"; txnId: string },
+  ) => void;
   spentByLine?: Record<string, number>;
   strikeKey: string;
   cmdOpen?: boolean;
@@ -102,6 +106,8 @@ function CaseFileInner({
   onStatusLine,
   onWhy,
   onResolved,
+  onRollback,
+  onActionFailed,
   onActionDone,
   spentByLine = {},
   strikeKey,
@@ -125,6 +131,13 @@ function CaseFileInner({
   const [rulingType, setRulingType] = useState<RulingType>("allow");
   const [entryStamp, setEntryStamp] = useState<"approved" | "returned" | null>(null);
   const [stampAnimate, setStampAnimate] = useState(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const stampDate = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const stampBy = actorLabel.replace(/\s*\(.*\)$/, "");
 
@@ -194,8 +207,8 @@ function CaseFileInner({
     if (!canWrite) return;
     setActionError(null);
     if (entry) {
+      const txnId = txn.txnId;
       onResolved?.();
-      onActionDone?.({ kind: "approve", entryId: entry.id });
       try {
         await approve({
           entryId: entry.id,
@@ -203,12 +216,15 @@ function CaseFileInner({
           note: "Approved in inbox review",
           passcode,
         });
+        if (!mountedRef.current) return;
         setEntryStamp("approved");
-        onStatusLine("Entry approved");
+        onActionDone?.({ kind: "approve", entryId: entry.id, txnId });
       } catch (e) {
         const msg = messageFromConvexError(e);
+        if (!mountedRef.current) return;
+        onRollback?.(txnId);
+        onActionFailed?.(msg);
         setActionError(msg);
-        onStatusLine(msg);
       }
       return;
     }
@@ -217,11 +233,11 @@ function CaseFileInner({
       return;
     }
     if (!ackNote.trim()) return;
+    const txnId = txn.txnId;
     onResolved?.();
-    onActionDone?.({ kind: "ack", txnId: txn.txnId });
     try {
       await acknowledge({
-        txnId: txn.txnId,
+        txnId: txnId,
         by: actorLabel,
         note: ackNote.trim(),
         passcode,
@@ -229,13 +245,16 @@ function CaseFileInner({
         rulingType,
         grantScope,
       });
+      if (!mountedRef.current) return;
       setAckOpen(false);
       setAckNote("");
-      onStatusLine("Decision acknowledged");
+      onActionDone?.({ kind: "ack", txnId });
     } catch (e) {
       const msg = messageFromConvexError(e);
+      if (!mountedRef.current) return;
+      onRollback?.(txnId);
+      onActionFailed?.(msg);
       setActionError(msg);
-      onStatusLine(msg);
     }
   }
 

@@ -27,6 +27,7 @@ export function InboxQueue({
   filter,
   setFilter,
   onApproveAll,
+  approveAllBusy,
 }: {
   rows: QueueRow[];
   grants: GrantTerms[];
@@ -37,6 +38,7 @@ export function InboxQueue({
   filter: InboxFilter;
   setFilter: (f: InboxFilter) => void;
   onApproveAll?: (txnIds: string[]) => void;
+  approveAllBusy?: boolean;
 }) {
   const fundBanner =
     fundFilter != null ? getFundLabel(fundFilter === "general" ? null : fundFilter, grants) : null;
@@ -104,10 +106,11 @@ export function InboxQueue({
                   {onApproveAll && (
                     <button
                       type="button"
-                      className="shrink-0 rounded-[6px] bg-money px-2 py-1 text-[12px] font-medium text-white"
+                      disabled={approveAllBusy}
+                      className="shrink-0 rounded-[6px] border border-ink-2 bg-sheet px-2 py-1 text-[12px] font-medium text-ink disabled:opacity-50"
                       onClick={() => onApproveAll(g.rows.map((r) => r.txnId))}
                     >
-                      Approve all {g.rows.length}
+                      {approveAllBusy ? "Approving…" : `Approve all ${g.rows.length}`}
                     </button>
                   )}
                 </div>
