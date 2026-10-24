@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   devIndicators: false,
   cacheComponents: false,
+  async redirects() {
+    return [{ source: "/demo", destination: "/app?tab=overview", permanent: false }];
+  },
   outputFileTracingIncludes: {
     "/api/seed": [
       "./steward-data/bank_transactions_q3_2026.csv",

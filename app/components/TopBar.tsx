@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 export function TopBar({
   orgDisplay,
   showSyntheticBadge,
@@ -29,7 +31,10 @@ export function TopBar({
   return (
     <header className="flex h-14 shrink-0 items-center bg-navy px-4 text-white">
       <div className="flex w-full flex-wrap items-center gap-3">
-        <span className="text-[15px] font-medium text-white/95">{orgDisplay}</span>
+        <Link href="/" className="text-[15px] font-medium text-white/95 hover:text-white">
+          Steward
+        </Link>
+        <span className="text-[14px] text-white/70">{orgDisplay}</span>
         {showSyntheticBadge && !isCustomData && (
           <span className="rounded-[4px] border border-white/25 bg-white/10 px-2 py-0.5 text-[12px]">
             Synthetic demo data
