@@ -1,7 +1,9 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { stewardCodingLabel } from "@/lib/codingLabel";
+import { lineNameFromGrants, stewardCodingLabel } from "@/lib/codingLabel";
+import { getFundLabel } from "@/lib/fundLabels";
+import { fundFilterParam, matchesFundFilter } from "@/lib/fundFilter";
 import type { GrantTerms } from "@/lib/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
@@ -26,8 +28,17 @@ import { useAppUrlState } from "../hooks/useAppUrlState";
 const STEWARD_ACTOR = { id: "steward", label: "Steward (agent)" } as const;
 
 export function StewardApp() {
-  const { tab, caseId, inboxFilter, txnFilter, setTab, setCaseId, setInboxFilter, setTxnFilter } =
-    useAppUrlState();
+  const {
+    tab,
+    caseId,
+    inboxFilter,
+    txnFilter,
+    fundFilter,
+    setTab,
+    setCaseId,
+    setInboxFilter,
+    setTxnFilter,
+  } = useAppUrlState();
   const counts = useQuery(api.ingest.counts);
   const needsOverview = tab === "overview" || tab === "inbox";
   const stats = useQuery(api.ui.dashboardStats, needsOverview ? {} : "skip");
@@ -102,27 +113,40 @@ export function StewardApp() {
   }, [statusToast]);
 
   const exceptions = queue ?? [];
+
+  const grantTermsList = useMemo(
+    () => (grants ?? []).map((g) => g.terms as GrantTerms | null).filter(Boolean) as GrantTerms[],
+    [grants],
+  );
+
+  const inboxRowsBase =
+    inboxFilter === "resolved"
+      ? (resolvedQueue ?? []).map((r) => ({ ...r, resolved: true as const }))
+      : exceptions.map((r) => ({ ...r, resolved: false as const }));
+
+  const inboxRows = inboxRowsBase.filter((r) => matchesFundFilter(r.grantId ?? null, fundFilter));
+
   useEffect(() => {
     if (tab !== "inbox" || inboxFilter === "resolved") return;
-    if (!selected && exceptions.length) setSelected(exceptions[0].txnId);
-  }, [tab, inboxFilter, exceptions, selected, setSelected]);
+    if (!selected && inboxRows.length) setSelected(inboxRows[0].txnId);
+  }, [tab, inboxFilter, inboxRows, selected, setSelected]);
 
   const onKey = useCallback(
     (e: KeyboardEvent) => {
-      if (tab !== "inbox" || !exceptions.length) return;
-      const idx = exceptions.findIndex((x) => x.txnId === selected);
+      if (tab !== "inbox" || !inboxRows.length) return;
+      const idx = inboxRows.findIndex((x) => x.txnId === selected);
       if (e.key === "j" || e.key === "J") {
         e.preventDefault();
-        setSelected(exceptions[Math.min(idx + 1, exceptions.length - 1)]?.txnId ?? selected);
+        setSelected(inboxRows[Math.min(idx + 1, inboxRows.length - 1)]?.txnId ?? selected);
       }
       if (e.key === "k" || e.key === "K") {
         e.preventDefault();
-        setSelected(exceptions[Math.max(idx - 1, 0)]?.txnId ?? selected);
+        setSelected(inboxRows[Math.max(idx - 1, 0)]?.txnId ?? selected);
       }
       if (e.key === "?" && selected) setPanelMode("why");
       else if (e.key === "?") setHelpOpen(true);
     },
-    [tab, exceptions, selected],
+    [tab, inboxRows, selected, setSelected],
   );
 
   useEffect(() => {
@@ -270,11 +294,6 @@ export function StewardApp() {
     );
   }
 
-  const inboxRows =
-    inboxFilter === "resolved"
-      ? (resolvedQueue ?? []).map((r) => ({ ...r, resolved: true as const }))
-      : exceptions.map((r) => ({ ...r, resolved: false as const }));
-
   return (
     <div className="flex min-h-screen flex-col bg-paper text-ink">
       <TopBar
@@ -294,10 +313,15 @@ export function StewardApp() {
         <NavRail tab={tab} onTab={setTab} inboxCount={stats?.needYou ?? 0} />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-end gap-3 border-b border-rule bg-sheet px-4 py-2 text-[13px] text-ink-2">
-            <button type="button" onClick={() => void onReset()} className="underline">
+            <button type="button" onClick={() => void onReset()} className="text-ink-2 hover:text-ink">
               Reset
             </button>
-            <button type="button" onClick={() => void loadDemo()} disabled={seedLoading} className="underline">
+            <button
+              type="button"
+              onClick={() => void loadDemo()}
+              disabled={seedLoading}
+              className="text-ink-2 hover:text-ink"
+            >
               Reload demo
             </button>
             {tab === "overview" && canWrite && (
@@ -341,9 +365,19 @@ export function StewardApp() {
           onReviewInbox={() => setTab("inbox")}
           onBankFeed={() => void bankFeedSeptOct()}
           onDraftReport={() => setTab("report")}
-          onSankeyOutcome={(outcome) => {
-            setInboxFilter(outcome === "disallowed" ? "disallowed" : "all");
+          onSankeyNavigate={(nav) => {
+            if (nav.kind === "fund") {
+              setTxnFilter("all", fundFilterParam(nav.grantId));
+              return;
+            }
+            if (nav.outcome === "clean") {
+              setTxnFilter("clean", fundFilterParam(nav.grantId));
+              return;
+            }
+            const filter = nav.outcome === "disallowed" ? "disallowed" : "needs_you";
+            setInboxFilter(filter, fundFilterParam(nav.grantId));
           }}
+          onGrantInbox={(grantId) => setInboxFilter("all", grantId)}
           onJournalFilter={() => {}}
         />
       )}
@@ -353,10 +387,13 @@ export function StewardApp() {
           <div className="col-span-12 lg:col-span-4">
             <InboxQueue
               rows={inboxRows}
+              grants={grantTermsList}
+              fundFilter={fundFilter}
+              onClearFund={() => setInboxFilter(inboxFilter, null)}
               selected={selected}
               onSelect={setSelected}
               filter={inboxFilter}
-              setFilter={setInboxFilter}
+              setFilter={(f) => setInboxFilter(f, fundFilter)}
               onApproveAll={(txnIds) => {
                 if (!canWrite || actingAsSteward) return;
                 const rowsByTxn = new Map(inboxRows.map((r) => [r.txnId, r]));
@@ -448,8 +485,10 @@ export function StewardApp() {
         <TransactionsTab
           ledger={ledger}
           filter={txnFilter}
+          fundFilter={fundFilter}
+          onClearFund={() => setTxnFilter(txnFilter, null)}
           setFilter={setTxnFilter}
-          grantTerms={(grants ?? []).map((g) => g.terms as GrantTerms).filter(Boolean)}
+          grantTerms={grantTermsList}
         />
       )}
       {tab === "grants" && <GrantsTab grants={grants} />}
@@ -476,6 +515,7 @@ export function StewardApp() {
         onClose={() => setCmdOpen(false)}
         commands={paletteCommands}
         transactions={ledger ?? []}
+        grantTerms={grantTermsList}
         onJumpTxn={(txnId) => setSelected(txnId)}
       />
       <ContextPanel
@@ -558,6 +598,8 @@ function formatAudit(a: { actor: string; action: string; why: string; targetId: 
 function TransactionsTab({
   ledger,
   filter,
+  fundFilter,
+  onClearFund,
   setFilter,
   grantTerms,
 }: {
@@ -575,31 +617,46 @@ function TransactionsTab({
       }[]
     | undefined;
   filter: "all" | "clean" | "exceptions" | "blocked";
-  setFilter: (f: "all" | "clean" | "exceptions" | "blocked") => void;
+  fundFilter: string | null;
+  onClearFund: () => void;
+  setFilter: (f: "all" | "clean" | "exceptions" | "blocked", fund?: string | null) => void;
   grantTerms: GrantTerms[];
 }) {
+  const ln = (gid: string | null, code: string | null) => lineNameFromGrants(grantTerms, gid, code);
   const rows = (ledger ?? []).filter((r) => {
+    if (!matchesFundFilter(r.grantId, fundFilter)) return false;
     if (filter === "clean") return r.status === "auto";
     if (filter === "blocked") return r.status === "blocked";
     if (filter === "exceptions") return r.status !== "auto";
     return true;
   });
+  const fundBanner =
+    fundFilter != null ? getFundLabel(fundFilter === "general" ? null : fundFilter, grantTerms) : null;
   return (
     <div className="p-6">
+      {fundBanner && (
+        <div className="mb-4 flex items-center gap-2 text-[13px]">
+          <span className="text-ink-2">Fund:</span>
+          <span className="font-medium">{fundBanner.title}</span>
+          <button type="button" onClick={onClearFund} className="text-sky">
+            Clear
+          </button>
+        </div>
+      )}
       <div className="mb-4 flex gap-4 text-[13px]">
         {(["all", "clean", "exceptions"] as const).map((f) => (
           <button
             key={f}
             type="button"
-            onClick={() => setFilter(f)}
-            className={filter === f ? "font-medium text-ledger underline" : "text-ink-2"}
+            onClick={() => setFilter(f, fundFilter)}
+            className={filter === f ? "font-medium text-money" : "text-ink-2 hover:text-ink"}
           >
             {f === "all" ? "All" : f === "clean" ? "Clean" : "Exceptions"}
           </button>
         ))}
       </div>
       {rows.length > 150 ? (
-        <TransactionsVirtualTable rows={rows} grantTerms={grantTerms} />
+        <TransactionsVirtualTable rows={rows} grantTerms={grantTerms} lineName={ln} />
       ) : (
         <div className="max-h-[70vh] overflow-auto border border-rule bg-sheet">
           <table className="w-full border-collapse text-[13px]">
@@ -627,6 +684,7 @@ function TransactionsTab({
                           amountCents: r.amountCents,
                           grantId: r.grantId,
                           budgetLine: r.budgetLine,
+                          lineName: ln,
                           grants: grantTerms,
                           description: r.description,
                           memo: r.memo,
@@ -638,6 +696,7 @@ function TransactionsTab({
                         amountCents: r.amountCents,
                         grantId: r.grantId,
                         budgetLine: r.budgetLine,
+                        lineName: ln,
                         splits: r.splits as { grantId: string | null; budgetLine: string | null; amount: number }[] | undefined,
                         grants: grantTerms,
                         description: r.description,
@@ -689,11 +748,13 @@ function GrantsTab({
           unallowable: { rule: string; clauseRef: string }[];
         } | null;
         if (!t) return null;
+        const fund = getFundLabel(t.grantId, [{ terms: t }]);
         return (
           <article key={i} className="border border-rule bg-sheet p-6">
-            <h2 className="text-[22px] font-semibold">{t.grantId}</h2>
+            <h2 className="text-[22px] font-semibold">{fund.title}</h2>
             <p className="mt-1 text-[13px] text-ink-2">
-              {t.funder} · {t.periodStart} to {t.periodEnd} · {fmtSentenceAmount(t.totalAward * 100)}
+              {fund.subtitle} · <span>{fund.code}</span> · {t.periodStart} to {t.periodEnd} ·{" "}
+              {fmtSentenceAmount(t.totalAward * 100)}
             </p>
             <div className="mt-6 space-y-4">
               {t.budgetLines.map((bl) => {
@@ -708,7 +769,7 @@ function GrantsTab({
                   <div key={bl.code}>
                     <div className="flex justify-between text-[13px]">
                       <span>
-                        {bl.code} {bl.name}
+                        {bl.name} <span className="text-ink-2">{bl.code}</span>
                       </span>
                       <span className="tabular text-ink-2">
                         {fmtTableAmount(spent)} / {fmtTableAmount(budget)}
@@ -800,7 +861,10 @@ function GrantReportSheet({
     <article className="border border-rule bg-sheet p-6">
       <h2 className="text-[22px] font-semibold">Funder report — draft</h2>
       <p className="mt-1 text-[13px] text-ink-2">
-        {terms.grantId} · {terms.funder}
+        {getFundLabel(terms.grantId, [{ terms }]).title}
+        <span className="mt-1 block text-[13px] font-normal text-ink-2">
+          {getFundLabel(terms.grantId, [{ terms }]).subtitle} · {terms.grantId}
+        </span>
       </p>
       <p className="mt-4 font-serif text-[16px] leading-[1.45] text-ink">
         {narrative ?? "Generate a narrative from the figures below."}
@@ -809,7 +873,7 @@ function GrantReportSheet({
       <button
         type="button"
         disabled={busy || !canWrite}
-        className="no-print mt-3 text-[13px] text-ledger underline disabled:opacity-40"
+        className="no-print mt-3 rounded-[6px] border border-rule px-3 py-1.5 text-[13px] disabled:opacity-40"
         onClick={() => {
           setBusy(true);
           setNarrativeError(null);

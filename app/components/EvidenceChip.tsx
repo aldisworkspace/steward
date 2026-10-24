@@ -22,7 +22,7 @@ export function EvidenceChip({
   const style = STYLES[source] ?? "border border-rule bg-sheet text-ink";
   return (
     <div className={`rounded-[6px] p-3 ${style}`}>
-      <p className="text-[12px] font-semibold uppercase tracking-wide opacity-90">{label}</p>
+      <p className="text-[12px] font-semibold text-ink-2">{label}</p>
       <div className="mt-2 text-[13px] leading-snug">{body}</div>
     </div>
   );

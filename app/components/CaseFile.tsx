@@ -15,6 +15,9 @@ import { EvidenceChip } from "./EvidenceChip";
 import { RedPenStrike } from "./RedPenStrike";
 import { RubberStamp } from "./RubberStamp";
 import { StatusPill } from "./StatusPill";
+import { FundLabelDisplay, BudgetLineDisplay } from "./FundLabelDisplay";
+import { GlossaryTerm } from "./GlossaryTerm";
+import { getFundLabel } from "@/lib/fundLabels";
 
 type CaseData = {
   txn: { txnId: string; date: string; description: string; amountCents: number; memo: string } | null;
@@ -350,7 +353,15 @@ function CaseFileInner({
       const grant = terms.find((g) => g.grantId === l.class);
       const bl = grant?.budgetLines.find((b) => b.code === l.budgetLine);
       const cap = bl ? bl.amount * 100 : 0;
-      return { key, label: `${l.budgetLine} ${bl?.name ?? ""}`, before, after, cap };
+      const fund = getFundLabel(l.class, terms);
+      return {
+        key,
+        label: `${fund.title} · ${bl?.name ?? l.budgetLine}`,
+        meta: l.budgetLine,
+        before,
+        after,
+        cap,
+      };
     });
 
   return (
@@ -381,7 +392,19 @@ function CaseFileInner({
           </p>
           <p>
             <span className="text-ink-2">What you need to do: </span>
-            {narrative.youNeed}
+            {decision.status === "blocked" ? (
+              <>
+                Confirm moving this off <GlossaryTerm term="restricted funds">grant funds</GlossaryTerm> to{" "}
+                <GlossaryTerm term="general funds">general funds</GlossaryTerm>, or override with a documented
+                reason.
+              </>
+            ) : entry ? (
+              <>
+                Approve or reject the proposed <GlossaryTerm term="journal entry">journal entry</GlossaryTerm>.
+              </>
+            ) : (
+              narrative.youNeed
+            )}
           </p>
         </div>
 
@@ -515,7 +538,9 @@ function CaseFileInner({
                 animate={stampAnimate}
               />
             )}
-            <h3 className="text-[17px] font-semibold text-ink">Journal entry</h3>
+            <h3 className="text-[17px] font-semibold text-ink">
+              <GlossaryTerm term="journal entry">Journal entry</GlossaryTerm>
+            </h3>
             <table className="mt-3 w-full border-collapse text-[13px]">
               <thead>
                 <tr className="border-b border-rule text-left text-ink-2">
@@ -530,8 +555,12 @@ function CaseFileInner({
                 {lines.map((l, i) => (
                   <tr key={i} className="border-b border-rule">
                     <td className="py-2 pr-2">{l.account}</td>
-                    <td className="py-2 pr-2">{l.class ?? "Unrestricted"}</td>
-                    <td className="py-2 pr-2">{l.budgetLine ?? "—"}</td>
+                    <td className="py-2 pr-2">
+                      <FundLabelDisplay grantId={l.class} grants={terms} showCode="meta" />
+                    </td>
+                    <td className="py-2 pr-2">
+                      <BudgetLineDisplay grantId={l.class} code={l.budgetLine} grants={terms} />
+                    </td>
                     <td className="tabular py-2 pr-2 text-right">{l.debit ? fmtTableAmount(l.debit) : ""}</td>
                     <td className="tabular py-2 text-right">{l.credit ? fmtTableAmount(l.credit) : ""}</td>
                   </tr>
@@ -551,7 +580,9 @@ function CaseFileInner({
                 <p className="text-[13px] font-medium text-ink-2">Budget impact</p>
                 {budgetImpacts.map((b) => (
                   <p key={b.key} className="text-[13px] text-ink">
-                    {b.label.trim()}: {fmtTableAmount(b.before)} → {fmtTableAmount(b.after)}
+                    {b.label.trim()}
+                    {"meta" in b && b.meta ? <span className="text-ink-2"> · {b.meta}</span> : null}:{" "}
+                    {fmtTableAmount(b.before)} → {fmtTableAmount(b.after)}
                     {b.cap ? ` of ${fmtTableAmount(b.cap)}` : ""}
                   </p>
                 ))}

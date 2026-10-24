@@ -19,8 +19,8 @@ export function lineLabel(
   budgetLine: string | null,
   lineName?: string,
 ): string {
-  if (!grantId) return "Unrestricted funds";
-  const line = budgetLine ? ` · ${budgetLine}${lineName ? ` ${lineName}` : ""}` : "";
+  if (!grantId) return "General funds";
+  const line = budgetLine ? ` · ${lineName ?? budgetLine}${lineName && budgetLine ? ` · ${budgetLine}` : ""}` : "";
   return `${grantId}${line}`;
 }
 

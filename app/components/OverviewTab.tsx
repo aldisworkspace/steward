@@ -1,10 +1,12 @@
 "use client";
 
+import { getFundLabel } from "@/lib/fundLabels";
 import type { GrantTerms } from "@/lib/types";
 import { useMemo } from "react";
 import { fmtRisk, fmtTableAmount } from "../format";
 import { CountUp } from "./CountUp";
-import { MoneyFlowSankey } from "./MoneyFlowSankey";
+import { GlossaryTerm } from "./GlossaryTerm";
+import { MoneyFlowSankey, type SankeyNavigate } from "./MoneyFlowSankey";
 
 type Stats = {
   total: number;
@@ -33,7 +35,8 @@ export function OverviewTab({
   onReviewInbox,
   onBankFeed,
   onDraftReport,
-  onSankeyOutcome,
+  onSankeyNavigate,
+  onGrantInbox,
   onJournalFilter,
 }: {
   stats: Stats | undefined;
@@ -46,7 +49,8 @@ export function OverviewTab({
   onReviewInbox: () => void;
   onBankFeed: () => void;
   onDraftReport: () => void;
-  onSankeyOutcome: (outcome: "clean" | "needs_you" | "disallowed") => void;
+  onSankeyNavigate: (nav: SankeyNavigate) => void;
+  onGrantInbox: (grantId: string) => void;
   onJournalFilter: (action: string | null) => void;
 }) {
   const needYou = stats?.needYou ?? 0;
@@ -54,22 +58,23 @@ export function OverviewTab({
   const openTotal = needYou + resolved;
   const pct = openTotal ? Math.round((resolved / openTotal) * 100) : 100;
   const complete = needYou === 0 && openTotal > 0;
+  const termsList = useMemo(
+    () => (grants ?? []).map((g) => g.terms as GrantTerms | null).filter(Boolean) as GrantTerms[],
+    [grants],
+  );
 
   const reportLine = useMemo(() => {
-    const termsList = (grants ?? [])
-      .map((g) => g.terms as GrantTerms | null)
-      .filter(Boolean) as GrantTerms[];
     const withDue = termsList
       .filter((t) => t.reportDue)
       .map((t) => {
         const due = new Date(t.reportDue!);
         const days = Math.ceil((due.getTime() - Date.now()) / 86400000);
-        return { grantId: t.grantId, days };
+        return { grantId: t.grantId, days, title: getFundLabel(t.grantId, termsList).title };
       })
       .sort((a, b) => a.days - b.days)[0];
     if (!withDue) return null;
-    return { grantId: withDue.grantId, days: withDue.days };
-  }, [grants]);
+    return withDue;
+  }, [termsList]);
 
   const timeline = useMemo(() => {
     const steps = [
@@ -90,6 +95,7 @@ export function OverviewTab({
     const t = g.terms as GrantTerms | null;
     if (!t) return null;
     const gid = t.grantId;
+    const fund = getFundLabel(gid, termsList);
     const spent = Object.entries(g.spentByLine)
       .filter(([k]) => k.startsWith(gid))
       .reduce((a, [, v]) => a + v, 0);
@@ -117,17 +123,30 @@ export function OverviewTab({
     return (
       <article
         key={gid}
-        className="rounded-[10px] border border-rule bg-sheet p-4"
+        role="button"
+        tabIndex={0}
+        onClick={() => onGrantInbox(gid)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onGrantInbox(gid);
+          }
+        }}
+        className="cursor-pointer rounded-[8px] border border-rule bg-sheet p-4 transition-colors hover:border-sky/50"
         style={{ borderTopWidth: 4, borderTopColor: hue }}
       >
-        <h3 className="font-display text-[17px] font-semibold">{gid}</h3>
+        <h3 className="font-display text-[17px] font-semibold">{fund.title}</h3>
+        <p className="mt-0.5 text-[13px] text-ink-2">
+          {fund.subtitle}
+          <span className="ml-2 text-ink-2">{fund.code}</span>
+        </p>
         <p className="mt-1 text-[13px] text-ink-2">
-          {t.funder} · {t.periodStart} – {t.periodEnd}
+          {t.periodStart} – {t.periodEnd}
         </p>
         <div className="mt-4 flex items-center gap-4">
           <RadialGauge pct={Math.min(100, spentPct)} hot={burnHot} />
           <div className="text-[13px] text-ink-2">
-            <p className={burnHot ? "text-attention font-medium" : ""}>
+            <p className={burnHot ? "font-medium text-attention" : ""}>
               {Math.round(spentPct)}% spent · {Math.round(elapsedPct)}% of period elapsed
             </p>
             {dueDays !== null && (
@@ -149,7 +168,7 @@ export function OverviewTab({
               <div key={bl.code}>
                 <div className="flex justify-between text-[12px]">
                   <span>
-                    {bl.code} {bl.name}
+                    {bl.name} <span className="text-ink-2">{bl.code}</span>
                   </span>
                   <span className="tabular text-ink-2">{fmtTableAmount(bl.lineSpent)}</span>
                 </div>
@@ -174,16 +193,16 @@ export function OverviewTab({
       <div className="grid gap-8 lg:grid-cols-12">
         <div className="lg:col-span-5">
           <p className="font-display text-[40px] font-semibold leading-[1.15] text-ink">
-            <span className="text-redpen tabular">
+            <span className="tabular text-redpen">
               $<CountUp value={clawDollars} />
             </span>{" "}
-            of grant spending could be clawed back.
+            of <GlossaryTerm term="restricted funds">grant spending</GlossaryTerm> could be clawed back.
           </p>
           <p className="mt-3 text-[17px] text-ink-2">
             Steward checked {stats?.total ?? 0} transactions against {(grants ?? []).length} grant
             agreements. {needYou} need you
             {reportLine
-              ? ` before the ${reportLine.grantId} report is due in ${reportLine.days} days.`
+              ? ` before the ${reportLine.title} report is due in ${reportLine.days} days.`
               : "."}
           </p>
           <div className="mt-6">
@@ -233,7 +252,7 @@ export function OverviewTab({
           </div>
         </div>
         <div className="lg:col-span-7">
-          <MoneyFlowSankey ledger={ledger} onOutcomeClick={onSankeyOutcome} />
+          <MoneyFlowSankey ledger={ledger} grants={termsList} onNavigate={onSankeyNavigate} />
         </div>
       </div>
 

@@ -19,7 +19,15 @@ type Row = {
   status: string;
 };
 
-export function TransactionsVirtualTable({ rows, grantTerms }: { rows: Row[]; grantTerms: GrantTerms[] }) {
+export function TransactionsVirtualTable({
+  rows,
+  grantTerms,
+  lineName,
+}: {
+  rows: Row[];
+  grantTerms: GrantTerms[];
+  lineName: (gid: string | null, code: string | null) => string | undefined;
+}) {
   const parentRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -61,6 +69,7 @@ export function TransactionsVirtualTable({ rows, grantTerms }: { rows: Row[]; gr
                         amountCents: r.amountCents,
                         grantId: r.grantId,
                         budgetLine: r.budgetLine,
+                        lineName,
                         grants: grantTerms,
                         description: r.description,
                         memo: r.memo,
@@ -72,6 +81,7 @@ export function TransactionsVirtualTable({ rows, grantTerms }: { rows: Row[]; gr
                       amountCents: r.amountCents,
                       grantId: r.grantId,
                       budgetLine: r.budgetLine,
+                      lineName,
                       splits: r.splits as { grantId: string | null; budgetLine: string | null; amount: number }[] | undefined,
                       grants: grantTerms,
                       description: r.description,

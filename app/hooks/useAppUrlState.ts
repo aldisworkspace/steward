@@ -26,6 +26,7 @@ const VALID_TABS = new Set<AppTab>([
 const VALID_FILTERS = new Set<InboxFilter>([
   "all",
   "disallowed",
+  "needs_you",
   "prior_approval",
   "bookkeeper",
   "duplicates",
@@ -43,6 +44,7 @@ export function useAppUrlState() {
   }, [searchParams]);
 
   const caseId = searchParams.get("case");
+  const fundFilter = searchParams.get("fund");
   const inboxFilter = useMemo((): InboxFilter => {
     const f = searchParams.get("filter") ?? "all";
     return VALID_FILTERS.has(f as InboxFilter) ? (f as InboxFilter) : "all";
@@ -87,21 +89,35 @@ export function useAppUrlState() {
   );
 
   const setInboxFilter = useCallback(
-    (filter: InboxFilter) => {
+    (filter: InboxFilter, fund?: string | null) => {
       replaceParams((p) => {
         p.set("tab", "inbox");
         p.set("filter", filter);
+        if (fund) p.set("fund", fund);
+        else p.delete("fund");
       });
     },
     [replaceParams],
   );
 
   const setTxnFilter = useCallback(
-    (filter: "all" | "clean" | "exceptions" | "blocked") => {
+    (filter: "all" | "clean" | "exceptions" | "blocked", fund?: string | null) => {
       replaceParams((p) => {
         p.set("tab", "transactions");
         if (filter === "all") p.delete("filter");
         else p.set("filter", filter);
+        if (fund) p.set("fund", fund);
+        else p.delete("fund");
+      });
+    },
+    [replaceParams],
+  );
+
+  const setFundFilter = useCallback(
+    (fund: string | null) => {
+      replaceParams((p) => {
+        if (fund) p.set("fund", fund);
+        else p.delete("fund");
       });
     },
     [replaceParams],
@@ -112,9 +128,11 @@ export function useAppUrlState() {
     caseId,
     inboxFilter,
     txnFilter,
+    fundFilter,
     setTab,
     setCaseId,
     setInboxFilter,
     setTxnFilter,
+    setFundFilter,
   };
 }

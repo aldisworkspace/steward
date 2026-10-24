@@ -2,7 +2,9 @@
 
 import { filterLabel, matchesInboxFilter, type InboxFilter } from "@/lib/inboxFilters";
 import { groupInboxRows, type QueueRow } from "@/lib/inboxGroups";
+import { getFundLabel } from "@/lib/fundLabels";
 import { queueIconForRule } from "@/lib/queueIcon";
+import type { GrantTerms } from "@/lib/types";
 import { fmtRisk, fmtTableAmount } from "../format";
 import { useState } from "react";
 
@@ -17,6 +19,9 @@ const FILTERS: InboxFilter[] = [
 
 export function InboxQueue({
   rows,
+  grants,
+  fundFilter,
+  onClearFund,
   selected,
   onSelect,
   filter,
@@ -24,12 +29,17 @@ export function InboxQueue({
   onApproveAll,
 }: {
   rows: QueueRow[];
+  grants: GrantTerms[];
+  fundFilter: string | null;
+  onClearFund: () => void;
   selected: string | null;
   onSelect: (id: string) => void;
   filter: InboxFilter;
   setFilter: (f: InboxFilter) => void;
   onApproveAll?: (txnIds: string[]) => void;
 }) {
+  const fundBanner =
+    fundFilter != null ? getFundLabel(fundFilter === "general" ? null : fundFilter, grants) : null;
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const filtered = rows.filter((r) => matchesInboxFilter(r.ruleId, r.status, filter, r.resolved));
   const counts = Object.fromEntries(
@@ -43,6 +53,15 @@ export function InboxQueue({
 
   return (
     <aside className="flex h-full flex-col border-r border-rule bg-paper">
+      {fundBanner && (
+        <div className="flex items-center gap-2 border-b border-rule px-3 py-2 text-[13px]">
+          <span className="text-ink-2">Fund:</span>
+          <span className="font-medium">{fundBanner.title}</span>
+          <button type="button" className="text-sky" onClick={onClearFund}>
+            Clear
+          </button>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 border-b border-rule p-3">
         {FILTERS.map((f) => {
           const chipColor =
@@ -94,12 +113,14 @@ export function InboxQueue({
                 </div>
                 {open &&
                   g.rows.map((r) => (
-                    <QueueRowButton key={r.txnId} r={r} selected={selected} onSelect={onSelect} />
+                    <QueueRowButton key={r.txnId} r={r} grants={grants} selected={selected} onSelect={onSelect} />
                   ))}
               </div>
             );
           }
-          return <QueueRowButton key={g.row.txnId} r={g.row} selected={selected} onSelect={onSelect} />;
+          return (
+            <QueueRowButton key={g.row.txnId} r={g.row} grants={grants} selected={selected} onSelect={onSelect} />
+          );
         })}
       </div>
     </aside>
@@ -108,14 +129,17 @@ export function InboxQueue({
 
 function QueueRowButton({
   r,
+  grants,
   selected,
   onSelect,
 }: {
   r: QueueRow;
+  grants: GrantTerms[];
   selected: string | null;
   onSelect: (id: string) => void;
 }) {
   const Icon = queueIconForRule(r.ruleId);
+  const fund = r.grantId != null ? getFundLabel(r.grantId, grants) : null;
   return (
     <button
       type="button"
@@ -129,7 +153,10 @@ function QueueRowButton({
       </span>
       <span className="flex min-w-0 flex-1 flex-col justify-center pr-3">
         <span className="truncate text-[14px] font-medium">{r.description}</span>
-        <span className="line-clamp-1 text-[13px] text-ink-2">{r.reason}</span>
+        <span className="line-clamp-1 text-[13px] text-ink-2">
+          {r.reason}
+          {fund && <span className="text-ink-2"> · {fund.title}</span>}
+        </span>
       </span>
       <span className="tabular flex shrink-0 items-center pr-3 text-[14px] font-bold">
         {fmtTableAmount(r.amountCents)}

@@ -1,5 +1,7 @@
 "use client";
 
+import { getFundLabel } from "@/lib/fundLabels";
+import type { GrantTerms } from "@/lib/types";
 import { useEffect, useMemo, useState } from "react";
 
 export type Command = {
@@ -14,12 +16,19 @@ export function CommandPalette({
   onClose,
   commands,
   transactions = [],
+  grantTerms = [],
   onJumpTxn,
 }: {
   open: boolean;
   onClose: () => void;
   commands: Command[];
-  transactions?: { txnId: string; description: string; amountCents: number }[];
+  transactions?: {
+    txnId: string;
+    description: string;
+    amountCents: number;
+    grantId?: string | null;
+  }[];
+  grantTerms?: GrantTerms[];
   onJumpTxn?: (txnId: string) => void;
 }) {
   const [q, setQ] = useState("");
@@ -44,14 +53,18 @@ export function CommandPalette({
           String(Math.abs(t.amountCents / 100)).includes(needle),
       )
       .slice(0, 8)
-      .map((t) => ({
-        id: `jump-${t.txnId}`,
-        label: `Jump to ${t.txnId} · ${t.description}`,
-        keywords: t.txnId,
-        run: () => onJumpTxn?.(t.txnId),
-      }));
+      .map((t) => {
+        const fund =
+          t.grantId != null ? getFundLabel(t.grantId, grantTerms).title : getFundLabel(null, grantTerms).title;
+        return {
+          id: `jump-${t.txnId}`,
+          label: `Jump to ${t.description} · ${fund} · ${t.txnId}`,
+          keywords: `${t.txnId} ${t.description} ${fund}`,
+          run: () => onJumpTxn?.(t.txnId),
+        };
+      });
     return [...base, ...jumps];
-  }, [commands, q, transactions, onJumpTxn]);
+  }, [commands, q, transactions, grantTerms, onJumpTxn]);
 
   useEffect(() => {
     if (!open) {

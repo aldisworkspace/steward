@@ -353,7 +353,9 @@ function GrantTermsFromQuery({
           return (
             <article key={id} className="mt-4 rounded-[6px] border border-rule bg-sheet p-4">
               <h3 className="font-semibold">{g.fileName}</h3>
-              <p className="text-[13px] text-ink-2">{terms.grantId} · {terms.funder}</p>
+              <p className="text-[13px] text-ink-2">
+                {terms.program ?? terms.funder} · <span className="text-ink-2">{terms.grantId}</span>
+              </p>
               {!sumOk && (
                 <p className="mt-2 text-[13px] text-pencil">
                   Lines sum to ${lineSum.toLocaleString()}; award is ${terms.totalAward.toLocaleString()}
