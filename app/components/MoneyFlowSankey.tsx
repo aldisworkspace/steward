@@ -2,7 +2,6 @@
 
 import {
   buildSankeyAggregates,
-  grantIdFromKey,
   OUTCOME_COLOR,
   OUTCOME_HINT,
   type Outcome,
