@@ -57,6 +57,18 @@ export interface StaffAllocation { employee: string; role: string; biweeklyCents
   allocation: { key: string; pct: number }[] } // key: "GRANT:LINE" | "UNRESTRICTED"
 export interface Precedent { id: string; date: string; by: string; ruling: string; scope: string }
 
+export type RulingType = "allow" | "disallow" | "prior_approval_granted" | "not_duplicate";
+
+export interface TypedPrecedent {
+  id: string;
+  date: string;
+  by: string;
+  scope: string;
+  match: { txnId?: string; vendorKey?: string };
+  ruling: RulingType;
+  note: string;
+}
+
 /** A candidate coding of one transaction (from the GL, or proposed by the model) that rules verify. */
 export interface Candidate { txnId: string; grantId: string | null; budgetLine: string | null; origin: "gl" | "model" | "none" }
 

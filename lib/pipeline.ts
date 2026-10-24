@@ -9,11 +9,13 @@ import { atRiskCentsForTxn } from "./atRisk";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
 import { MATERIALITY_CENTS, runRules } from "./rules";
 import { ruleLabel, tickForSource } from "./ruleLabels";
+import { applyTypedPrecedentsForTxn } from "./typedPrecedents";
 import { type Candidate, type Decision, type DecisionCheck, type Evidence, type Finding, type GlRow, type GrantTerms, GrantTermsZ,
-  type Precedent, type StaffAllocation, type Status, type Txn } from "./types";
+  type Precedent, type StaffAllocation, type Status, type Txn, type TypedPrecedent } from "./types";
 
 export interface PipelineInput {
   txns: Txn[]; gl: GlRow[]; staff: StaffAllocation[]; grants: GrantTerms[]; precedents: Precedent[];
+  typedPrecedents?: TypedPrecedent[];
 }
 
 export interface ProposedEntryDraft {
@@ -41,10 +43,8 @@ export async function extractGrantTerms(model: ModelClient, pdfBase64: string): 
 
 // ---------------------------------------------------------------------------
 const isPayroll = (t: Txn) => isPayrollTxn(t);
-/** "AMAZON MKTPLACE PMTS REFUND" / "STAPLES 00114" → "AMAZON MKTPLACE" / "STAPLES" */
-export const vendorKey = (d: string) =>
-  d.toUpperCase().replace(/[^A-Z ]+/g, " ").replace(/\b(REFUND|PMTS?|INC|LLC|LP|WHSE|DEBIT|ACH)\b/g, " ")
-    .trim().split(/\s+/).slice(0, 2).join(" ");
+import { vendorKey } from "./vendorKey";
+export { vendorKey };
 const RANK: Record<Status, number> = { auto: 0, needs_review: 1, blocked: 2 };
 const worst = (a: Status, b: Status): Status => (RANK[b] > RANK[a] ? b : a);
 const BATCH = 25;
@@ -197,14 +197,11 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
 
   const decisions: Decision[] = input.txns.map((t) => {
     const c = codings.get(t.txnId)!;
-    const fs = findings.filter((f) => f.txnId === t.txnId);
+    let txnFindings = findings.filter((f) => f.txnId === t.txnId);
     const g = glByRef.get(t.txnId);
-    let status: Status = c.confidence < 0.7 ? "needs_review" : "auto";
-    if (c.concern) status = worst(status, c.concern.status);
-    for (const f of fs) status = worst(status, f.status);
 
     let grantId = c.grantId, budgetLine = c.budgetLine, splits = c.splits;
-    const sug = fs.find((f) => f.suggestion)?.suggestion;
+    const sug = txnFindings.find((f) => f.suggestion)?.suggestion;
     if (sug) {
       if (sug.length === 1) { grantId = sug[0].grantId; budgetLine = sug[0].budgetLine; splits = undefined; }
       else { grantId = null; budgetLine = null; splits = sug.map((s) => ({ grantId: s.grantId, budgetLine: s.budgetLine, amount: s.amountCents })); }
@@ -214,34 +211,60 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     // where Steward only hesitated (no concern, no rule hit) → accept the bookkeeper's coding, note it.
     let note = "";
     const glLineValid = !!g?.class && !!input.grants.find((x) => x.grantId === g.class)?.budgetLines.some((l) => l.code === g.budgetLine);
-    if (g && glLineValid && !fs.length && !c.concern && !splits && grantId === null && -t.amountCents < MATERIALITY_CENTS && t.amountCents < 0) {
-      grantId = g.class; budgetLine = g.budgetLine; status = "auto";
+    let materialityAuto = false;
+    if (g && glLineValid && !txnFindings.length && !c.concern && !splits && grantId === null && -t.amountCents < MATERIALITY_CENTS && t.amountCents < 0) {
+      grantId = g.class; budgetLine = g.budgetLine; materialityAuto = true;
       note = ` Immaterial (< $${MATERIALITY_CENTS / 100}); accepted the bookkeeper's coding ${g.class}:${g.budgetLine}.`;
     }
 
     // Sources disagree: bookkeeper charged a different grant and no rule explains why.
-    if (g && !fs.length && (g.class ?? null) !== (splits ? null : grantId) && !splits) {
-      status = worst(status, "needs_review");
+    if (g && !txnFindings.length && (g.class ?? null) !== (splits ? null : grantId) && !splits) {
       findings.push({ ruleId: "R-GL-DISAGREE", txnId: t.txnId, status: "needs_review",
         message: `Bookkeeper charged ${g.class ?? "unrestricted"}${g.budgetLine ? ":" + g.budgetLine : ""}; Steward proposes ${grantId ?? "unrestricted"}${budgetLine ? ":" + budgetLine : ""}.`,
         evidence: [{ source: "gl", ref: t.txnId, note: `${g.account} / ${g.class ?? "-"} / ${g.budgetLine ?? "-"} by ${g.enteredBy}` }] });
+      txnFindings = findings.filter((f) => f.txnId === t.txnId);
     }
 
-    const txnFindings = findings.filter((f) => f.txnId === t.txnId);
+    let concernForApply: { status: Status; reason: string } | null = c.concern
+      ? { status: c.concern.status, reason: c.concern.reason }
+      : null;
+    const precedentApply = applyTypedPrecedentsForTxn({
+      t,
+      grantId: splits ? null : grantId,
+      budgetLine: splits ? null : budgetLine,
+      findings: txnFindings,
+      concern: concernForApply,
+      typed: input.typedPrecedents ?? [],
+      grants: input.grants,
+    });
+    txnFindings = precedentApply.findings;
+    concernForApply = precedentApply.concern;
+    if (!splits) {
+      grantId = precedentApply.grantId;
+      budgetLine = precedentApply.budgetLine;
+    }
+
+    let status: Status = c.confidence < 0.7 ? "needs_review" : "auto";
+    if (concernForApply) status = worst(status, concernForApply.status);
+    for (const f of txnFindings) status = worst(status, f.status);
+    if (precedentApply.forcedStatus) status = precedentApply.forcedStatus;
+    if (materialityAuto && status === "needs_review" && !txnFindings.length && !concernForApply) status = "auto";
+
     const checks: DecisionCheck[] = txnFindings.map((f) => ({
       ruleId: f.ruleId,
       label: ruleLabel(f.ruleId),
       message: f.message,
       tick: tickForSource(f.evidence[0]?.source ?? "bank"),
     }));
-    if (c.concern) {
+    if (concernForApply) {
       checks.push({
         ruleId: null,
         label: "Steward's judgment",
-        message: c.concern.reason,
+        message: concernForApply.reason,
         tick: "Ⓑ",
       });
     }
+    checks.push(...precedentApply.checks);
 
     const knownClauseRefs: string[] = [];
     for (const gr of input.grants) {
@@ -275,14 +298,19 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       return ref;
     };
 
+    const precById = new Map(input.precedents.map((p) => [p.id, p]));
     const evidence: Evidence[] = [
       { source: "bank", ref: t.txnId, note: `${t.date} ${t.description} ${(t.amountCents / 100).toFixed(2)}${t.memo ? ` — "${t.memo}"` : ""}` },
       ...(g ? [{ source: "gl" as const, ref: t.txnId, note: `bookkeeper: ${g.class ?? "unrestricted"}${g.budgetLine ? ":" + g.budgetLine : ""}` }] : []),
-      ...keptClauseRefs.map((r) => ({ source: "contract" as const, ref: r, note: clauseNote(r) })),
+      ...c.clauseRefs
+        .filter((r) => r.startsWith("P") && precById.has(r))
+        .map((r) => ({ source: "precedent" as const, ref: r, note: precById.get(r)!.ruling })),
+      ...keptClauseRefs.filter((r) => !r.startsWith("P")).map((r) => ({ source: "contract" as const, ref: r, note: clauseNote(r) })),
       ...(c.concern?.clauseRef
         ? [{ source: "contract" as const, ref: c.concern.clauseRef, note: clauseNote(c.concern.clauseRef) }]
         : []),
       ...txnFindings.flatMap((f) => f.evidence),
+      ...precedentApply.evidence,
     ];
 
     const modelRationale = c.rationale + note;

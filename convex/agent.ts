@@ -120,6 +120,7 @@ export const runAgent = action({
         usageOutput,
         errors,
       });
+      await ctx.runMutation(internal.autonomy.scheduleFollowUpIfNeeded, {});
       return { runId, usageInput, usageOutput, errors, decisionCount: result.decisions.length };
     } catch (e) {
       const message = (e as Error).message;
@@ -131,6 +132,7 @@ export const runAgent = action({
         usageOutput,
         errors,
       });
+      await ctx.runMutation(internal.autonomy.scheduleFollowUpIfNeeded, {});
       throw e;
     }
   },

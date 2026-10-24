@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { messageFromConvexError } from "../lib/convexError";
 import { contractClausesFromDecision } from "@/lib/clauseText";
+import type { RulingType } from "@/lib/types";
+import { vendorKey } from "@/lib/vendorKey";
 import { stewardCodingLabel } from "@/lib/codingLabel";
 import type { GrantTerms } from "@/lib/types";
 import { fmtSentenceAmount, fmtTableAmount } from "../format";
@@ -73,7 +75,16 @@ export function CaseFile({
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideNote, setOverrideNote] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [precedentScope, setPrecedentScope] = useState<"txn" | "vendor">("txn");
+  const [rulingType, setRulingType] = useState<RulingType>("allow");
   const seenStrike = useRef(new Set<string>());
+
+  function defaultRuling(ruleId: string | null | undefined): RulingType {
+    if (ruleId === "R-PRIOR-APPROVAL") return "prior_approval_granted";
+    if (ruleId === "R-DUPLICATE") return "not_duplicate";
+    if (ruleId?.startsWith("R-UNALLOWABLE")) return "disallow";
+    return "allow";
+  }
 
   useEffect(() => {
     if (data?.txn?.txnId) seenStrike.current.add(strikeKey);
@@ -88,6 +99,8 @@ export function CaseFile({
   }
 
   const { txn, decision, gl, entry, grantTerms } = data;
+  const grantScope = decision.grantId ?? "GA-2026-114";
+  const vendorLabel = vendorKey(txn.description);
   const terms = grantTermsList(grantTerms);
   const ln = (gid: string | null, code: string | null) => lineName(grantTerms, gid, code);
 
@@ -163,6 +176,9 @@ export function CaseFile({
         by: actorLabel,
         note: ackNote.trim(),
         passcode,
+        precedentScope,
+        rulingType,
+        grantScope,
       });
       setAckOpen(false);
       setAckNote("");
@@ -179,7 +195,15 @@ export function CaseFile({
     setActionError(null);
     if (entry) {
       try {
-        await reject({ entryId: entry.id, by: actorLabel, note: rejectNote.trim(), passcode });
+        await reject({
+          entryId: entry.id,
+          by: actorLabel,
+          note: rejectNote.trim(),
+          passcode,
+          precedentScope,
+          rulingType,
+          grantScope,
+        });
         setRejectOpen(false);
         setRejectNote("");
         onStatusLine("Entry rejected");
@@ -196,6 +220,9 @@ export function CaseFile({
         by: actorLabel,
         note: rejectNote.trim(),
         passcode,
+        precedentScope,
+        rulingType,
+        grantScope,
       });
       setRejectOpen(false);
       setRejectNote("");
@@ -216,6 +243,9 @@ export function CaseFile({
         by: actorLabel,
         note: overrideNote.trim(),
         passcode,
+        precedentScope,
+        rulingType,
+        grantScope,
       });
       setOverrideOpen(false);
       setOverrideNote("");
@@ -412,6 +442,15 @@ export function CaseFile({
 
       {ackOpen && !entry && (
         <div className="absolute bottom-20 right-8 z-10 w-72 rounded-[6px] border border-rule bg-sheet p-4 shadow-none">
+          <PrecedentFields
+            ruleId={decision.ruleHits[0]}
+            vendorLabel={vendorLabel}
+            precedentScope={precedentScope}
+            setPrecedentScope={setPrecedentScope}
+            rulingType={rulingType}
+            setRulingType={setRulingType}
+            onOpen={() => setRulingType(defaultRuling(decision.ruleHits[0]))}
+          />
           <label className="text-[13px] text-ink-2">Note (accept Steward&apos;s call)</label>
           <textarea
             className="mt-2 w-full rounded-[4px] border border-rule p-2 text-[15px]"
@@ -462,6 +501,15 @@ export function CaseFile({
 
       {rejectOpen && (
         <div className="absolute bottom-20 right-8 z-10 w-72 rounded-[6px] border border-rule bg-sheet p-4 shadow-none">
+          <PrecedentFields
+            ruleId={decision.ruleHits[0]}
+            vendorLabel={vendorLabel}
+            precedentScope={precedentScope}
+            setPrecedentScope={setPrecedentScope}
+            rulingType={rulingType}
+            setRulingType={setRulingType}
+            onOpen={() => setRulingType(defaultRuling(decision.ruleHits[0]))}
+          />
           <label className="text-[13px] text-ink-2">Required note</label>
           <textarea
             className="mt-2 w-full rounded-[4px] border border-rule p-2 text-[15px]"
@@ -484,6 +532,62 @@ export function CaseFile({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function PrecedentFields({
+  ruleId,
+  vendorLabel,
+  precedentScope,
+  setPrecedentScope,
+  rulingType,
+  setRulingType,
+  onOpen,
+}: {
+  ruleId?: string | null;
+  vendorLabel: string;
+  precedentScope: "txn" | "vendor";
+  setPrecedentScope: (v: "txn" | "vendor") => void;
+  rulingType: RulingType;
+  setRulingType: (v: RulingType) => void;
+  onOpen?: () => void;
+}) {
+  useEffect(() => {
+    onOpen?.();
+  }, [ruleId]);
+  return (
+    <div className="mb-3 space-y-2 text-[13px]">
+      <p className="text-ink-2">Apply to:</p>
+      <label className="flex gap-2">
+        <input
+          type="radio"
+          checked={precedentScope === "txn"}
+          onChange={() => setPrecedentScope("txn")}
+        />
+        This transaction only
+      </label>
+      <label className="flex gap-2">
+        <input
+          type="radio"
+          checked={precedentScope === "vendor"}
+          onChange={() => setPrecedentScope("vendor")}
+        />
+        All future charges from {vendorLabel || "this vendor"}
+      </label>
+      <label className="block">
+        Ruling
+        <select
+          className="mt-1 w-full rounded border border-rule px-2 py-1"
+          value={rulingType}
+          onChange={(e) => setRulingType(e.target.value as RulingType)}
+        >
+          <option value="allow">Allow (accept coding)</option>
+          <option value="disallow">Disallow (move off grant)</option>
+          <option value="prior_approval_granted">Prior approval granted</option>
+          <option value="not_duplicate">Not a duplicate</option>
+        </select>
+      </label>
     </div>
   );
 }

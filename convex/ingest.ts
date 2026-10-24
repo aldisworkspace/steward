@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { assertDemoPasscode } from "./passcode";
 
 const txn = v.object({
@@ -85,6 +86,54 @@ export const loadDemo = mutation({
         dataSource: "demo",
       });
     }
+    await ctx.runMutation(internal.autonomy.enqueueAgentRun, {});
+  },
+});
+
+function dedupeKey(t: { date: string; amountCents: number; description: string }) {
+  return `${t.date}|${t.amountCents}|${t.description.trim().toUpperCase()}`;
+}
+
+export const appendBankTransactions = mutation({
+  args: {
+    passcode: v.optional(v.string()),
+    transactions: v.array(txn),
+    glRows: v.optional(v.array(glRow)),
+  },
+  handler: async (ctx, args) => {
+    assertDemoPasscode(args.passcode);
+    const existing = await ctx.db.query("transactions").collect();
+    const keys = new Set(existing.map(dedupeKey));
+    let maxNum = 0;
+    for (const t of existing) {
+      const n = parseInt(t.txnId.replace(/^T0*/, ""), 10);
+      if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+    }
+    const added: { txnId: string; row: (typeof args.transactions)[number] }[] = [];
+    for (const row of args.transactions) {
+      if (keys.has(dedupeKey(row))) continue;
+      maxNum += 1;
+      const txnId = `T${String(maxNum).padStart(4, "0")}`;
+      await ctx.db.insert("transactions", { ...row, txnId });
+      added.push({ txnId, row });
+      keys.add(dedupeKey(row));
+    }
+    for (const { txnId, row } of added) {
+      const gl = (args.glRows ?? []).find(
+        (r) =>
+          r.date === row.date &&
+          r.amountCents === row.amountCents &&
+          r.description === row.description,
+      );
+      if (gl) await ctx.db.insert("glRows", { ...gl, bankRef: txnId });
+    }
+    const addedIds = added.map((a) => a.txnId);
+    if (addedIds.length) {
+      await ctx.runMutation(internal.autonomy.enqueueAgentRun, {
+        journalLine: `Bank feed delivered ${addedIds.length} transaction${addedIds.length === 1 ? "" : "s"} — reviewing`,
+      });
+    }
+    return { added: addedIds.length, txnIds: addedIds };
   },
 });
 
@@ -156,6 +205,7 @@ export const startCustomWorkspace = mutation({
       why: "Started custom data workspace",
       evidence: [`${args.transactions.length} bank txns`, `${args.grantDocIds.length} grants`],
     });
+    await ctx.runMutation(internal.autonomy.enqueueAgentRun, {});
   },
 });
 

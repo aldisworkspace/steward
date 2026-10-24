@@ -51,7 +51,23 @@ export default defineSchema({
     by: v.string(),
     ruling: v.string(),
     scope: v.string(),
+    rulingType: v.optional(
+      v.union(
+        v.literal("allow"),
+        v.literal("disallow"),
+        v.literal("prior_approval_granted"),
+        v.literal("not_duplicate"),
+      ),
+    ),
+    matchTxnId: v.optional(v.string()),
+    matchVendorKey: v.optional(v.string()),
+    note: v.optional(v.string()),
   }),
+
+  agentRunControl: defineTable({
+    key: v.literal("main"),
+    followUpRequested: v.boolean(),
+  }).index("by_key", ["key"]),
 
   decisions: defineTable({
     txnId: v.string(),

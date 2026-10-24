@@ -33,6 +33,7 @@ export function StewardApp() {
   const resetExtractErrors = useMutation(api.grants.resetExtractErrors);
   const extractGrant = useAction(api.agent.extractGrant);
   const regenerateNarrative = useAction(api.report.regenerateNarrative);
+  const triggerMorningCheck = useMutation(api.deadlines.triggerMorningCheck);
 
   const [tab, setTab] = useState<Tab>("inbox");
   const [selected, setSelected] = useState<string | null>(null);
@@ -119,9 +120,6 @@ export function StewardApp() {
         throw new Error(body.error ?? "Seed failed");
       }
       setLoaded(true);
-      if (opts?.autoRun) {
-        await runAgent({ passcode: getDemoPasscode() });
-      }
     } catch (e) {
       setInlineError(messageFromConvexError(e));
     } finally {
@@ -150,6 +148,25 @@ export function StewardApp() {
       setInlineError(messageFromConvexError(e));
     } finally {
       setRunLoading(false);
+    }
+  }
+
+  async function bankFeedSeptOct() {
+    if (!canWrite) return;
+    setSeedLoading(true);
+    setInlineError(null);
+    try {
+      const res = await fetch("/api/feed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passcode: getDemoPasscode(), demoSeptOct: true }),
+      });
+      const body = (await res.json()) as { ok?: boolean; error?: string; added?: number };
+      if (!res.ok || body.ok === false) throw new Error(body.error ?? "Feed failed");
+    } catch (e) {
+      setInlineError(messageFromConvexError(e));
+    } finally {
+      setSeedLoading(false);
     }
   }
 
@@ -290,11 +307,11 @@ export function StewardApp() {
           </button>
           <button
             type="button"
-            onClick={() => void loadDemo({ autoRun: true })}
-            disabled={seedLoading}
-            className="text-ink-2 underline"
+            onClick={() => void bankFeedSeptOct()}
+            disabled={seedLoading || !counts?.transactions}
+            className="text-ledger underline disabled:opacity-40"
           >
-            Load and run Steward
+            Bank feed: September–October arrives
           </button>
           <button
             type="button"
@@ -386,7 +403,12 @@ export function StewardApp() {
               strikeKey={selected ?? ""}
             />
           </section>
-          <JournalPanel audit={audit} run={run} />
+          <JournalPanel
+            audit={audit}
+            run={run}
+            canWrite={canWrite}
+            onMorningCheck={() => triggerMorningCheck({ passcode: getDemoPasscode() })}
+          />
         </div>
       )}
 
@@ -474,13 +496,24 @@ function QueueGroup({
 function JournalPanel({
   audit,
   run,
+  canWrite,
+  onMorningCheck,
 }: {
   audit: { at: string; actor: string; action: string; why: string; targetId: string }[] | undefined;
   run: { progress: string; status: string } | null | undefined;
+  canWrite: boolean;
+  onMorningCheck: () => void;
 }) {
   return (
     <aside className="overflow-y-auto bg-paper p-4">
-      <h2 className="text-[13px] font-medium text-ink-2">Journal</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-[13px] font-medium text-ink-2">Journal</h2>
+        {canWrite && (
+          <button type="button" className="text-[12px] text-ledger underline" onClick={onMorningCheck}>
+            Run morning check
+          </button>
+        )}
+      </div>
       {run?.status === "running" && (
         <p className="journal-item-new mt-3 text-[13px] text-ink-2">{run.progress}</p>
       )}

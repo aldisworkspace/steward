@@ -38,7 +38,6 @@ export function YourDataTab({
   const extractGrant = useAction(api.agent.extractGrant);
   const confirmTerms = useMutation(api.grants.confirmGrantTerms);
   const startWorkspace = useMutation(api.ingest.startCustomWorkspace);
-  const runAgent = useAction(api.agent.runAgent);
 
   const [orgName, setOrgName] = useState("");
   const [bankRaw, setBankRaw] = useState<string | null>(null);
@@ -163,7 +162,6 @@ export function YourDataTab({
         staffAllocations: staff,
         grantDocIds: readyGrantIds,
       });
-      await runAgent({ passcode: getDemoPasscode() });
       onRunStarted();
     } catch (e) {
       onError(messageFromConvexError(e));

@@ -92,8 +92,9 @@ export async function POST(req: Request) {
       readFile(path.join(dataDir, "precedents.json"), "utf-8"),
     ]);
 
-    const transactions = parseBank(bankText);
-    const glRows = parseGl(glText);
+    const transactions = parseBank(bankText).filter((t) => t.date < "2026-09-01");
+    const txnIds = new Set(transactions.map((t) => t.txnId));
+    const glRows = parseGl(glText).filter((g) => txnIds.has(g.bankRef));
     const staffAllocations = parseStaff(staffText);
     const rawPrecedents = JSON.parse(precedentsText) as Omit<Precedent, "id">[];
     const precedents = rawPrecedents.map((p) => ({

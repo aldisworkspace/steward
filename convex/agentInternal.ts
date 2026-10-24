@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
-import type { Decision, GlRow, GrantTerms, Precedent, StaffAllocation, Txn } from "../lib/types";
+import type { Decision, GlRow, GrantTerms, Precedent, StaffAllocation, Txn, TypedPrecedent } from "../lib/types";
 
 export const getGrant = internalQuery({
   args: { grantDocId: v.id("grants") },
@@ -57,18 +57,39 @@ export const loadPipelineInput = internalQuery({
     const grants = grantRows
       .filter((g) => g.status === "ready" && g.terms)
       .map((g) => g.terms as GrantTerms);
-    const precedents: Precedent[] = precRows.map((p, i) => ({
-      id: `P${i + 1}`,
-      date: p.date,
-      by: p.by,
-      ruling: p.ruling,
-      scope: p.scope,
-    }));
+    const precedents: Precedent[] = [];
+    const typedPrecedents: TypedPrecedent[] = [];
+    precRows.forEach((p, i) => {
+      const id = `P${i + 1}`;
+      if (p.rulingType) {
+        typedPrecedents.push({
+          id,
+          date: p.date,
+          by: p.by,
+          scope: p.scope,
+          ruling: p.rulingType,
+          note: p.note ?? p.ruling,
+          match: {
+            txnId: p.matchTxnId ?? undefined,
+            vendorKey: p.matchVendorKey ?? undefined,
+          },
+        });
+      } else {
+        precedents.push({
+          id,
+          date: p.date,
+          by: p.by,
+          ruling: p.ruling,
+          scope: p.scope,
+        });
+      }
+    });
     return {
       txns: txns as Txn[],
       gl: gl as GlRow[],
       staff: staff as StaffAllocation[],
       precedents,
+      typedPrecedents,
       grants,
     };
   },
