@@ -11,13 +11,11 @@ import { messageFromConvexError } from "../lib/convexError";
 import { CaseFile } from "./CaseFile";
 import { RedPenStrike } from "./RedPenStrike";
 import { WhyDrawer } from "./WhyDrawer";
+import { YourDataTab } from "./YourDataTab";
 
-type Tab = "inbox" | "transactions" | "grants" | "report" | "proof";
+type Tab = "inbox" | "transactions" | "grants" | "report" | "proof" | "yourdata";
 
-const ACTORS = [
-  { id: "approver", label: "A. Okafor (Executive Director)" },
-  { id: "steward", label: "Steward (agent)" },
-] as const;
+const STEWARD_ACTOR = { id: "steward", label: "Steward (agent)" } as const;
 
 export function StewardApp() {
   const counts = useQuery(api.ingest.counts);
@@ -28,6 +26,7 @@ export function StewardApp() {
   const grants = useQuery(api.ui.grantsSheets);
   const ledger = useQuery(api.ui.transactionLedger);
 
+  const workspace = useQuery(api.settings.get);
   const demoGate = useQuery(api.demoAuth.gate);
   const runAgent = useAction(api.agent.runAgent);
   const resetRun = useMutation(api.ingest.resetRunState);
@@ -37,7 +36,7 @@ export function StewardApp() {
 
   const [tab, setTab] = useState<Tab>("inbox");
   const [selected, setSelected] = useState<string | null>(null);
-  const [actor, setActor] = useState<(typeof ACTORS)[number]["id"]>("approver");
+  const [actor, setActor] = useState<"approver" | "steward">("approver");
   const [whyOpen, setWhyOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
@@ -54,7 +53,10 @@ export function StewardApp() {
   const grantsReady = (grantList ?? []).filter((g) => g.status === "ready").length >= 1;
   const showBadge = loaded || (counts && counts.transactions > 0);
   const actingAsSteward = actor === "steward";
-  const actorLabel = ACTORS.find((a) => a.id === actor)!.label;
+  const approverLabel = workspace?.approverLabel ?? "A. Okafor (Executive Director)";
+  const actorLabel = actor === "steward" ? STEWARD_ACTOR.label : approverLabel;
+  const orgDisplay = workspace?.organizationName ?? "Valencia Youth Collective";
+  const isCustomData = workspace?.dataSource === "custom";
   const passcode = getDemoPasscode();
   const canWrite = passcodeReady && hasDemoWriteAccess(demoGate?.requiresPasscode ?? false);
 
@@ -201,10 +203,15 @@ export function StewardApp() {
     <div className="min-h-screen bg-paper text-ink">
       <header className="border-b border-rule bg-sheet px-6 py-3 flex flex-wrap items-center gap-4">
         <span className="text-[17px] font-semibold">Steward</span>
-        <span className="text-[15px] text-ink-2">Valencia Youth Collective</span>
-        {showBadge && (
+        <span className="text-[15px] text-ink-2">{orgDisplay}</span>
+        {showBadge && !isCustomData && (
           <span className="rounded-[4px] border border-pencil/30 bg-pencil-wash px-2 py-0.5 text-[13px] text-pencil">
             Synthetic demo data
+          </span>
+        )}
+        {isCustomData && (
+          <span className="rounded-[4px] border border-rule px-2 py-0.5 text-[13px] text-ink-2">
+            Your data — not stored beyond this demo workspace
           </span>
         )}
         {passcodeReady && demoGate?.requiresPasscode && !canWrite && (
@@ -218,13 +225,10 @@ export function StewardApp() {
             id="actor"
             className="rounded-[4px] border border-rule bg-sheet px-2 py-1 text-[13px]"
             value={actor}
-            onChange={(e) => setActor(e.target.value as typeof actor)}
+            onChange={(e) => setActor(e.target.value as "approver" | "steward")}
           >
-            {ACTORS.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.label}
-              </option>
-            ))}
+            <option value="approver">{approverLabel}</option>
+            <option value="steward">{STEWARD_ACTOR.label}</option>
           </select>
         </div>
       </header>
@@ -343,6 +347,7 @@ export function StewardApp() {
             ["grants", "Grants"],
             ["report", "Report"],
             ["proof", "Proof"],
+            ["yourdata", "Your data"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -402,6 +407,13 @@ export function StewardApp() {
         />
       )}
       {tab === "proof" && <ProofTab run={run} />}
+      {tab === "yourdata" && (
+        <YourDataTab
+          canWrite={canWrite}
+          onError={setInlineError}
+          onRunStarted={() => setTab("inbox")}
+        />
+      )}
 
       <WhyDrawer
         txnId={selected}
