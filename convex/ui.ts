@@ -35,8 +35,7 @@ export const dashboardStats = query({
     for (const d of openExceptions) {
       const t = byTxn.get(d.txnId);
       if (!t || t.amountCents >= 0) continue;
-      let risk = d.atRiskCents ?? 0;
-      if (risk <= 0 && d.ruleHits.length) risk = Math.abs(t.amountCents);
+      const risk = d.atRiskCents ?? 0;
       if (risk <= 0) continue;
       atRiskCents += risk;
       const label = d.ruleHits[0] ? ruleLabel(d.ruleHits[0]) : "Steward's judgment";
@@ -60,12 +59,13 @@ export const dashboardStats = query({
 export const inboxQueue = query({
   args: {},
   handler: async (ctx) => {
-    const [decisions, txns, glRows, entries, resolutions] = await Promise.all([
+    const [decisions, txns, glRows, entries, resolutions, staffRows] = await Promise.all([
       ctx.db.query("decisions").collect(),
       ctx.db.query("transactions").collect(),
       ctx.db.query("glRows").collect(),
       ctx.db.query("proposedEntries").collect(),
       ctx.db.query("inboxResolutions").collect(),
+      ctx.db.query("staffAllocations").collect(),
     ]);
     const resolvedTxnIds = new Set(resolutions.map((r) => r.txnId));
     const byTxn = new Map(txns.map((t) => [t.txnId, t]));
@@ -87,14 +87,32 @@ export const inboxQueue = query({
           "Needs review";
         const hasPrecedent = precedents.some((p) => p.ruling.includes(d.txnId) || p.scope.includes(d.txnId));
         const proposed = entryByTxn.get(d.txnId);
+        const memo = t?.memo ?? "";
+        const hay = `${t?.description ?? ""} ${memo}`.toLowerCase();
+        let employee: string | null = null;
+        for (const s of staffRows) {
+          const full = s.employee.trim();
+          if (full && hay.includes(full.toLowerCase())) {
+            employee = full;
+            break;
+          }
+          const last = full.split(/\s+/).pop();
+          if (last && last.length >= 2 && hay.includes(last.toLowerCase())) {
+            employee = full;
+            break;
+          }
+        }
         return {
           txnId: d.txnId,
           status: d.status,
           grantId: d.grantId,
           amountCents: t?.amountCents ?? 0,
           description: t?.description ?? "",
+          memo,
+          atRiskCents: d.atRiskCents ?? 0,
           reason,
           ruleId,
+          employee,
           hasEntry: !!proposed,
           entryId: proposed?.id ?? null,
           hasPrecedent,

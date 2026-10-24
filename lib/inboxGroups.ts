@@ -7,6 +7,8 @@ export type QueueRow = {
   ruleId?: string | null;
   grantId?: string | null;
   entryId?: string | null;
+  atRiskCents?: number;
+  employee?: string | null;
   resolved?: boolean;
 };
 
@@ -17,8 +19,8 @@ export type QueueGroup =
 export function groupInboxRows(rows: QueueRow[]): QueueGroup[] {
   const byKey = new Map<string, QueueRow[]>();
   for (const r of rows) {
-    const vendor = r.description.split(/\s+/).slice(0, 2).join(" ");
-    const key = `${r.ruleId ?? "none"}|${vendor}`;
+    const employee = r.employee ?? r.description.split(/\s+/)[0] ?? "Vendor";
+    const key = `${r.ruleId ?? "none"}|${employee}`;
     const list = byKey.get(key) ?? [];
     list.push(r);
     byKey.set(key, list);
@@ -26,11 +28,13 @@ export function groupInboxRows(rows: QueueRow[]): QueueGroup[] {
   const out: QueueGroup[] = [];
   for (const [, list] of byKey) {
     if (list.length >= 2 && list[0]?.ruleId === "R-EFFORT") {
-      const atRisk = list.reduce((a, r) => a + Math.abs(r.amountCents), 0);
+      const atRisk = list.reduce((a, r) => a + (r.atRiskCents ?? 0), 0);
+      const emp = list[0]!.employee ?? "Employee";
+      const short = emp.includes(". ") ? emp : emp.split(/\s+/)[0] ?? emp;
       out.push({
         kind: "group",
-        key: `g-${list[0]!.ruleId}-${list[0]!.description}`,
-        label: `${list[0]!.description.split(/\s+/)[0] ?? "Vendor"} — ${list[0]!.reason} ×${list.length}`,
+        key: `g-${list[0]!.ruleId}-${short}`,
+        label: `${short}'s pay exceeds time sheets ×${list.length}`,
         ruleId: list[0]!.ruleId ?? null,
         rows: list,
         atRiskCents: atRisk,
