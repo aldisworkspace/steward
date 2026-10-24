@@ -5,7 +5,7 @@
  */
 import { type ModelClient, MODELS, pdfBlock } from "./llm";
 import { CODING_SYSTEM, CodingZ, type Coding, DEFENSE_SYSTEM, DefenseZ, EXTRACT_SYSTEM } from "./prompts";
-import { runRules } from "./rules";
+import { MATERIALITY_CENTS, runRules } from "./rules";
 import { type Candidate, type Decision, type Evidence, type Finding, type GlRow, type GrantTerms, GrantTermsZ,
   type Precedent, type StaffAllocation, type Status, type Txn } from "./types";
 
@@ -38,6 +38,10 @@ export async function extractGrantTerms(model: ModelClient, pdfBase64: string): 
 
 // ---------------------------------------------------------------------------
 const isPayroll = (t: Txn) => /payroll/i.test(t.description);
+/** "AMAZON MKTPLACE PMTS REFUND" / "STAPLES 00114" → "AMAZON MKTPLACE" / "STAPLES" */
+export const vendorKey = (d: string) =>
+  d.toUpperCase().replace(/[^A-Z ]+/g, " ").replace(/\b(REFUND|PMTS?|INC|LLC|LP|WHSE|DEBIT|ACH)\b/g, " ")
+    .trim().split(/\s+/).slice(0, 2).join(" ");
 const RANK: Record<Status, number> = { auto: 0, needs_review: 1, blocked: 2 };
 const worst = (a: Status, b: Status): Status => (RANK[b] > RANK[a] ? b : a);
 const BATCH = 25;
@@ -76,12 +80,23 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
     precedents: input.precedents,
   });
 
+  // How the organization previously coded each vendor (from the GL), excluding the row itself.
+  const memoByTxn = new Map(input.txns.map((t) => [t.txnId, t.memo]));
+  const history = new Map<string, { class: string | null; budgetLine: string | null; memo: string; txnId: string }[]>();
+  for (const r of input.gl) {
+    if (r.amountCents >= 0) continue;
+    const k = vendorKey(r.description);
+    history.set(k, [...(history.get(k) ?? []), { class: r.class, budgetLine: r.budgetLine, memo: memoByTxn.get(r.bankRef) ?? "", txnId: r.bankRef }]);
+  }
+
   for (let i = 0; i < forModel.length; i += BATCH) {
     const batch = forModel.slice(i, i + BATCH);
     const rows = batch.map((t) => {
       const g = glByRef.get(t.txnId);
+      const vendorHistory = (history.get(vendorKey(t.description)) ?? []).filter((h) => h.txnId !== t.txnId).slice(-3)
+        .map(({ class: c, budgetLine, memo }) => ({ grantId: c, budgetLine, memo }));
       return { txnId: t.txnId, date: t.date, description: t.description, amountUsd: t.amountCents / 100, memo: t.memo,
-        gl: g ? { class: g.class, budgetLine: g.budgetLine, enteredBy: g.enteredBy } : null };
+        gl: g ? { class: g.class, budgetLine: g.budgetLine, enteredBy: g.enteredBy } : null, vendorHistory };
     });
     try {
       const { data, usage: u } = await model.json({
@@ -147,6 +162,15 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       else { grantId = null; budgetLine = null; splits = sug.map((s) => ({ grantId: s.grantId, budgetLine: s.budgetLine, amount: s.amountCents })); }
     }
 
+    // Materiality: an immaterial routine purchase the bookkeeper already charged to a valid grant line,
+    // where Steward only hesitated (no concern, no rule hit) → accept the bookkeeper's coding, note it.
+    let note = "";
+    const glLineValid = !!g?.class && !!input.grants.find((x) => x.grantId === g.class)?.budgetLines.some((l) => l.code === g.budgetLine);
+    if (g && glLineValid && !fs.length && !c.concern && !splits && grantId === null && -t.amountCents < MATERIALITY_CENTS && t.amountCents < 0) {
+      grantId = g.class; budgetLine = g.budgetLine; status = "auto";
+      note = ` Immaterial (< $${MATERIALITY_CENTS / 100}); accepted the bookkeeper's coding ${g.class}:${g.budgetLine}.`;
+    }
+
     // Sources disagree: bookkeeper charged a different grant and no rule explains why.
     if (g && !fs.length && (g.class ?? null) !== (splits ? null : grantId) && !splits) {
       status = worst(status, "needs_review");
@@ -163,7 +187,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       ...fs.flatMap((f) => f.evidence),
     ];
     return { txnId: t.txnId, grantId, budgetLine, splits, status, confidence: c.confidence,
-      rationale: [c.rationale, ...findings.filter((f) => f.txnId === t.txnId).map((f) => f.message)].join(" "),
+      rationale: [c.rationale + note, ...findings.filter((f) => f.txnId === t.txnId).map((f) => f.message)].join(" "),
       evidence, ruleHits: findings.filter((f) => f.txnId === t.txnId).map((f) => f.ruleId) };
   });
 
