@@ -8,9 +8,10 @@ export function matchGrantForInflow(
   const text = `${description} ${memo}`.toUpperCase();
   for (const g of grants) {
     if (text.includes(g.grantId)) return g.grantId;
-    if (text.includes(g.funder.toUpperCase().slice(0, 12))) return g.grantId;
-    if (g.grantId === "GA-2026-114" && /GGRWA|GOLDEN GATE REGIONAL/i.test(text)) return g.grantId;
-    if (g.grantId === "HLF-26-031" && /HARBOR LIGHT/i.test(text)) return g.grantId;
+    const funder = g.funder.trim();
+    if (funder.length >= 4 && text.includes(funder.toUpperCase())) return g.grantId;
+    const short = funder.split(/\s+/).slice(0, 2).join(" ").toUpperCase();
+    if (short.length >= 4 && text.includes(short)) return g.grantId;
   }
   return null;
 }

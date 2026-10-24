@@ -4,6 +4,7 @@
  * Rules never change data. They return findings with evidence and an optional suggestion
  * that a human must approve.
  */
+import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
 import type { Candidate, Evidence, Finding, GlRow, GrantTerms, Precedent, StaffAllocation, Txn } from "./types";
 
 export interface RuleInput {
@@ -19,7 +20,7 @@ export interface RuleInput {
 export const MATERIALITY_CENTS = 250_00;
 
 const usd = (c: number) => `$${(Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const isPayroll = (t: Txn) => /payroll/i.test(t.description);
+const isPayroll = (t: Txn) => isPayrollTxn(t);
 const isOutflow = (t: Txn) => t.amountCents < 0;
 const text = (t: Txn) => `${t.description} ${t.memo}`;
 
@@ -29,11 +30,16 @@ function daysBetween(a: string, b: string) {
 
 /** Keyword heuristics for unallowable categories. The model handles anything these miss. */
 const UNALLOWABLE_PATTERNS: { id: string; txn: RegExp; termRule: RegExp; label: string }[] = [
-  { id: "fines", txn: /citation|penalt|\bfine[sd]?\b|late fee/i, termRule: /fine|penalt/i, label: "fines and penalties" },
+  { id: "fines", txn: /citation|violation|penalt|\bfine[sd]?\b|late fee/i, termRule: /fine|penalt|violation/i, label: "fines and penalties" },
   { id: "fundraising", txn: /gala|benefit|fundrais|donor (event|dinner)|auction/i, termRule: /fundrais/i, label: "fundraising" },
-  { id: "alcohol_staff", txn: /\bbar\b|brewery|brewing|wine|liquor|happy hour|appreciation/i,
-    termRule: /alcohol|staff (meals|appreciation)/i, label: "alcohol / staff entertainment" },
-  { id: "lobbying", txn: /lobby/i, termRule: /lobby/i, label: "lobbying" },
+  { id: "alcohol_staff", txn: /\bbar\b|brewery|brewing|wine|liquor|happy hour|appreciation|bottle & barrel/i,
+    termRule: /alcohol|hospitality|staff (meals|appreciation)/i, label: "alcohol / staff entertainment" },
+  { id: "staff_entertainment", txn: /giants|team outing|ticket(ing)?/i,
+    termRule: /entertainment|social activities for staff/i, label: "staff entertainment" },
+  { id: "lobbying", txn: /lobby|advocacy|appropriations|capitol strategies/i,
+    termRule: /lobby|legislat|advocacy|appropriations|influence/i, label: "lobbying" },
+  { id: "travel_out_of_state", txn: /united airlines|out-of-state|\b(chicago|denver|new york|seattle|boston)\b/i,
+    termRule: /outside the state|out-of-state|within the state of california/i, label: "out-of-state travel" },
 ];
 
 export function runRules(input: RuleInput): Finding[] {
@@ -92,6 +98,21 @@ export function runRules(input: RuleInput): Finding[] {
       }
     }
 
+    // Restricted purpose: grant text vs transaction memo (e.g. youth-only grant, adult program supplies).
+    if (g && isOutflow(t) && g.restrictedPurpose) {
+      const rp = g.restrictedPurpose.toLowerCase();
+      const tx = text(t).toLowerCase();
+      if ((/teen|14-18|youth mural/.test(rp) && /adult ceramics|adult class/.test(tx)) ||
+          (/corridor arts|performances|exhibitions/.test(rp) && /adult ceramics/.test(tx))) {
+        blockedOrDup.add(t.txnId);
+        findings.push({ ruleId: "R-PURPOSE", txnId: t.txnId, status: "blocked",
+          message: `This expense looks outside ${g.grantId}'s restricted purpose (${g.restrictedPurpose}). Move to unrestricted funds.`,
+          evidence: [{ source: "contract", ref: g.grantId, note: g.restrictedPurpose },
+                     { source: "bank", ref: t.txnId, note: text(t) }],
+          suggestion: [{ grantId: null, budgetLine: null, amountCents: t.amountCents }] });
+      }
+    }
+
     // R-PRIOR-APPROVAL: single purchases at or above a contract threshold.
     if (g && isOutflow(t) && !isPayroll(t)) {
       for (const pa of g.priorApproval) {
@@ -128,7 +149,7 @@ export function runRules(input: RuleInput): Finding[] {
   for (const t of txns.filter(isPayroll)) {
     const c = candidates.get(t.txnId);
     if (!c?.grantId) continue;
-    const person = staff.find((s) => t.memo.includes(`(${s.employee})`));
+    const person = matchStaffForTxn(t, staff);
     if (!person) continue;
     const key = `${c.grantId}:${c.budgetLine}`;
     const allowedPct = person.allocation.find((a) => a.key === key)?.pct ?? 0;

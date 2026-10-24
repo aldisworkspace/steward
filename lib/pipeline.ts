@@ -6,6 +6,7 @@
 import { type ModelClient, MODELS, pdfBlock } from "./llm";
 import { CODING_SYSTEM, CodingZ, type Coding, DEFENSE_SYSTEM, DefenseZ, EXTRACT_SYSTEM } from "./prompts";
 import { atRiskCentsForTxn } from "./atRisk";
+import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
 import { MATERIALITY_CENTS, runRules } from "./rules";
 import { ruleLabel, tickForSource } from "./ruleLabels";
 import { type Candidate, type Decision, type DecisionCheck, type Evidence, type Finding, type GlRow, type GrantTerms, GrantTermsZ,
@@ -39,7 +40,7 @@ export async function extractGrantTerms(model: ModelClient, pdfBase64: string): 
 }
 
 // ---------------------------------------------------------------------------
-const isPayroll = (t: Txn) => /payroll/i.test(t.description);
+const isPayroll = (t: Txn) => isPayrollTxn(t);
 /** "AMAZON MKTPLACE PMTS REFUND" / "STAPLES 00114" → "AMAZON MKTPLACE" / "STAPLES" */
 export const vendorKey = (d: string) =>
   d.toUpperCase().replace(/[^A-Z ]+/g, " ").replace(/\b(REFUND|PMTS?|INC|LLC|LP|WHSE|DEBIT|ACH)\b/g, " ")
@@ -50,7 +51,7 @@ const BATCH = 25;
 
 /** Payroll is coded from time records (system of record for effort), not by the model. */
 function codePayroll(t: Txn, staff: StaffAllocation[]): (Coding & { splits?: Decision["splits"] }) | null {
-  const person = staff.find((s) => t.memo.includes(`(${s.employee})`));
+  const person = matchStaffForTxn(t, staff);
   if (!person) return null;
   const parts = person.allocation.map((a, idx) => {
     const [grantId, budgetLine] = a.key === "UNRESTRICTED" ? [null, null] : a.key.split(":");
