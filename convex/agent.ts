@@ -1,5 +1,5 @@
 "use node";
-// bundled with ../lib/* for Claude structured outputs
+// bundled with ../lib/* (pipeline, prompts) for Claude structured outputs
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";

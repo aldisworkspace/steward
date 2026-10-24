@@ -1,0 +1,7 @@
+{
+  "issueRecall": "12/12",
+  "issuePrecision": "12/13",
+  "codingAccuracy": "84/85",
+  "misses": ["T0009 COSTCO WHSE #0144 want GA-2026-114:A3 got null:null"],
+  "falsePositives": ["T0009"]
+}

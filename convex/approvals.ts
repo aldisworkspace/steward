@@ -40,5 +40,19 @@ export const rejectEntry = mutation({
       why: note,
       evidence: [entry.txnId],
     });
+    await ctx.db.insert("precedents", {
+      date: at.slice(0, 10),
+      by,
+      ruling: note,
+      scope: entry.txnId,
+    });
+    await ctx.db.insert("auditLog", {
+      at,
+      actor: by,
+      action: "precedent_recorded",
+      targetId: entry.txnId,
+      why: "Precedent recorded",
+      evidence: [note.slice(0, 120)],
+    });
   },
 });

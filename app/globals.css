@@ -1,26 +1,112 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #f4f6f5;
+  --sheet: #ffffff;
+  --ink: #1b2430;
+  --ink-2: #5b6673;
+  --rule: #dce3e0;
+  --ledger: #0f5c4a;
+  --redpen: #c2362b;
+  --pencil: #a86a12;
+  --ledger-wash: #e6f0ec;
+  --redpen-wash: #f8e7e5;
+  --pencil-wash: #f6eedd;
+  --font-sans: var(--font-public-sans), system-ui, sans-serif;
+  --font-serif: var(--font-newsreader), Georgia, serif;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-sheet: var(--sheet);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-rule: var(--rule);
+  --color-ledger: var(--ledger);
+  --color-redpen: var(--redpen);
+  --color-pencil: var(--pencil);
+  --color-ledger-wash: var(--ledger-wash);
+  --color-redpen-wash: var(--redpen-wash);
+  --color-pencil-wash: var(--pencil-wash);
+  --font-sans: var(--font-public-sans), system-ui, sans-serif;
+  --font-serif: var(--font-newsreader), Georgia, serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  font-size: 15px;
+  line-height: 1.45;
+  color-scheme: light only;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ledger);
+  outline-offset: 2px;
+}
+
+@keyframes strike-draw {
+  from {
+    stroke-dashoffset: 120;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.redpen-strike-animate {
+  stroke-dasharray: 120;
+  stroke-dashoffset: 120;
+  animation: strike-draw 450ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redpen-strike-animate {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes journal-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.journal-item-new {
+  animation: journal-in 150ms ease-out;
+}
+
+@keyframes count-down {
+  from {
+    opacity: 0.6;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.count-animate {
+  animation: count-down 600ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .count-animate {
+    animation: none;
+  }
 }
