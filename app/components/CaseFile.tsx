@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useMutation } from "convex/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { messageFromConvexError } from "../lib/convexError";
 import { contractClausesFromDecision } from "@/lib/clauseText";
@@ -32,6 +32,41 @@ type CaseData = {
   grantTerms: { fileName: string; terms: unknown }[];
 };
 
+type CaseDataLoaded = Omit<CaseData, "txn" | "decision"> & {
+  txn: NonNullable<CaseData["txn"]>;
+  decision: NonNullable<CaseData["decision"]>;
+};
+
+/** Red-pen strike animates once per case across remounts. */
+const seenStrikeKeys = new Set<string>();
+
+type CaseFileProps = {
+  data: CaseData | null | undefined;
+  actingAsSteward: boolean;
+  actorLabel: string;
+  passcode?: string;
+  canWrite: boolean;
+  onStatusLine: (m: string | null) => void;
+  onWhy: () => void;
+  strikeKey: string;
+};
+
+export function CaseFile(props: CaseFileProps) {
+  if (!props.data?.txn || !props.data.decision) {
+    return (
+      <div className="flex h-full items-center justify-center p-8 text-[15px] text-ink-2">
+        Select an exception from the queue.
+      </div>
+    );
+  }
+  const data: CaseDataLoaded = {
+    ...props.data,
+    txn: props.data.txn,
+    decision: props.data.decision,
+  };
+  return <CaseFileInner key={data.txn.txnId} {...props} data={data} />;
+}
+
 function grantTermsList(rows: CaseData["grantTerms"]): GrantTerms[] {
   return rows.map((g) => g.terms as GrantTerms).filter(Boolean);
 }
@@ -45,7 +80,7 @@ function lineName(grantTerms: CaseData["grantTerms"], grantId: string | null, co
   return undefined;
 }
 
-export function CaseFile({
+function CaseFileInner({
   data,
   actingAsSteward,
   actorLabel,
@@ -54,16 +89,7 @@ export function CaseFile({
   onStatusLine,
   onWhy,
   strikeKey,
-}: {
-  data: CaseData | null | undefined;
-  actingAsSteward: boolean;
-  actorLabel: string;
-  passcode?: string;
-  canWrite: boolean;
-  onStatusLine: (m: string | null) => void;
-  onWhy: () => void;
-  strikeKey: string;
-}) {
+}: CaseFileProps & { data: CaseDataLoaded }) {
   const approve = useMutation(api.approvals.approveEntry);
   const reject = useMutation(api.approvals.rejectEntry);
   const acknowledge = useMutation(api.approvals.acknowledgeDecision);
@@ -77,7 +103,6 @@ export function CaseFile({
   const [actionError, setActionError] = useState<string | null>(null);
   const [precedentScope, setPrecedentScope] = useState<"txn" | "vendor">("txn");
   const [rulingType, setRulingType] = useState<RulingType>("allow");
-  const seenStrike = useRef(new Set<string>());
 
   function defaultRuling(ruleId: string | null | undefined): RulingType {
     if (ruleId === "R-PRIOR-APPROVAL") return "prior_approval_granted";
@@ -87,19 +112,15 @@ export function CaseFile({
   }
 
   useEffect(() => {
-    if (data?.txn?.txnId) seenStrike.current.add(strikeKey);
-  }, [data?.txn?.txnId, strikeKey]);
-
-  if (!data?.txn || !data.decision) {
-    return (
-      <div className="flex h-full items-center justify-center p-8 text-[15px] text-ink-2">
-        Select an exception from the queue.
-      </div>
-    );
-  }
+    onStatusLine(null);
+  }, [data.txn.txnId, onStatusLine]);
 
   const { txn, decision, gl, entry, grantTerms } = data;
-  const grantScope = decision.grantId ?? "GA-2026-114";
+  const grantScope = decision.grantId ?? "ALL";
+  const strikeAnimate = !seenStrikeKeys.has(strikeKey);
+  useEffect(() => {
+    seenStrikeKeys.add(strikeKey);
+  }, [strikeKey]);
   const vendorLabel = vendorKey(txn.description);
   const terms = grantTermsList(grantTerms);
   const ln = (gid: string | null, code: string | null) => lineName(grantTerms, gid, code);
@@ -140,11 +161,6 @@ export function CaseFile({
   const dr = lines.reduce((a, l) => a + l.debit, 0);
   const cr = lines.reduce((a, l) => a + l.credit, 0);
   const balanced = dr === cr && lines.length > 0;
-
-  useEffect(() => {
-    setActionError(null);
-    onStatusLine(null);
-  }, [data?.txn?.txnId, onStatusLine]);
 
   async function onApprove() {
     if (!canWrite) return;
@@ -295,7 +311,7 @@ export function CaseFile({
 
         <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2">
           {bkLabel ? (
-            <RedPenStrike text={bkLabel} className="text-[15px]" />
+            <RedPenStrike text={bkLabel} className="text-[15px]" animate={strikeAnimate} />
           ) : (
             <span className="text-[15px] text-ink-2">Not yet coded</span>
           )}

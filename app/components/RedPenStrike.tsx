@@ -1,6 +1,14 @@
 "use client";
 
-export function RedPenStrike({ text, className = "" }: { text: string; className?: string }) {
+export function RedPenStrike({
+  text,
+  className = "",
+  animate = true,
+}: {
+  text: string;
+  className?: string;
+  animate?: boolean;
+}) {
   return (
     <span className={`relative inline-block text-ink-2 ${className}`}>
       <span>{text}</span>
@@ -14,7 +22,7 @@ export function RedPenStrike({ text, className = "" }: { text: string; className
           stroke="var(--redpen)"
           strokeWidth="2"
           strokeLinecap="round"
-          className="redpen-strike-animate"
+          className={animate ? "redpen-strike-animate" : undefined}
           pathLength={120}
         />
       </svg>
