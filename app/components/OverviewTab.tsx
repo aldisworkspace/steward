@@ -240,7 +240,7 @@ export function OverviewTab({
               onClick={onBankFeed}
               className="rounded-[6px] border-2 border-navy px-4 py-2.5 text-[15px] font-medium text-navy"
             >
-              Bank feed arrives
+              Simulate Sept–Oct bank feed
             </button>
             <button
               type="button"
@@ -263,10 +263,8 @@ export function OverviewTab({
         <ol className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">
           {timeline.steps.map((step, i) => (
             <li key={step.id} className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onJournalFilter(step.action)}
-                className={`flex items-center gap-2 rounded-full border px-3 py-1.5 ${
+              <span
+                className={`flex items-center gap-2 rounded-[6px] border px-3 py-2 ${
                   i === timeline.active
                     ? "border-attention bg-attention-tint text-ink"
                     : "border-rule bg-sheet text-ink-2"
@@ -276,7 +274,7 @@ export function OverviewTab({
                   className={`h-2 w-2 rounded-full bg-navy ${i === timeline.active && timeline.running ? "presence-dot-running" : ""}`}
                 />
                 {step.label}
-              </button>
+              </span>
               {i < timeline.steps.length - 1 && <span className="text-ink-2">→</span>}
             </li>
           ))}
