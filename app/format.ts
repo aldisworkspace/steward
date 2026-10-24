@@ -1,3 +1,10 @@
+export function fmtDate(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(
+    new Date(y, m - 1, d),
+  );
+}
+
 export function fmtTableAmount(cents: number): string {
   const n = Math.abs(cents) / 100;
   const s = n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

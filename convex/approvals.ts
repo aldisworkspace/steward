@@ -32,6 +32,13 @@ export const approveEntry = mutation({
       why: note,
       evidence: [entry.txnId],
     });
+    await ctx.db.insert("inboxResolutions", {
+      txnId: entry.txnId,
+      resolution: "approved_entry",
+      by,
+      at,
+      note,
+    });
   },
 });
 
@@ -77,7 +84,15 @@ export const rejectEntry = mutation({
         vendorScope: precedentScope === "vendor",
         description: txn?.description,
       });
-    } else {
+    }
+    await ctx.db.insert("inboxResolutions", {
+      txnId: entry.txnId,
+      resolution: "rejected_entry",
+      by,
+      at,
+      note,
+    });
+    if (!rulingType) {
       await ctx.db.insert("precedents", { date: at.slice(0, 10), by, ruling: note, scope: entry.txnId });
       await ctx.db.insert("auditLog", {
         at,

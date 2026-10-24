@@ -41,9 +41,8 @@ export function ContextPanel({
   if (mode === "why" && txnId) {
     return (
       <>
-        <button type="button" className="fixed inset-0 z-40 bg-navy/30" aria-label="Close panel" onClick={onClose} />
         <aside
-          className="fixed right-0 top-0 z-50 flex h-full w-[440px] max-w-[100vw] flex-col border-l border-rule bg-sheet shadow-[0_8px_32px_rgba(14,27,44,0.12)]"
+          className="fixed right-0 top-0 z-50 flex h-full w-[440px] max-w-[100vw] flex-col border-l border-rule bg-sheet shadow-[0_8px_24px_rgba(14,27,44,0.12)]"
           role="dialog"
           aria-modal="true"
           aria-label="Ask Steward why"

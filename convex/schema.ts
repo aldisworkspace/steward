@@ -137,7 +137,12 @@ export default defineSchema({
 
   inboxResolutions: defineTable({
     txnId: v.string(),
-    resolution: v.union(v.literal("acknowledged"), v.literal("overridden")),
+    resolution: v.union(
+      v.literal("acknowledged"),
+      v.literal("overridden"),
+      v.literal("approved_entry"),
+      v.literal("rejected_entry"),
+    ),
     by: v.string(),
     at: v.string(),
     note: v.string(),

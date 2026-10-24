@@ -58,7 +58,7 @@ export function NavRail({
 
   return (
     <nav
-      className={`relative z-20 flex shrink-0 flex-col border-r border-rule bg-sheet transition-[width] duration-200 ${
+      className={`absolute inset-y-0 left-0 z-30 flex flex-col border-r border-rule bg-sheet shadow-[0_8px_24px_rgba(14,27,44,0.12)] transition-[width] duration-200 ${
         wide ? "w-[220px]" : "w-16"
       }`}
       onMouseEnter={() => setHover(true)}

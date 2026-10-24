@@ -9,7 +9,8 @@ import type { RulingType } from "@/lib/types";
 import { vendorKey } from "@/lib/vendorKey";
 import { stewardCodingLabel } from "@/lib/codingLabel";
 import type { GrantTerms } from "@/lib/types";
-import { fmtSentenceAmount, fmtTableAmount } from "../format";
+import { displayVendor } from "@/lib/displayVendor";
+import { fmtDate, fmtSentenceAmount, fmtTableAmount } from "../format";
 import { caseNarrative } from "@/lib/caseNarrative";
 import { EvidenceChip } from "./EvidenceChip";
 import { RedPenStrike } from "./RedPenStrike";
@@ -71,8 +72,8 @@ type CaseFileProps = {
 export function CaseFile(props: CaseFileProps) {
   if (!props.data?.txn || !props.data.decision) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-[15px] text-ink-2">
-        Select an exception from the queue.
+      <div className="flex h-full items-center justify-center p-8 text-[14px] text-ink-2">
+        Pick an item on the left to see what happened and what to do.
       </div>
     );
   }
@@ -115,7 +116,9 @@ function CaseFileInner({
   helpOpen = false,
   panelOpen = false,
 }: CaseFileProps & { data: CaseDataLoaded }) {
-  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [evidenceOpen, setEvidenceOpen] = useState(
+    () => data.decision.status === "blocked" || data.decision.status === "needs_review",
+  );
   const approve = useMutation(api.approvals.approveEntry);
   const reject = useMutation(api.approvals.rejectEntry);
   const acknowledge = useMutation(api.approvals.acknowledgeDecision);
@@ -403,17 +406,18 @@ function CaseFileInner({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto px-6 py-5 pb-28">
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-rule pb-4">
-          <div>
-            <p className="text-[14px] text-ink-2">
-              {txn.description} · {txn.date}
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-rule pb-4">
+          <div className="min-w-0 flex-1">
+            <h1 className="break-words text-[17px] font-semibold text-ink">{displayVendor(txn.description)}</h1>
+            <p className="mt-1 text-[13px] text-ink-2">
+              {fmtDate(txn.date)} · Bank: {txn.description}
             </p>
             <div className="mt-2">
               <StatusPill status={decision.status} />
             </div>
           </div>
-          <p className="font-display tabular text-[40px] font-bold leading-[1.1] text-ink">
+          <p className="font-display shrink-0 tabular text-[40px] font-semibold leading-none text-ink">
             {fmtSentenceAmount(txn.amountCents)}
           </p>
         </div>
@@ -508,17 +512,14 @@ function CaseFileInner({
                   Precedent {e.ref}
                 </button>
               ))}
-            <button type="button" className="text-[12px] text-sky underline" onClick={() => setEvidenceOpen((o) => !o)}>
-              {evidenceOpen ? "Collapse" : "Expand"}
-            </button>
           </div>
           {evidenceOpen && (
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-          {bankEv && <EvidenceChip source="bank" label="Bank Ⓑ" body={bankEv.note} />}
+          {bankEv && <EvidenceChip source="bank" label="Bank record" body={bankEv.note} />}
           {glEv && (
             <EvidenceChip
               source="gl"
-              label="Books Ⓛ"
+              label="Bookkeeper's entry"
               body={
                 <>
                   {glEv.note}
@@ -532,7 +533,7 @@ function CaseFileInner({
           {clauses.length > 0 && (
             <EvidenceChip
               source="contract"
-              label="Contract Ⓒ"
+              label="Grant agreement"
               body={
                 <div className="space-y-3">
                   {clauses.map((c) => (
@@ -545,11 +546,11 @@ function CaseFileInner({
               }
             />
           )}
-          {timeEv && <EvidenceChip source="time_record" label="Time record Ⓣ" body={timeEv.note} />}
+          {timeEv && <EvidenceChip source="time_record" label="Time sheet" body={timeEv.note} />}
           {evidence
             .filter((e) => e.source === "precedent")
             .map((e) => (
-              <EvidenceChip key={e.ref} source="precedent" label={`Precedent Ⓟ ${e.ref}`} body={e.note} />
+              <EvidenceChip key={e.ref} source="precedent" label="Past ruling" body={e.note} />
             ))}
         </div>
           )}
@@ -631,10 +632,11 @@ function CaseFileInner({
 
       <div className="sticky bottom-0 border-t border-rule bg-sheet px-6 py-4">
         <div className="flex flex-wrap items-center justify-end gap-3">
-          {canWrite && (
-            <span className="mr-auto text-[13px] text-ink-2">J/K · A · R · E evidence · ? why · ⌘K</span>
-          )}
-          <button type="button" onClick={onWhy} className="text-[15px] text-ink-2 underline-offset-2 hover:underline">
+          <button
+            type="button"
+            onClick={onWhy}
+            className="mr-auto rounded-[6px] border border-transparent px-3 py-2 text-[14px] text-ink-2 hover:border-rule hover:bg-paper"
+          >
             Ask Steward why
           </button>
           {entry ? (
@@ -645,15 +647,15 @@ function CaseFileInner({
                 onClick={() => setRejectOpen(true)}
                 className="rounded-[4px] border border-rule px-4 py-2 text-[15px] font-medium text-ink disabled:opacity-40"
               >
-                Reject…
+                Send back…
               </button>
               <button
                 type="button"
                 disabled={!canWrite}
                 onClick={() => void onApprove()}
-                className="rounded-[6px] bg-money px-4 py-2 text-[15px] font-medium text-white disabled:opacity-40"
+                className="rounded-[6px] bg-saffron px-4 py-2 text-[14px] font-semibold text-ink disabled:opacity-50"
               >
-                Approve entry
+                Approve correction
               </button>
             </>
           ) : (
@@ -670,9 +672,9 @@ function CaseFileInner({
                 type="button"
                 disabled={!canWrite}
                 onClick={() => (ackOpen ? void onApprove() : setAckOpen(true))}
-                className="rounded-[6px] bg-money px-4 py-2 text-[15px] font-medium text-white disabled:opacity-40"
+                className="rounded-[6px] bg-saffron px-4 py-2 text-[14px] font-semibold text-ink disabled:opacity-50"
               >
-                Acknowledge
+                Agree
               </button>
             </>
           )}
