@@ -1,0 +1,70 @@
+bank_ref,date,description,amount,account,class,budget_line,entered_by
+T0001,2026-06-03,DEPOSIT HARBOR LIGHT FDN,60000.00,4000 Grant & Contribution Revenue,,,bookkeeper:r.lopez
+T0002,2026-06-23,LAKESHORE LEARNING,-750.17,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0003,2026-06-29,GREEN APPLE BOOKS,-988.62,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0004,2026-07-01,ACH DEBIT MISSION ST PROPERTIES LLC RENT,-6500.00,6000 General Operations,,,bookkeeper:r.lopez
+T0005,2026-07-02,DEPOSIT GGRWA ADVANCE GA-2026-114,54000.00,4000 Grant & Contribution Revenue,,,bookkeeper:r.lopez
+T0006,2026-07-05,COMCAST BUSINESS 800-391-3000,-189.99,6000 General Operations,,,bookkeeper:r.lopez
+T0007,2026-07-07,AMAZON MKTPLACE PMTS,-132.25,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0008,2026-07-08,VENMO *PAYOUT BATCH YPE COHORT,-1654.03,5000 Program Expense,GA-2026-114,A4,bookkeeper:r.lopez
+T0009,2026-07-09,COSTCO WHSE #0144,-91.81,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0010,2026-07-10,GUSTO PAYROLL NET PAY,-3200.00,5000 Program Expense,GA-2026-114,A1,bookkeeper:r.lopez
+T0011,2026-07-10,GUSTO PAYROLL NET PAY,-2800.00,5000 Program Expense,GA-2026-114,A1,bookkeeper:r.lopez
+T0012,2026-07-10,GUSTO PAYROLL NET PAY,-4100.00,6000 General Operations,,,bookkeeper:r.lopez
+T0013,2026-07-10,GUSTO PAYROLL NET PAY,-2400.00,5000 Program Expense,HLF-26-031,B1,bookkeeper:r.lopez
+T0014,2026-07-10,GUSTO PAYROLL NET PAY,-2400.00,5000 Program Expense,HLF-26-031,B1,bookkeeper:r.lopez
+T0015,2026-07-12,PG&E WEB ONLINE,-293.13,6000 General Operations,,,bookkeeper:r.lopez
+T0016,2026-07-12,AMAZON MKTPLACE PMTS,-334.90,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0017,2026-07-12,CLIPPER CARD AUTOLOAD,-40.00,5000 Program Expense,GA-2026-114,A5,bookkeeper:r.lopez
+T0018,2026-07-14,OFFICE DEPOT #2231,-187.55,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0019,2026-07-15,INTUIT *QUICKBOOKS ONLINE,-90.00,6000 General Operations,,,bookkeeper:r.lopez
+T0020,2026-07-22,VENMO *PAYOUT BATCH YPE COHORT,-1825.35,5000 Program Expense,GA-2026-114,A4,bookkeeper:r.lopez
+T0021,2026-07-22,CALIFORNIA ACADEMY OF SCI,-1240.00,5000 Program Expense,HLF-26-031,B3,bookkeeper:r.lopez
+T0022,2026-07-24,GUSTO PAYROLL NET PAY,-3200.00,5000 Program Expense,GA-2026-114,A1,bookkeeper:r.lopez
+T0023,2026-07-24,GUSTO PAYROLL NET PAY,-2800.00,5000 Program Expense,GA-2026-114,A1,bookkeeper:r.lopez
+T0024,2026-07-24,GUSTO PAYROLL NET PAY,-4100.00,6000 General Operations,,,bookkeeper:r.lopez
+T0025,2026-07-24,GUSTO PAYROLL NET PAY,-2400.00,5000 Program Expense,HLF-26-031,B1,bookkeeper:r.lopez
+T0026,2026-07-24,GUSTO PAYROLL NET PAY,-2400.00,5000 Program Expense,HLF-26-031,B1,bookkeeper:r.lopez
+T0027,2026-07-24,CLIPPER CARD AUTOLOAD,-40.00,5000 Program Expense,GA-2026-114,A5,bookkeeper:r.lopez
+T0028,2026-07-25,LAKESHORE LEARNING,-639.71,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0029,2026-07-25,GREEN APPLE BOOKS,-1015.78,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0030,2026-07-26,LA TAQUERIA SF,-146.98,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0031,2026-07-26,SCHOLASTIC INC,-602.18,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0032,2026-08-01,ACH DEBIT MISSION ST PROPERTIES LLC RENT,-6500.00,6000 General Operations,,,bookkeeper:r.lopez
+T0033,2026-08-01,OFFICE DEPOT #2231,-298.76,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0034,2026-08-03,GOLDEN GATE CHARTER BUS,-980.00,5000 Program Expense,HLF-26-031,B3,bookkeeper:r.lopez
+T0035,2026-08-05,COMCAST BUSINESS 800-391-3000,-189.99,6000 General Operations,,,bookkeeper:r.lopez
+T0036,2026-08-05,DEMCO INC,-592.74,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0037,2026-08-05,STRIPE TRANSFER ST-DONATIONS,2090.92,4000 Grant & Contribution Revenue,,,bookkeeper:r.lopez
+T0038,2026-08-06,SCHOLASTIC INC,-1284.00,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0039,2026-08-07,GUSTO PAYROLL NET PAY,-3200.00,5000 Program Expense,GA-2026-114,A1,bookkeeper:r.lopez
+T0040,2026-08-07,GUSTO PAYROLL NET PAY,-2800.00,5000 Program Expense,GA-2026-114,A1,bookkeeper:r.lopez
+T0041,2026-08-07,GUSTO PAYROLL NET PAY,-4100.00,6000 General Operations,,,bookkeeper:r.lopez
+T0042,2026-08-07,GUSTO PAYROLL NET PAY,-2400.00,5000 Program Expense,HLF-26-031,B1,bookkeeper:r.lopez
+T0043,2026-08-07,GUSTO PAYROLL NET PAY,-2400.00,5000 Program Expense,HLF-26-031,B1,bookkeeper:r.lopez
+T0044,2026-08-07,SCHOLASTIC INC,-1284.00,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0045,2026-08-08,AMAZON MKTPLACE PMTS,-306.80,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0046,2026-08-08,VENMO *PAYOUT BATCH YPE COHORT,-1523.19,5000 Program Expense,GA-2026-114,A4,bookkeeper:r.lopez
+T0047,2026-08-09,LA TAQUERIA SF,-189.16,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0048,2026-08-12,PG&E WEB ONLINE,-213.25,6000 General Operations,,,bookkeeper:r.lopez
+T0049,2026-08-12,GREEN APPLE BOOKS,-636.93,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0050,2026-08-14,EXPLORATORIUM,-1580.00,5000 Program Expense,HLF-26-031,B3,bookkeeper:r.lopez
+T0051,2026-08-14,STRIPE TRANSFER ST-DONATIONS,645.41,4000 Grant & Contribution Revenue,,,bookkeeper:r.lopez
+T0052,2026-08-15,INTUIT *QUICKBOOKS ONLINE,-90.00,6000 General Operations,,,bookkeeper:r.lopez
+T0053,2026-08-16,STAPLES 00114,-125.74,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0054,2026-08-16,AMAZON MKTPLACE PMTS,-187.47,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0055,2026-08-18,STAPLES 00114,-144.20,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0056,2026-08-19,LAKESHORE LEARNING,-468.18,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0057,2026-08-19,AMAZON MKTPLACE PMTS REFUND,63.48,4000 Grant & Contribution Revenue,GA-2026-114,A3,bookkeeper:r.lopez
+T0058,2026-08-21,GUSTO PAYROLL NET PAY,-3200.00,5000 Program Expense,GA-2026-114,A1,bookkeeper:r.lopez
+T0059,2026-08-21,GUSTO PAYROLL NET PAY,-2800.00,5000 Program Expense,GA-2026-114,A1,bookkeeper:r.lopez
+T0060,2026-08-21,GUSTO PAYROLL NET PAY,-4100.00,6000 General Operations,,,bookkeeper:r.lopez
+T0061,2026-08-21,GUSTO PAYROLL NET PAY,-2400.00,5000 Program Expense,HLF-26-031,B1,bookkeeper:r.lopez
+T0062,2026-08-21,GUSTO PAYROLL NET PAY,-2400.00,5000 Program Expense,HLF-26-031,B1,bookkeeper:r.lopez
+T0063,2026-08-21,AMAZON MKTPLACE PMTS,-154.94,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0064,2026-08-21,DEMCO INC,-1321.95,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0065,2026-08-21,THE BLACK CAT SF,-482.50,5000 Program Expense,GA-2026-114,A3,bookkeeper:r.lopez
+T0066,2026-08-22,VENMO *PAYOUT BATCH YPE COHORT,-1609.87,5000 Program Expense,GA-2026-114,A4,bookkeeper:r.lopez
+T0067,2026-08-22,DEMCO INC,-1104.60,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0068,2026-08-25,LAKESHORE LEARNING,-8350.00,5000 Program Expense,HLF-26-031,B2,bookkeeper:r.lopez
+T0069,2026-08-26,STRIPE TRANSFER ST-DONATIONS,747.95,4000 Grant & Contribution Revenue,,,bookkeeper:r.lopez

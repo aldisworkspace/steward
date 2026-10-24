@@ -1,0 +1,32 @@
+[
+  {
+    "id": "T0005",
+    "issue": "Ledger records $54,000 advance; bank shows $45,000",
+    "clause": null
+  },
+  {
+    "id": "T0011",
+    "issue": "Salary charged 100% to GA-2026-114; staff_allocation says 50%",
+    "clause": "GA-2026-114 \u00a76"
+  },
+  {
+    "id": "T0023",
+    "issue": "Salary charged 100% to GA-2026-114; staff_allocation says 50%",
+    "clause": "GA-2026-114 \u00a76"
+  },
+  {
+    "id": "T0040",
+    "issue": "Salary charged 100% to GA-2026-114; staff_allocation says 50%",
+    "clause": "GA-2026-114 \u00a76"
+  },
+  {
+    "id": "T0059",
+    "issue": "Salary charged 100% to GA-2026-114; staff_allocation says 50%",
+    "clause": "GA-2026-114 \u00a76"
+  },
+  {
+    "id": "T0065",
+    "issue": "Bar tab coded as Program supplies on federal grant",
+    "clause": "GA-2026-114 \u00a74.2, \u00a74.7"
+  }
+]
