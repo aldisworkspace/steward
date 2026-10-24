@@ -25,6 +25,9 @@ import { KeyboardHelp } from "./KeyboardHelp";
 import { TransactionsVirtualTable } from "./TransactionsVirtualTable";
 import { YourDataTab } from "./YourDataTab";
 import { useAppUrlState } from "../hooks/useAppUrlState";
+import { useAdminMode } from "../hooks/useAdminMode";
+import { useConvexConnection } from "../hooks/useConvexConnection";
+import { AppLoadingShell } from "./AppLoadingShell";
 
 const STEWARD_ACTOR = { id: "steward", label: "Steward (agent)" } as const;
 
@@ -102,6 +105,8 @@ export function StewardApp() {
   const isCustomData = workspace?.dataSource === "custom";
   const passcode = getDemoPasscode();
   const canWrite = passcodeReady && hasDemoWriteAccess(demoGate?.requiresPasscode ?? false);
+  const adminMode = useAdminMode();
+  const offline = useConvexConnection();
 
   useEffect(() => {
     initDemoPasscodeFromUrl();
@@ -248,7 +253,7 @@ export function StewardApp() {
 
   const paletteCommands = useMemo((): Command[] => {
     const next = exceptions[0];
-    return [
+    const cmds: Command[] = [
       {
         id: "review-next",
         label: "Review next item",
@@ -261,11 +266,6 @@ export function StewardApp() {
         id: "run",
         label: "Run Steward",
         run: () => void onRunSteward(),
-      },
-      {
-        id: "feed",
-        label: "Bank feed arrives",
-        run: () => void bankFeedSeptOct(),
       },
       {
         id: "report",
@@ -286,19 +286,52 @@ export function StewardApp() {
         run: () => setActor((a) => (a === "approver" ? "steward" : "approver")),
       },
     ];
-  }, [exceptions]);
+    if (adminMode) {
+      cmds.push(
+        {
+          id: "feed",
+          label: "Bank feed arrives",
+          run: () => void bankFeedSeptOct(),
+        },
+        {
+          id: "morning",
+          label: "Run morning check",
+          run: () => void triggerMorningCheck({ passcode: getDemoPasscode() }),
+        },
+        {
+          id: "reload",
+          label: "Reload demo data",
+          run: () => void loadDemo(),
+        },
+        {
+          id: "reset",
+          label: "Reset demo state",
+          run: () => {
+            if (confirm("Reset all demo data and run state?")) void onReset();
+          },
+        },
+      );
+    }
+    return cmds;
+  }, [exceptions, adminMode]);
 
-  if (!counts?.transactions) {
+  if (counts === undefined) {
+    return <AppLoadingShell />;
+  }
+
+  if (counts.transactions === 0) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-paper p-8">
         <div className="max-w-md text-center">
           <h1 className="text-[22px] font-semibold text-ink">Steward</h1>
-          <p className="mt-3 text-[15px] text-ink-2">Load July–August to start</p>
+          <p className="mt-3 text-[14px] text-ink-2">
+            Steward has no bank data yet. Load the July–August sample to start.
+          </p>
           <button
             type="button"
             onClick={() => void loadDemo()}
             disabled={seedLoading}
-            className="mt-6 rounded-[6px] bg-money px-5 py-2.5 text-[15px] font-medium text-white disabled:opacity-50"
+            className="mt-6 rounded-[6px] bg-money px-5 py-2 text-[14px] font-medium text-white disabled:opacity-50"
           >
             {seedLoading ? "Loading…" : "Load July–August"}
           </button>
@@ -309,6 +342,11 @@ export function StewardApp() {
 
   return (
     <div className="flex min-h-screen flex-col bg-paper text-ink">
+      {offline && (
+        <p className="border-b border-attention/30 bg-attention-tint px-4 py-1 text-center text-[13px] text-ink" role="status">
+          Offline — reconnecting…
+        </p>
+      )}
       <TopBar
         orgDisplay={orgDisplay}
         showSyntheticBadge={!!showBadge}
@@ -325,31 +363,33 @@ export function StewardApp() {
       <div className="flex min-h-0 flex-1">
         <NavRail tab={tab} onTab={setTab} inboxCount={stats?.needYou ?? 0} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex items-center justify-end gap-3 border-b border-rule bg-sheet px-4 py-2 text-[13px] text-ink-2">
-            <button type="button" onClick={() => void onReset()} className="text-ink-2 hover:text-ink">
-              Reset
-            </button>
-            <button
-              type="button"
-              onClick={() => void loadDemo()}
-              disabled={seedLoading}
-              className="text-ink-2 hover:text-ink"
-            >
-              Reload demo
-            </button>
-            {tab === "overview" && canWrite && (
+          {adminMode && (
+            <div className="flex items-center justify-end gap-3 border-b border-rule bg-sheet px-4 py-2 text-[13px] text-ink-2">
               <button
                 type="button"
-                className="text-money underline"
-                onClick={() => triggerMorningCheck({ passcode: getDemoPasscode() })}
+                onClick={() => {
+                  if (confirm("Reset all demo data and run state?")) void onReset();
+                }}
+                className="text-ink-2 hover:text-ink"
               >
-                Run morning check
+                Reset
               </button>
-            )}
-          </div>
-      {(inlineError || statusNote) && (
-        <p className="px-4 py-2 text-[13px] text-redpen" role="alert">
-          {inlineError ?? statusNote}
+              <button
+                type="button"
+                onClick={() => void loadDemo()}
+                disabled={seedLoading}
+                className="text-ink-2 hover:text-ink"
+              >
+                Reload demo
+              </button>
+            </div>
+          )}
+      {inlineError && (
+        <p className="flex items-center gap-3 px-4 py-2 text-[13px] text-ink" role="alert">
+          <span className="text-redpen">{inlineError}</span>
+          <button type="button" className="text-[13px] text-sky" onClick={() => setInlineError(null)}>
+            Dismiss
+          </button>
         </p>
       )}
       {run?.status === "error" && run.errors.length > 0 && (
