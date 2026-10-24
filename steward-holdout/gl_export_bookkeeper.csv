@@ -1,0 +1,50 @@
+bank_ref,date,description,amount,account,class,budget_line,entered_by
+T0001,2026-07-08,BLICK ART MATERIALS,-455.10,5000 Program Expense,FCF-2026-77,D-2,bookkeeper:j.ortiz
+T0002,2026-07-16,DEPOSIT FOGLINE COMMUNITY FUND,40000.00,4000 Grant Revenue,,,bookkeeper:j.ortiz
+T0003,2026-07-25,SHERWIN-WILLIAMS #8812,-282.18,5000 Program Expense,FCF-2026-77,D-2,bookkeeper:j.ortiz
+T0004,2026-07-27,SHERWIN-WILLIAMS #8812,-650.57,5000 Program Expense,FCF-2026-77,D-2,bookkeeper:j.ortiz
+T0005,2026-07-29,SHERWIN-WILLIAMS #8812,-324.79,5000 Program Expense,FCF-2026-77,D-2,bookkeeper:j.ortiz
+T0006,2026-08-01,ACH BAYVIEW COMMONS LEASE,-4200.00,6000 General Operations,,,bookkeeper:j.ortiz
+T0007,2026-08-02,SHERWIN-WILLIAMS #8812,-328.54,5000 Program Expense,FCF-2026-77,D-2,bookkeeper:j.ortiz
+T0008,2026-08-02,DEPOSIT PCAC ADVANCE,25200.00,4000 Grant Revenue,,,bookkeeper:j.ortiz
+T0009,2026-08-06,AT&T BUSINESS,-142.35,6000 General Operations,,,bookkeeper:j.ortiz
+T0010,2026-08-07,ADP PAYROLL,-2600.00,5000 Program Expense,FCF-2026-77,D-1,bookkeeper:j.ortiz
+T0011,2026-08-07,ADP PAYROLL,-3000.00,5000 Program Expense,PCAC-26-0412,C-1,bookkeeper:j.ortiz
+T0012,2026-08-07,ADP PAYROLL,-3900.00,6000 General Operations,,,bookkeeper:j.ortiz
+T0013,2026-08-12,MAILCHIMP,-121.22,5000 Program Expense,PCAC-26-0412,C-4,bookkeeper:j.ortiz
+T0014,2026-08-17,SQ *TEEN STIPEND PAYOUT,-585.70,5000 Program Expense,FCF-2026-77,D-3,bookkeeper:j.ortiz
+T0015,2026-08-18,PROGRESSIVE COMMERCIAL INS,-1150.00,5000 Program Expense,FCF-2026-77,D-4,bookkeeper:j.ortiz
+T0016,2026-08-20,GUSTO BENEFITS ADMIN,-60.00,6000 General Operations,,,bookkeeper:j.ortiz
+T0017,2026-08-21,ADP PAYROLL,-2600.00,5000 Program Expense,FCF-2026-77,D-1,bookkeeper:j.ortiz
+T0018,2026-08-21,ADP PAYROLL,-3000.00,5000 Program Expense,PCAC-26-0412,C-1,bookkeeper:j.ortiz
+T0019,2026-08-21,ADP PAYROLL,-3900.00,6000 General Operations,,,bookkeeper:j.ortiz
+T0020,2026-08-21,THE LAB SF VENUE,-1282.65,5000 Program Expense,PCAC-26-0412,C-3,bookkeeper:j.ortiz
+T0021,2026-08-28,AMTRAK,-84.00,5000 Program Expense,PCAC-26-0412,C-5,bookkeeper:j.ortiz
+T0022,2026-08-30,SHERWIN-WILLIAMS #8812,-341.10,5000 Program Expense,FCF-2026-77,D-2,bookkeeper:j.ortiz
+T0023,2026-09-01,ACH BAYVIEW COMMONS LEASE,-4200.00,6000 General Operations,,,bookkeeper:j.ortiz
+T0024,2026-09-03,CAPITOL STRATEGIES LLC,-2500.00,5000 Program Expense,PCAC-26-0412,C-5,bookkeeper:j.ortiz
+T0025,2026-09-04,ADP PAYROLL,-2600.00,5000 Program Expense,FCF-2026-77,D-1,bookkeeper:j.ortiz
+T0026,2026-09-04,ADP PAYROLL,-3000.00,5000 Program Expense,PCAC-26-0412,C-1,bookkeeper:j.ortiz
+T0027,2026-09-04,ADP PAYROLL,-3900.00,6000 General Operations,,,bookkeeper:j.ortiz
+T0028,2026-09-05,SQ *GUEST ARTIST FEE,-2091.57,5000 Program Expense,PCAC-26-0412,C-1,bookkeeper:j.ortiz
+T0029,2026-09-05,SQ *GUEST ARTIST FEE,-1022.78,5000 Program Expense,PCAC-26-0412,C-1,bookkeeper:j.ortiz
+T0030,2026-09-06,AT&T BUSINESS,-142.35,6000 General Operations,,,bookkeeper:j.ortiz
+T0031,2026-09-09,SF PUBLIC WORKS VIOLATION,-250.00,5000 Program Expense,PCAC-26-0412,C-3,bookkeeper:j.ortiz
+T0032,2026-09-10,SQ *GUEST ARTIST FEE,-1813.44,5000 Program Expense,PCAC-26-0412,C-1,bookkeeper:j.ortiz
+T0033,2026-09-11,SHERWIN-WILLIAMS #8812,-254.77,5000 Program Expense,FCF-2026-77,D-2,bookkeeper:j.ortiz
+T0034,2026-09-12,SQ *GUEST ARTIST FEE,-1687.79,5000 Program Expense,PCAC-26-0412,C-1,bookkeeper:j.ortiz
+T0035,2026-09-12,BOTTLE & BARREL SF,-612.40,5000 Program Expense,PCAC-26-0412,C-3,bookkeeper:j.ortiz
+T0036,2026-09-15,SQ *FOGHORN PRINT SHOP,-845.00,5000 Program Expense,PCAC-26-0412,C-4,bookkeeper:j.ortiz
+T0037,2026-09-16,MAILCHIMP,-164.38,5000 Program Expense,PCAC-26-0412,C-4,bookkeeper:j.ortiz
+T0038,2026-09-17,SQ *GUEST ARTIST FEE,-1994.17,5000 Program Expense,PCAC-26-0412,C-1,bookkeeper:j.ortiz
+T0039,2026-09-17,SQ *FOGHORN PRINT SHOP,-845.00,5000 Program Expense,PCAC-26-0412,C-4,bookkeeper:j.ortiz
+T0040,2026-09-18,ADP PAYROLL,-2600.00,5000 Program Expense,FCF-2026-77,D-1,bookkeeper:j.ortiz
+T0041,2026-09-18,ADP PAYROLL,-3000.00,5000 Program Expense,PCAC-26-0412,C-1,bookkeeper:j.ortiz
+T0042,2026-09-18,ADP PAYROLL,-3900.00,6000 General Operations,,,bookkeeper:j.ortiz
+T0043,2026-09-20,GUSTO BENEFITS ADMIN,-60.00,6000 General Operations,,,bookkeeper:j.ortiz
+T0044,2026-09-21,BLICK ART MATERIALS,-932.75,5000 Program Expense,FCF-2026-77,D-2,bookkeeper:j.ortiz
+T0045,2026-09-22,SHERWIN-WILLIAMS #8812,-141.00,5000 Program Expense,FCF-2026-77,D-2,bookkeeper:j.ortiz
+T0046,2026-09-24,THE LAB SF VENUE,-1306.39,5000 Program Expense,PCAC-26-0412,C-3,bookkeeper:j.ortiz
+T0047,2026-09-26,SF GIANTS TICKETING,-480.00,5000 Program Expense,PCAC-26-0412,C-5,bookkeeper:j.ortiz
+T0048,2026-09-27,SHERWIN-WILLIAMS #8812,-439.71,5000 Program Expense,FCF-2026-77,D-2,bookkeeper:j.ortiz
+T0049,2026-09-30,META ADS,-211.19,5000 Program Expense,PCAC-26-0412,C-4,bookkeeper:j.ortiz

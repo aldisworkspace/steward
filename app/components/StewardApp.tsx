@@ -720,11 +720,15 @@ function ProofTab({ run }: { run: { usageInput: number; usageOutput: number } | 
           </tr>
           <tr className="border-b border-rule">
             <td className="py-2">Hold-out set</td>
-            <td className="py-2">{(holdout?.issueRecall as string) ?? "—"}</td>
-            <td className="py-2">{(holdout?.issuePrecision as string) ?? "—"}</td>
-            <td className="py-2">{(holdout?.codingAccuracy as string) ?? "—"}</td>
+            <td className="py-2">{((holdout?.recall ?? holdout?.issueRecall) as string) ?? "—"}</td>
+            <td className="py-2">{((holdout?.precision ?? holdout?.issuePrecision) as string) ?? "—"}</td>
+            <td className="py-2">{((holdout?.cleanRowAccuracy ?? holdout?.codingAccuracy) as string) ?? "—"}</td>
             <td className="py-2 text-ink-2">
-              {holdout?.usage ? String(holdout.usage) : "No hold-out eval yet."}
+              {holdout?.tokens
+                ? `${(holdout.tokens as { input: number; output: number }).input} in / ${(holdout.tokens as { input: number; output: number }).output} out`
+                : holdout
+                  ? "—"
+                  : "No hold-out eval yet."}
             </td>
           </tr>
         </tbody>

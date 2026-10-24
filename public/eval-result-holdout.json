@@ -1,0 +1,20 @@
+{
+  "dataset": "steward-holdout",
+  "issues": 15,
+  "recall": "15/15",
+  "precision": "15/16",
+  "cleanRowAccuracy": "52/53",
+  "tokens": {
+    "input": 13813,
+    "output": 13032
+  },
+  "seconds": 61,
+  "errors": [],
+  "misses": [],
+  "falsePositives": [
+    "T0021"
+  ],
+  "codingMisses": [
+    "T0021 AMTRAK want PCAC-26-0412:C-5 got null:null"
+  ]
+}
