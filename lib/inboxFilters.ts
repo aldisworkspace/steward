@@ -1,6 +1,7 @@
 export type InboxFilter =
   | "all"
   | "not_allowed"
+  | "needs_you"
   | "approval"
   | "payroll"
   | "books"
@@ -41,6 +42,10 @@ export function matchesInboxFilter(
   if (filter === "done") return !!resolved;
   if (resolved) return false;
   if (filter === "all") return true;
+  if (filter === "needs_you") {
+    if (status === "auto") return false;
+    return inboxCategory(ruleId, status) !== "not_allowed";
+  }
   const cat = inboxCategory(ruleId, status);
   if (filter === "not_allowed") return cat === "not_allowed";
   if (filter === "approval") return cat === "approval";
@@ -57,6 +62,8 @@ export function filterLabel(f: InboxFilter): string {
       return "All";
     case "not_allowed":
       return "Not allowed";
+    case "needs_you":
+      return "Needs you";
     case "approval":
       return "Funder approval";
     case "payroll":

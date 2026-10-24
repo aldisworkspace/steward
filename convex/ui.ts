@@ -1,18 +1,10 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import { computeFundBreakdown } from "../lib/fundBreakdown";
+import { isInboxResolved } from "../lib/inboxResolved";
 import { ruleLabel } from "../lib/ruleLabels";
 
 const STATUS_RANK: Record<string, number> = { blocked: 0, needs_review: 1, auto: 2 };
-
-function isInboxResolved(
-  txnId: string,
-  entries: { txnId: string; state: string }[],
-  resolvedTxnIds: Set<string>,
-): boolean {
-  const entry = entries.find((e) => e.txnId === txnId);
-  if (entry && (entry.state === "approved" || entry.state === "rejected")) return true;
-  return resolvedTxnIds.has(txnId);
-}
 
 export const dashboardStats = query({
   args: {},
@@ -53,6 +45,32 @@ export const dashboardStats = query({
       blocked: openExceptions.filter((d) => d.status === "blocked").length,
       review: openExceptions.filter((d) => d.status === "needs_review").length,
     };
+  },
+});
+
+export const fundBreakdown = query({
+  args: {},
+  handler: async (ctx) => {
+    const [decisions, txns, entries, resolutions, grants] = await Promise.all([
+      ctx.db.query("decisions").collect(),
+      ctx.db.query("transactions").collect(),
+      ctx.db.query("proposedEntries").collect(),
+      ctx.db.query("inboxResolutions").collect(),
+      ctx.db.query("grants").collect(),
+    ]);
+    const grantTerms = grants.filter((g) => g.terms).map((g) => g.terms);
+    return computeFundBreakdown({
+      transactions: txns.map((t) => ({ txnId: t.txnId, amountCents: t.amountCents })),
+      decisions: decisions.map((d) => ({
+        txnId: d.txnId,
+        status: d.status,
+        grantId: d.grantId,
+        ruleHits: d.ruleHits,
+      })),
+      entries: entries.map((e) => ({ txnId: e.txnId, state: e.state })),
+      resolutionTxnIds: resolutions.map((r) => r.txnId),
+      grants: grantTerms,
+    });
   },
 });
 

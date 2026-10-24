@@ -26,6 +26,7 @@ const VALID_TABS = new Set<AppTab>([
 const VALID_FILTERS = new Set<InboxFilter>([
   "all",
   "not_allowed",
+  "needs_you",
   "approval",
   "payroll",
   "books",

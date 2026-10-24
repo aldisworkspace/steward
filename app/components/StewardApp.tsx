@@ -60,6 +60,7 @@ export function StewardApp() {
     api.ui.transactionLedger,
     tab === "transactions" || tab === "overview" ? {} : "skip",
   );
+  const fundBreakdown = useQuery(api.ui.fundBreakdown, tab === "overview" ? {} : "skip");
 
   const workspace = useQuery(api.settings.get);
   const demoGate = useQuery(api.demoAuth.gate);
@@ -429,7 +430,7 @@ export function StewardApp() {
         <OverviewTab
           stats={stats ?? undefined}
           grants={grants}
-          ledger={ledger}
+          fundBreakdown={fundBreakdown ?? undefined}
           queue={exceptions}
           runStatus={run?.status}
           runProgress={run?.progress}
@@ -437,17 +438,21 @@ export function StewardApp() {
           onReviewInbox={() => setTab("inbox")}
           onBankFeed={() => void bankFeedSeptOct()}
           onDraftReport={() => setTab("report")}
-          onSankeyNavigate={(nav) => {
-            if (nav.kind === "fund") {
-              setTxnFilter("all", fundFilterParam(nav.grantId));
+          onFundNavigate={(nav) => {
+            const fund = fundFilterParam(nav.grantId);
+            if (nav.segment === "clean") {
+              setTxnFilter("clean", fund);
               return;
             }
-            if (nav.outcome === "clean") {
-              setTxnFilter("clean", fundFilterParam(nav.grantId));
+            if (nav.segment === "all_open") {
+              setInboxFilter("all", fund);
               return;
             }
-            const filter = nav.outcome === "disallowed" ? "not_allowed" : "all";
-            setInboxFilter(filter, fundFilterParam(nav.grantId));
+            if (nav.segment === "not_allowed") {
+              setInboxFilter("not_allowed", fund);
+              return;
+            }
+            setInboxFilter("needs_you", fund);
           }}
           onGrantInbox={(grantId) => setInboxFilter("all", grantId)}
           onJournalFilter={() => {}}

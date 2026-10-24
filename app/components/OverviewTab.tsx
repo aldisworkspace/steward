@@ -6,7 +6,8 @@ import { useMemo } from "react";
 import { fmtRisk, fmtTableAmount } from "../format";
 import { CountUp } from "./CountUp";
 import { GlossaryTerm } from "./GlossaryTerm";
-import { MoneyFlowSankey, type SankeyNavigate } from "./MoneyFlowSankey";
+import { FundBreakdown, type FundBreakdownNavigate } from "./FundBreakdown";
+import type { FundBreakdownResult } from "@/lib/fundBreakdown";
 
 type Stats = {
   total: number;
@@ -27,7 +28,7 @@ type GrantRow = {
 export function OverviewTab({
   stats,
   grants,
-  ledger,
+  fundBreakdown,
   queue,
   runStatus,
   runProgress,
@@ -35,13 +36,13 @@ export function OverviewTab({
   onReviewInbox,
   onBankFeed,
   onDraftReport,
-  onSankeyNavigate,
+  onFundNavigate,
   onGrantInbox,
   onJournalFilter,
 }: {
   stats: Stats | undefined;
   grants: GrantRow[] | undefined;
-  ledger: { amountCents: number; grantId: string | null; status: string }[] | undefined;
+  fundBreakdown: FundBreakdownResult | null | undefined;
   queue: { txnId: string; status: string; grantId: string | null }[];
   runStatus: string | undefined;
   runProgress: string | undefined;
@@ -49,7 +50,7 @@ export function OverviewTab({
   onReviewInbox: () => void;
   onBankFeed: () => void;
   onDraftReport: () => void;
-  onSankeyNavigate: (nav: SankeyNavigate) => void;
+  onFundNavigate: (nav: FundBreakdownNavigate) => void;
   onGrantInbox: (grantId: string) => void;
   onJournalFilter: (action: string | null) => void;
 }) {
@@ -252,7 +253,7 @@ export function OverviewTab({
           </div>
         </div>
         <div className="lg:col-span-7">
-          <MoneyFlowSankey ledger={ledger} grants={termsList} onNavigate={onSankeyNavigate} />
+          <FundBreakdown data={fundBreakdown} onNavigate={onFundNavigate} />
         </div>
       </div>
 

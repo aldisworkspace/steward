@@ -198,6 +198,27 @@ button[class*="border"]:not(:disabled):hover {
   }
 }
 
+@keyframes fund-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.fund-bar-grow {
+  transform-origin: left center;
+  animation: fund-bar-grow 500ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fund-bar-grow {
+    animation: none;
+    transform: none;
+  }
+}
+
 @keyframes sankey-draw {
   from {
     opacity: 0;
