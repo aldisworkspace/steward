@@ -27,10 +27,9 @@ export function TopBar({
 }) {
   const running = runStatus === "running";
   return (
-    <header className="bg-navy px-6 py-3 text-white">
-      <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-4">
-        <span className="font-display text-[18px] font-bold tracking-tight">Steward</span>
-        <span className="text-[14px] text-white/75">{orgDisplay}</span>
+    <header className="flex h-14 shrink-0 items-center bg-navy px-4 text-white">
+      <div className="flex w-full flex-wrap items-center gap-3">
+        <span className="text-[15px] font-medium text-white/95">{orgDisplay}</span>
         {showSyntheticBadge && !isCustomData && (
           <span className="rounded-[4px] border border-white/25 bg-white/10 px-2 py-0.5 text-[12px]">
             Synthetic demo data

@@ -9,27 +9,37 @@ import { fmtRisk, fmtSentenceAmount, fmtTableAmount, relativeTime } from "../for
 import { getDemoPasscode, hasDemoWriteAccess, initDemoPasscodeFromUrl } from "../lib/demoPasscode";
 import { messageFromConvexError } from "../lib/convexError";
 import { CaseFile } from "./CaseFile";
+import { CaseSkeleton } from "./CaseSkeleton";
 import { CommandPalette, type Command } from "./CommandPalette";
+import { ContextPanel, type PanelMode } from "./ContextPanel";
 import { InboxQueue } from "./InboxQueue";
+import { NavRail } from "./NavRail";
 import { OverviewTab } from "./OverviewTab";
 import { RedPenStrike } from "./RedPenStrike";
 import { TopBar } from "./TopBar";
-import { WhyDrawer } from "./WhyDrawer";
 import { YourDataTab } from "./YourDataTab";
-import type { InboxFilter } from "@/lib/inboxFilters";
-
-type Tab = "overview" | "inbox" | "transactions" | "grants" | "report" | "proof" | "yourdata";
+import { useAppUrlState } from "../hooks/useAppUrlState";
 
 const STEWARD_ACTOR = { id: "steward", label: "Steward (agent)" } as const;
 
 export function StewardApp() {
+  const { tab, caseId, inboxFilter, txnFilter, setTab, setCaseId, setInboxFilter, setTxnFilter } =
+    useAppUrlState();
   const counts = useQuery(api.ingest.counts);
-  const stats = useQuery(api.ui.dashboardStats);
-  const queue = useQuery(api.ui.inboxQueue);
+  const needsOverview = tab === "overview" || tab === "inbox";
+  const stats = useQuery(api.ui.dashboardStats, needsOverview ? {} : "skip");
+  const queue = useQuery(api.ui.inboxQueue, tab === "inbox" ? {} : "skip");
+  const resolvedQueue = useQuery(api.ui.inboxResolved, tab === "inbox" && inboxFilter === "resolved" ? {} : "skip");
   const run = useQuery(api.dashboard.latestRun);
-  const audit = useQuery(api.ui.auditFeed);
-  const grants = useQuery(api.ui.grantsSheets);
-  const ledger = useQuery(api.ui.transactionLedger);
+  const audit = useQuery(api.ui.auditFeed, tab === "overview" ? {} : "skip");
+  const grants = useQuery(
+    api.ui.grantsSheets,
+    tab === "overview" || tab === "grants" || tab === "report" || tab === "inbox" ? {} : "skip",
+  );
+  const ledger = useQuery(
+    api.ui.transactionLedger,
+    tab === "transactions" || tab === "overview" ? {} : "skip",
+  );
 
   const workspace = useQuery(api.settings.get);
   const demoGate = useQuery(api.demoAuth.gate);
@@ -38,21 +48,28 @@ export function StewardApp() {
   const regenerateNarrative = useAction(api.report.regenerateNarrative);
   const triggerMorningCheck = useMutation(api.deadlines.triggerMorningCheck);
 
-  const [tab, setTab] = useState<Tab>("overview");
   const [cmdOpen, setCmdOpen] = useState(false);
-  const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
-  const [journalFilter, setJournalFilter] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [panelMode, setPanelMode] = useState<PanelMode>(null);
   const [actor, setActor] = useState<"approver" | "steward">("approver");
-  const [whyOpen, setWhyOpen] = useState(false);
+  const selected = caseId;
+  const setSelected = setCaseId;
   const [loaded, setLoaded] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
   const [runLoading, setRunLoading] = useState(false);
-  const [txnFilter, setTxnFilter] = useState<"all" | "clean" | "exceptions">("all");
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [statusNote, setStatusNote] = useState<string | null>(null);
   const [passcodeReady, setPasscodeReady] = useState(false);
-  const caseData = useQuery(api.ui.caseFile, selected ? { txnId: selected } : "skip");
+  const caseData = useQuery(
+    api.ui.caseFile,
+    tab === "inbox" && selected ? { txnId: selected } : "skip",
+  );
+  const spentByLine = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const g of grants ?? []) {
+      Object.assign(m, g.spentByLine);
+    }
+    return m;
+  }, [grants]);
   const showBadge = loaded || (counts && counts.transactions > 0);
   const actingAsSteward = actor === "steward";
   const approverLabel = workspace?.approverLabel ?? "A. Okafor (Executive Director)";
@@ -69,8 +86,9 @@ export function StewardApp() {
 
   const exceptions = queue ?? [];
   useEffect(() => {
+    if (tab !== "inbox" || inboxFilter === "resolved") return;
     if (!selected && exceptions.length) setSelected(exceptions[0].txnId);
-  }, [exceptions, selected]);
+  }, [tab, inboxFilter, exceptions, selected, setSelected]);
 
   const onKey = useCallback(
     (e: KeyboardEvent) => {
@@ -84,7 +102,8 @@ export function StewardApp() {
         e.preventDefault();
         setSelected(exceptions[Math.max(idx - 1, 0)]?.txnId ?? selected);
       }
-      if (e.key === "?" && selected) setWhyOpen(true);
+      if (e.key === "?" && selected) setPanelMode("why");
+      if (e.key === "?" && !selected) setCmdOpen(true);
     },
     [tab, exceptions, selected],
   );
@@ -204,7 +223,7 @@ export function StewardApp() {
         label: "Ask Steward why…",
         run: () => {
           setTab("inbox");
-          setWhyOpen(true);
+          setPanelMode("why");
         },
       },
       {
@@ -234,8 +253,13 @@ export function StewardApp() {
     );
   }
 
+  const inboxRows =
+    inboxFilter === "resolved"
+      ? (resolvedQueue ?? []).map((r) => ({ ...r, resolved: true as const }))
+      : exceptions.map((r) => ({ ...r, resolved: false as const }));
+
   return (
-    <div className="min-h-screen bg-paper text-ink">
+    <div className="flex min-h-screen flex-col bg-paper text-ink">
       <TopBar
         orgDisplay={orgDisplay}
         showSyntheticBadge={!!showBadge}
@@ -249,52 +273,33 @@ export function StewardApp() {
         stewardLabel={STEWARD_ACTOR.label}
         onOpenCommand={() => setCmdOpen(true)}
       />
-
-      <nav className="border-b border-rule bg-sheet">
-        <div className="mx-auto flex max-w-[1280px] gap-6 px-6 text-[15px]">
-          {(
-            [
-              ["overview", "Overview"],
-              ["inbox", "Inbox"],
-              ["transactions", "Transactions"],
-              ["grants", "Grants"],
-              ["report", "Report"],
-              ["proof", "Proof"],
-              ["yourdata", "Your data"],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={`border-b-2 py-3 ${tab === id ? "border-money font-medium text-ink" : "border-transparent text-ink-2"}`}
-            >
-              {label}
-              {id === "inbox" && stats && stats.needYou > 0 && (
-                <span className="ml-1.5 rounded-full bg-attention-tint px-1.5 text-[12px] text-attention">
-                  {stats.needYou}
-                </span>
-              )}
-            </button>
-          ))}
-          <div className="ml-auto flex items-center gap-3 py-2 text-[13px] text-ink-2">
+      <div className="flex min-h-0 flex-1">
+        <NavRail tab={tab} onTab={setTab} inboxCount={stats?.needYou ?? 0} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-center justify-end gap-3 border-b border-rule bg-sheet px-4 py-2 text-[13px] text-ink-2">
             <button type="button" onClick={() => void onReset()} className="underline">
               Reset
             </button>
             <button type="button" onClick={() => void loadDemo()} disabled={seedLoading} className="underline">
               Reload demo
             </button>
+            {tab === "overview" && canWrite && (
+              <button
+                type="button"
+                className="text-money underline"
+                onClick={() => triggerMorningCheck({ passcode: getDemoPasscode() })}
+              >
+                Run morning check
+              </button>
+            )}
           </div>
-        </div>
-      </nav>
-
       {(inlineError || statusNote) && (
-        <p className="mx-auto max-w-[1280px] px-6 py-2 text-[13px] text-redpen" role="alert">
+        <p className="px-4 py-2 text-[13px] text-redpen" role="alert">
           {inlineError ?? statusNote}
         </p>
       )}
       {run?.status === "error" && run.errors.length > 0 && (
-        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-3 px-6 py-2">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-2">
           <p className="text-[13px] text-redpen">{run.errors[0]}</p>
           <button
             type="button"
@@ -306,6 +311,7 @@ export function StewardApp() {
         </div>
       )}
 
+          <main className="mx-auto w-full max-w-[1320px] flex-1 px-2 py-2 sm:px-4">
       {tab === "overview" && (
         <OverviewTab
           stats={stats ?? undefined}
@@ -319,45 +325,44 @@ export function StewardApp() {
           onBankFeed={() => void bankFeedSeptOct()}
           onDraftReport={() => setTab("report")}
           onSankeyOutcome={(outcome) => {
-            setTab("inbox");
             setInboxFilter(outcome === "disallowed" ? "disallowed" : "all");
           }}
-          onJournalFilter={(action) => {
-            setJournalFilter(action);
-            setTab("inbox");
-          }}
+          onJournalFilter={() => {}}
         />
       )}
 
       {tab === "inbox" && (
-        <div className="mx-auto grid min-h-[calc(100vh-140px)] max-w-[1440px] grid-cols-[320px_1fr_280px]">
-          <InboxQueue
-            rows={exceptions}
-            selected={selected}
-            onSelect={setSelected}
-            filter={inboxFilter}
-            setFilter={setInboxFilter}
-          />
-          <section className="relative border-r border-rule bg-sheet">
-            <CaseFile
-              data={caseData}
-              actingAsSteward={actingAsSteward}
-              actorLabel={actorLabel}
-              passcode={getDemoPasscode()}
-              canWrite={canWrite}
-              onStatusLine={setStatusNote}
-              onWhy={() => setWhyOpen(true)}
-              strikeKey={selected ?? ""}
+        <div className="grid min-h-[calc(100vh-8rem)] grid-cols-12 gap-2">
+          <div className="col-span-12 lg:col-span-4">
+            <InboxQueue
+              rows={inboxRows}
+              selected={selected}
+              onSelect={setSelected}
+              filter={inboxFilter}
+              setFilter={setInboxFilter}
             />
+          </div>
+          <section className="relative col-span-12 min-h-[480px] rounded-[8px] border border-rule bg-sheet lg:col-span-8">
+            {caseData === undefined && selected ? (
+              <CaseSkeleton />
+            ) : (
+              <CaseFile
+                data={caseData}
+                spentByLine={spentByLine}
+                actingAsSteward={actingAsSteward}
+                actorLabel={actorLabel}
+                passcode={getDemoPasscode()}
+                canWrite={canWrite}
+                onStatusLine={setStatusNote}
+                onWhy={() => setPanelMode("why")}
+                onResolved={() => {
+                  const rest = exceptions.filter((e) => e.txnId !== selected);
+                  setSelected(rest[0]?.txnId ?? null);
+                }}
+                strikeKey={selected ?? ""}
+              />
+            )}
           </section>
-          <JournalPanel
-            audit={audit}
-            run={run}
-            canWrite={canWrite}
-            filterAction={journalFilter}
-            onClearFilter={() => setJournalFilter(null)}
-            onMorningCheck={() => triggerMorningCheck({ passcode: getDemoPasscode() })}
-          />
         </div>
       )}
 
@@ -385,22 +390,20 @@ export function StewardApp() {
           onRunStarted={() => setTab("inbox")}
         />
       )}
-
+          </main>
+        </div>
+      </div>
       <CommandPalette
         open={cmdOpen}
         onClose={() => setCmdOpen(false)}
         commands={paletteCommands}
         transactions={ledger ?? []}
-        onJumpTxn={(txnId) => {
-          setTab("inbox");
-          setSelected(txnId);
-        }}
+        onJumpTxn={(txnId) => setSelected(txnId)}
       />
-
-      <WhyDrawer
+      <ContextPanel
+        mode={panelMode}
+        onClose={() => setPanelMode(null)}
         txnId={selected}
-        open={whyOpen}
-        onClose={() => setWhyOpen(false)}
         passcode={getDemoPasscode()}
         canWrite={canWrite}
       />
@@ -487,12 +490,13 @@ function TransactionsTab({
         status: string;
       }[]
     | undefined;
-  filter: "all" | "clean" | "exceptions";
-  setFilter: (f: "all" | "clean" | "exceptions") => void;
+  filter: "all" | "clean" | "exceptions" | "blocked";
+  setFilter: (f: "all" | "clean" | "exceptions" | "blocked") => void;
   grantTerms: GrantTerms[];
 }) {
   const rows = (ledger ?? []).filter((r) => {
     if (filter === "clean") return r.status === "auto";
+    if (filter === "blocked") return r.status === "blocked";
     if (filter === "exceptions") return r.status !== "auto";
     return true;
   });

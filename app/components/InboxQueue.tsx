@@ -4,7 +4,14 @@ import { filterLabel, matchesInboxFilter, type InboxFilter } from "@/lib/inboxFi
 import { queueIconForRule } from "@/lib/queueIcon";
 import { fmtTableAmount } from "../format";
 
-const FILTERS: InboxFilter[] = ["all", "disallowed", "prior_approval", "bookkeeper", "duplicates"];
+const FILTERS: InboxFilter[] = [
+  "all",
+  "disallowed",
+  "prior_approval",
+  "bookkeeper",
+  "duplicates",
+  "resolved",
+];
 
 export function InboxQueue({
   rows,
@@ -21,15 +28,21 @@ export function InboxQueue({
     reason: string;
     ruleId?: string | null;
     hasPrecedent?: boolean;
+    resolved?: boolean;
   }[];
   selected: string | null;
   onSelect: (id: string) => void;
   filter: InboxFilter;
   setFilter: (f: InboxFilter) => void;
 }) {
-  const filtered = rows.filter((r) => matchesInboxFilter(r.ruleId, r.status, filter));
+  const filtered = rows.filter((r) => matchesInboxFilter(r.ruleId, r.status, filter, r.resolved));
   const counts = Object.fromEntries(
-    FILTERS.map((f) => [f, rows.filter((r) => matchesInboxFilter(r.ruleId, r.status, f)).length]),
+    FILTERS.map((f) => [
+      f,
+      f === "resolved"
+        ? rows.filter((r) => r.resolved).length
+        : rows.filter((r) => matchesInboxFilter(r.ruleId, r.status, f, r.resolved)).length,
+    ]),
   ) as Record<InboxFilter, number>;
 
   return (

@@ -10,9 +10,11 @@ import { vendorKey } from "@/lib/vendorKey";
 import { stewardCodingLabel } from "@/lib/codingLabel";
 import type { GrantTerms } from "@/lib/types";
 import { fmtSentenceAmount, fmtTableAmount } from "../format";
+import { caseNarrative } from "@/lib/caseNarrative";
 import { EvidenceChip } from "./EvidenceChip";
 import { RedPenStrike } from "./RedPenStrike";
 import { RubberStamp } from "./RubberStamp";
+import { StatusPill } from "./StatusPill";
 
 type CaseData = {
   txn: { txnId: string; date: string; description: string; amountCents: number; memo: string } | null;
@@ -49,6 +51,8 @@ type CaseFileProps = {
   canWrite: boolean;
   onStatusLine: (m: string | null) => void;
   onWhy: () => void;
+  onResolved?: () => void;
+  spentByLine?: Record<string, number>;
   strikeKey: string;
 };
 
@@ -89,8 +93,11 @@ function CaseFileInner({
   canWrite,
   onStatusLine,
   onWhy,
+  onResolved,
+  spentByLine = {},
   strikeKey,
 }: CaseFileProps & { data: CaseDataLoaded }) {
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const approve = useMutation(api.approvals.approveEntry);
   const reject = useMutation(api.approvals.rejectEntry);
   const acknowledge = useMutation(api.approvals.acknowledgeDecision);
@@ -184,6 +191,7 @@ function CaseFileInner({
         });
         setEntryStamp("approved");
         onStatusLine("Entry approved");
+        onResolved?.();
       } catch (e) {
         const msg = messageFromConvexError(e);
         setActionError(msg);
@@ -209,6 +217,7 @@ function CaseFileInner({
       setAckOpen(false);
       setAckNote("");
       onStatusLine("Decision acknowledged");
+      onResolved?.();
     } catch (e) {
       const msg = messageFromConvexError(e);
       setActionError(msg);
@@ -234,6 +243,7 @@ function CaseFileInner({
         setRejectNote("");
         setEntryStamp("returned");
         onStatusLine("Entry rejected");
+        onResolved?.();
       } catch (e) {
         const msg = messageFromConvexError(e);
         setActionError(msg);
@@ -296,6 +306,10 @@ function CaseFileInner({
         if (entry) setRejectOpen(true);
         else setOverrideOpen(true);
       }
+      if (e.key === "e" || e.key === "E") {
+        e.preventDefault();
+        setEvidenceOpen((o) => !o);
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -306,30 +320,136 @@ function CaseFileInner({
   const timeEv = evidence.find((e) => e.source === "time_record");
   const whyText = decision.modelRationale ?? decision.rationale;
   const checks = decision.checks ?? [];
+  const narrative = caseNarrative({
+    bankNote: bankEv?.note,
+    glNote: glEv?.note,
+    bkLabel,
+    stewardLabel,
+    status: decision.status,
+    actionHint: entry
+      ? "Approve or reject the proposed journal entry."
+      : "Acknowledge Steward's call or override with a note.",
+  });
+  const forbidReason = actingAsSteward
+    ? "Switch acting user to an approver to take action."
+    : !canWrite
+      ? "View-only demo — add ?key= to the URL for write access."
+      : null;
+
+  const budgetImpacts = lines
+    .filter((l) => l.class && l.budgetLine && (l.debit || l.credit))
+    .map((l) => {
+      const key = `${l.class}:${l.budgetLine}`;
+      const before = spentByLine[key] ?? 0;
+      const delta = l.debit - l.credit;
+      const after = before + delta;
+      const grant = terms.find((g) => g.grantId === l.class);
+      const bl = grant?.budgetLines.find((b) => b.code === l.budgetLine);
+      const cap = bl ? bl.amount * 100 : 0;
+      return { key, label: `${l.budgetLine} ${bl?.name ?? ""}`, before, after, cap };
+    });
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        <div className="flex items-start justify-between gap-4 border-b border-rule pb-4">
+      <div className="flex-1 overflow-y-auto px-6 py-5 pb-28">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-rule pb-4">
           <div>
-            <h2 className="text-[22px] font-semibold leading-[1.2] text-ink">{txn.description}</h2>
-            <p className="mt-1 text-[13px] text-ink-2">{txn.date}</p>
+            <p className="text-[14px] text-ink-2">
+              {txn.description} · {txn.date}
+            </p>
+            <div className="mt-2">
+              <StatusPill status={decision.status} />
+            </div>
           </div>
-          <p className="font-display tabular text-[44px] font-bold leading-[1.1] text-ink">
+          <p className="font-display tabular text-[40px] font-bold leading-[1.1] text-ink">
             {fmtSentenceAmount(txn.amountCents)}
+          </p>
+        </div>
+
+        <div className="mt-6 max-w-[75ch] space-y-2 text-[14px] text-ink">
+          <p>
+            <span className="text-ink-2">What happened: </span>
+            {narrative.happened}
+          </p>
+          <p>
+            <span className="text-ink-2">What Steward did: </span>
+            {narrative.stewardDid}
+          </p>
+          <p>
+            <span className="text-ink-2">What you need to do: </span>
+            {narrative.youNeed}
           </p>
         </div>
 
         <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2">
           {bkLabel ? (
-            <RedPenStrike text={bkLabel} className="text-[15px]" animate={strikeAnimate} />
+            <RedPenStrike text={bkLabel} className="text-[14px]" animate={strikeAnimate} />
           ) : (
-            <span className="text-[15px] text-ink-2">Not yet coded</span>
+            <span className="text-[14px] text-ink-2">Not yet coded</span>
           )}
           <span className="text-[17px] font-semibold text-money">{stewardLabel}</span>
         </div>
 
-        <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3">
+        <div className="mt-8">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-medium text-ink-2">Evidence</span>
+            {bankEv && (
+              <button
+                type="button"
+                className="rounded-full border border-navy/30 bg-navy px-2 py-1 text-[12px] text-white"
+                onClick={() => setEvidenceOpen(true)}
+                title={bankEv.note}
+              >
+                Bank
+              </button>
+            )}
+            {glEv && (
+              <button
+                type="button"
+                className="rounded-full border border-slate/30 bg-slate px-2 py-1 text-[12px] text-white"
+                onClick={() => setEvidenceOpen(true)}
+                title={glEv.note}
+              >
+                Ledger
+              </button>
+            )}
+            {clauses.length > 0 && (
+              <button
+                type="button"
+                className="rounded-full border-2 border-money px-2 py-1 font-serif text-[12px] text-money"
+                onClick={() => setEvidenceOpen(true)}
+                title={clauses[0]?.rule}
+              >
+                Contract §
+              </button>
+            )}
+            {timeEv && (
+              <button
+                type="button"
+                className="rounded-full border border-sky/40 bg-sky/15 px-2 py-1 text-[12px]"
+                onClick={() => setEvidenceOpen(true)}
+              >
+                Time record
+              </button>
+            )}
+            {evidence
+              .filter((e) => e.source === "precedent")
+              .map((e) => (
+                <button
+                  key={e.ref}
+                  type="button"
+                  className="rounded-full border border-attention/50 bg-attention-tint px-2 py-1 text-[12px]"
+                  onClick={() => setEvidenceOpen(true)}
+                >
+                  Precedent {e.ref}
+                </button>
+              ))}
+            <button type="button" className="text-[12px] text-sky underline" onClick={() => setEvidenceOpen((o) => !o)}>
+              {evidenceOpen ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {evidenceOpen && (
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
           {bankEv && <EvidenceChip source="bank" label="Bank Ⓑ" body={bankEv.note} />}
           {glEv && (
             <EvidenceChip
@@ -368,19 +488,18 @@ function CaseFileInner({
               <EvidenceChip key={e.ref} source="precedent" label={`Precedent Ⓟ ${e.ref}`} body={e.note} />
             ))}
         </div>
-
-        <div className="mt-8 max-w-[75ch]">
-          <p className="text-[15px] text-ink">{whyText}</p>
-          {checks.length > 0 && (
-            <ul className="mt-4 space-y-2 text-[15px] text-ink">
-              {checks.map((c, i) => (
-                <li key={i} title={c.ruleId ?? undefined}>
-                  <span className="text-ink-2">{c.tick}</span> {c.label}: {c.message}
-                </li>
-              ))}
-            </ul>
           )}
         </div>
+
+        {checks.length > 0 && (
+          <ul className="mt-6 max-w-[75ch] space-y-1 text-[13px] text-ink-2">
+            {checks.map((c, i) => (
+              <li key={i} title={c.ruleId ?? undefined}>
+                {c.label}: {c.message}
+              </li>
+            ))}
+          </ul>
+        )}
 
         {entry && lines.length > 0 && (
           <div className="relative mt-8">
@@ -392,7 +511,7 @@ function CaseFileInner({
                 animate={stampAnimate}
               />
             )}
-            <h3 className="text-[17px] font-semibold text-ink">Proposed journal entry</h3>
+            <h3 className="text-[17px] font-semibold text-ink">Journal entry</h3>
             <table className="mt-3 w-full border-collapse text-[13px]">
               <thead>
                 <tr className="border-b border-rule text-left text-ink-2">
@@ -423,18 +542,25 @@ function CaseFileInner({
               </tfoot>
             </table>
             {balanced && <p className="mt-2 text-[13px] font-medium text-money">Balanced</p>}
+            {budgetImpacts.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-[13px] font-medium text-ink-2">Budget impact</p>
+                {budgetImpacts.map((b) => (
+                  <p key={b.key} className="text-[13px] text-ink">
+                    {b.label.trim()}: {fmtTableAmount(b.before)} → {fmtTableAmount(b.after)}
+                    {b.cap ? ` of ${fmtTableAmount(b.cap)}` : ""}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         )}
-
-        <p className="mt-10 text-[13px] text-ink-2">
-          Ⓑ agreed to bank · Ⓛ agreed to ledger · Ⓒ agreed to contract · Ⓣ agreed to time records · Ⓟ precedent
-        </p>
       </div>
 
-      <div className="border-t border-rule px-6 py-4">
+      <div className="sticky bottom-0 border-t border-rule bg-sheet px-6 py-4">
         <div className="flex flex-wrap items-center justify-end gap-3">
           {canWrite && (
-            <span className="mr-auto text-[13px] text-ink-2">J/K queue · A approve · R reject · ? ask why</span>
+            <span className="mr-auto text-[13px] text-ink-2">J/K · A · R · E evidence · ? why · ⌘K</span>
           )}
           <button type="button" onClick={onWhy} className="text-[15px] text-ink-2 underline-offset-2 hover:underline">
             Ask Steward why
@@ -479,14 +605,9 @@ function CaseFileInner({
             </>
           )}
         </div>
-        {actionError && (
-          <p className="mt-3 text-[13px] font-medium text-redpen" role="alert">
-            {actionError}
-          </p>
-        )}
-        {actingAsSteward && !actionError && (
-          <p className="mt-2 text-[13px] text-ink-2">
-            Acting as Steward — approvals are enforced on the server.
+        {(forbidReason || actionError) && (
+          <p className="mt-2 text-[13px] text-redpen" role="alert">
+            {actionError ?? forbidReason}
           </p>
         )}
       </div>

@@ -1,10 +1,19 @@
-export type InboxFilter = "all" | "disallowed" | "prior_approval" | "bookkeeper" | "duplicates";
+export type InboxFilter =
+  | "all"
+  | "disallowed"
+  | "prior_approval"
+  | "bookkeeper"
+  | "duplicates"
+  | "resolved";
 
 export function matchesInboxFilter(
   ruleId: string | null | undefined,
   status: string,
   filter: InboxFilter,
+  resolved?: boolean,
 ): boolean {
+  if (filter === "resolved") return !!resolved;
+  if (resolved) return false;
   if (filter === "all") return true;
   if (filter === "disallowed") return status === "blocked";
   if (filter === "prior_approval") return ruleId === "R-PRIOR-APPROVAL";
@@ -25,5 +34,7 @@ export function filterLabel(f: InboxFilter): string {
       return "Bookkeeper errors";
     case "duplicates":
       return "Duplicates";
+    case "resolved":
+      return "Resolved";
   }
 }

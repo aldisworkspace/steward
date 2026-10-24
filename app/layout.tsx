@@ -6,6 +6,7 @@ const publicSans = Public_Sans({
   variable: "--font-public-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600"],
+  display: "swap",
 });
 
 const newsreader = Newsreader({
@@ -18,6 +19,7 @@ const bricolage = Bricolage_Grotesque({
   variable: "--font-bricolage",
   subsets: ["latin"],
   weight: ["600", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {

@@ -12,12 +12,14 @@ export function WhyDrawer({
   onClose,
   passcode,
   canWrite,
+  embedded = false,
 }: {
   txnId: string | null;
   open: boolean;
   onClose: () => void;
   passcode?: string;
   canWrite: boolean;
+  embedded?: boolean;
 }) {
   const explain = useAction(api.agent.explain);
   const [input, setInput] = useState("");
@@ -63,19 +65,20 @@ export function WhyDrawer({
     }
   }
 
-  return (
+  const shell = (
     <>
-      <button type="button" className="fixed inset-0 z-40 bg-ink/20" aria-label="Close drawer" onClick={onClose} />
-      <aside
-        className="fixed right-0 top-0 z-50 flex h-full w-[440px] max-w-full flex-col border-l border-rule bg-sheet"
-        role="dialog"
-        aria-labelledby="why-title"
-      >
-        <header className="border-b border-rule px-5 py-4">
-          <h2 id="why-title" className="text-[17px] font-semibold text-ink">
-            Ask Steward why
-          </h2>
-          <p className="mt-1 text-[13px] text-ink-2">{txnId}</p>
+        <header className="flex items-start justify-between border-b border-rule px-5 py-4">
+          <div>
+            <h2 id="why-title" className="text-[17px] font-semibold text-ink">
+              Ask Steward why
+            </h2>
+            <p className="mt-1 text-[13px] text-ink-2">{txnId}</p>
+          </div>
+          {embedded && (
+            <button type="button" onClick={onClose} className="text-[14px] text-ink-2 underline">
+              Close
+            </button>
+          )}
         </header>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {thread.map((m, i) => (
@@ -132,6 +135,22 @@ export function WhyDrawer({
             </button>
           </div>
         </footer>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex h-full flex-col">{shell}</div>;
+  }
+
+  return (
+    <>
+      <button type="button" className="fixed inset-0 z-40 bg-ink/20" aria-label="Close drawer" onClick={onClose} />
+      <aside
+        className="fixed right-0 top-0 z-50 flex h-full w-[440px] max-w-full flex-col border-l border-rule bg-sheet shadow-[0_8px_32px_rgba(14,27,44,0.12)]"
+        role="dialog"
+        aria-labelledby="why-title"
+      >
+        {shell}
       </aside>
     </>
   );

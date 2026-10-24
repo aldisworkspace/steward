@@ -109,6 +109,36 @@ export const inboxQueue = query({
   },
 });
 
+export const inboxResolved = query({
+  args: {},
+  handler: async (ctx) => {
+    const [resolutions, txns, decisions] = await Promise.all([
+      ctx.db.query("inboxResolutions").collect(),
+      ctx.db.query("transactions").collect(),
+      ctx.db.query("decisions").collect(),
+    ]);
+    const byTxn = new Map(txns.map((t) => [t.txnId, t]));
+    const byDecision = new Map(decisions.map((d) => [d.txnId, d]));
+    return resolutions
+      .map((r) => {
+        const t = byTxn.get(r.txnId);
+        const d = byDecision.get(r.txnId);
+        return {
+          txnId: r.txnId,
+          status: d?.status ?? "needs_review",
+          grantId: d?.grantId ?? null,
+          amountCents: t?.amountCents ?? 0,
+          description: t?.description ?? "",
+          reason: r.resolution === "acknowledged" ? "Acknowledged" : "Overridden",
+          ruleId: d?.ruleHits[0] ?? null,
+          resolved: true as const,
+          resolvedAt: r.at,
+        };
+      })
+      .sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt));
+  },
+});
+
 export const caseFile = query({
   args: { txnId: v.string() },
   handler: async (ctx, { txnId }) => {
