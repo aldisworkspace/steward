@@ -13,13 +13,15 @@ import { defendDecision, extractGrantTerms, runPipeline } from "../lib/pipeline"
 import type { GrantTerms } from "../lib/types";
 import { GrantTermsZ } from "../lib/types";
 import { pdfToText } from "./pdfText";
+import { assertDemoPasscode } from "./passcode";
 
 export const extractGrant = action({
-  args: { grantDocId: v.id("grants") },
+  args: { grantDocId: v.id("grants"), passcode: v.optional(v.string()) },
   handler: async (
     ctx,
-    { grantDocId },
+    { grantDocId, passcode },
   ): Promise<{ grantId: string; budgetLines: number; skipped: boolean }> => {
+    assertDemoPasscode(passcode);
     const grant = await ctx.runQuery(internal.agentInternal.getGrant, { grantDocId });
     if (!grant) throw new Error("Grant not found");
     if (grant.status === "ready" && grant.terms) {
@@ -66,9 +68,10 @@ export const extractGrant = action({
 });
 
 export const runAgent = action({
-  args: {},
+  args: { passcode: v.optional(v.string()) },
   handler: async (
     ctx,
+    { passcode },
   ): Promise<{
     runId: Id<"runs">;
     usageInput: number;
@@ -76,9 +79,11 @@ export const runAgent = action({
     errors: string[];
     decisionCount: number;
   }> => {
+    assertDemoPasscode(passcode);
+    await ctx.runMutation(internal.runGuard.prepareRun, {});
     const input = await ctx.runQuery(internal.agentInternal.loadPipelineInput, {});
-    if (input.grants.length < 2) {
-      throw new Error("Both grant agreements must be ready before running Steward.");
+    if (input.grants.length < 1) {
+      throw new Error("At least one grant agreement must be ready before running Steward.");
     }
     const runId: Id<"runs"> = await ctx.runMutation(internal.agentInternal.createRun, {});
     let usageInput = 0;
@@ -96,11 +101,14 @@ export const runAgent = action({
       errors.push(...result.errors);
       const journalLines = buildRunJournalLines({
         txns: input.txns,
+        gl: input.gl,
+        staff: input.staff,
         decisions: result.decisions,
         findings: result.findings,
         entries: result.entries,
       });
       await ctx.runMutation(internal.agentInternal.savePipelineResults, {
+        runId,
         decisions: result.decisions,
         entries: result.entries,
         journalLines,
@@ -129,8 +137,11 @@ export const runAgent = action({
 });
 
 export const explain = action({
-  args: { txnId: v.string(), question: v.string() },
-  handler: async (ctx, { txnId, question }) => {
+  args: { txnId: v.string(), question: v.string(), passcode: v.optional(v.string()) },
+  handler: async (ctx, { txnId, question, passcode }) => {
+    assertDemoPasscode(passcode);
+    const q = question.trim();
+    if (q.length > 500) throw new Error("Question must be at most 500 characters.");
     const decision = await ctx.runQuery(internal.agentInternal.getDecisionByTxn, { txnId });
     if (!decision) throw new Error(`No decision for ${txnId}`);
     const { grants } = await ctx.runQuery(internal.agentInternal.loadPipelineInput, {});
@@ -138,11 +149,11 @@ export const explain = action({
       actor: "auditor-question",
       action: "challenge",
       targetId: txnId,
-      why: question,
+      why: q,
       evidence: [],
     });
     const answer = await defendDecision(getModelClient(), {
-      question,
+      question: q,
       decision: decision as Parameters<typeof defendDecision>[1]["decision"],
       grants: grants as GrantTerms[],
     });

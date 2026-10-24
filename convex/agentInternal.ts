@@ -131,11 +131,16 @@ export const finishRun = internalMutation({
 
 export const savePipelineResults = internalMutation({
   args: {
+    runId: v.id("runs"),
     decisions: v.array(v.any()),
     entries: v.array(v.any()),
     journalLines: v.array(v.string()),
   },
-  handler: async (ctx, { decisions, entries, journalLines }) => {
+  handler: async (ctx, { runId, decisions, entries, journalLines }) => {
+    for (const row of await ctx.db.query("auditLog").collect()) {
+      if (row.action === "run_summary") await ctx.db.delete(row._id);
+    }
+
     for (const d of await ctx.db.query("decisions").collect()) {
       await ctx.db.delete(d._id);
     }
@@ -162,25 +167,33 @@ export const savePipelineResults = internalMutation({
         at: runAt,
         actor: "steward",
         action: "run_summary",
-        targetId: "run",
+        targetId: String(runId),
         why: line,
         evidence: [],
       });
     }
 
-    for (const e of await ctx.db.query("proposedEntries").collect()) {
+    const existingEntries = await ctx.db.query("proposedEntries").collect();
+    const settledTxn = new Set(
+      existingEntries
+        .filter((e) => e.state === "approved" || e.state === "rejected")
+        .map((e) => e.txnId),
+    );
+
+    for (const e of existingEntries) {
       if (e.state === "proposed") await ctx.db.delete(e._id);
     }
-    let n = 0;
+
+    const runKey = String(runId);
     for (const raw of entries as {
       txnId: string;
       date: string;
       memo: string;
       lines: { account: string; class: string | null; budgetLine: string | null; debitCents: number; creditCents: number }[];
     }[]) {
-      n += 1;
+      if (settledTxn.has(raw.txnId)) continue;
       await ctx.db.insert("proposedEntries", {
-        id: `PE-${raw.txnId}-${n}`,
+        id: `PE-${runKey}-${raw.txnId}`,
         txnId: raw.txnId,
         date: raw.date,
         memo: raw.memo,

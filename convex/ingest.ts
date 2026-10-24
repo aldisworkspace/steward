@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import { assertDemoPasscode } from "./passcode";
 
 const txn = v.object({
   txnId: v.string(),
@@ -45,12 +46,14 @@ async function clearTable(ctx: MutationCtx, table: DemoTable) {
 
 export const loadDemo = mutation({
   args: {
+    passcode: v.optional(v.string()),
     transactions: v.array(txn),
     glRows: v.array(glRow),
     staffAllocations: v.array(staffAllocation),
     precedents: v.array(precedent),
   },
   handler: async (ctx, args) => {
+    assertDemoPasscode(args.passcode);
     await clearTable(ctx, "transactions");
     await clearTable(ctx, "glRows");
     await clearTable(ctx, "staffAllocations");
@@ -72,12 +75,21 @@ export const loadDemo = mutation({
 });
 
 export const resetRunState = mutation({
-  args: {},
-  handler: async (ctx) => {
+  args: { passcode: v.optional(v.string()) },
+  handler: async (ctx, { passcode }) => {
+    assertDemoPasscode(passcode);
     for (const row of await ctx.db.query("decisions").collect()) await ctx.db.delete(row._id);
     for (const row of await ctx.db.query("proposedEntries").collect()) await ctx.db.delete(row._id);
+    for (const row of await ctx.db.query("inboxResolutions").collect()) await ctx.db.delete(row._id);
     for (const row of await ctx.db.query("runs").collect()) await ctx.db.delete(row._id);
-    for (const row of await ctx.db.query("auditLog").collect()) await ctx.db.delete(row._id);
+    await ctx.db.insert("auditLog", {
+      at: new Date().toISOString(),
+      actor: "demo",
+      action: "reset",
+      targetId: "run",
+      why: "Demo run state reset",
+      evidence: [],
+    });
   },
 });
 

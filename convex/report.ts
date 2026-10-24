@@ -5,6 +5,7 @@ import { api } from "./_generated/api";
 import { getModelClient } from "../lib/model";
 import { MODELS } from "../lib/llm";
 import type { GrantTerms } from "../lib/types";
+import { assertDemoPasscode } from "./passcode";
 
 const NarrativeZ = z.object({ narrative: z.string().max(2000) });
 
@@ -38,10 +39,12 @@ export const grantReportData = query({
           actual += Math.abs(t.amountCents);
         }
       }
-      const budget = bl.amount * 100;
+      const budget = Math.round(bl.amount * 100);
       const remaining = budget - actual;
       const pct = budget ? (actual / budget) * 100 : 0;
-      const cap = terms.lineVarianceLimitPct ? budget * (1 + terms.lineVarianceLimitPct / 100) : budget;
+      const cap = terms.lineVarianceLimitPct
+        ? Math.round(budget * (1 + terms.lineVarianceLimitPct / 100))
+        : budget;
       const over = actual > cap;
       return { code: bl.code, name: bl.name, budget, actual, remaining, pct, over, cap };
     });
@@ -65,8 +68,9 @@ export const grantReportData = query({
 });
 
 export const regenerateNarrative = action({
-  args: { grantId: v.string() },
-  handler: async (ctx, { grantId }): Promise<string> => {
+  args: { grantId: v.string(), passcode: v.optional(v.string()) },
+  handler: async (ctx, { grantId, passcode }): Promise<string> => {
+    assertDemoPasscode(passcode);
     const data = await ctx.runQuery(api.report.grantReportData, { grantId });
     if (!data) throw new Error("Grant not found");
     const model = getModelClient();
@@ -92,6 +96,7 @@ export const regenerateNarrative = action({
       toolName: "draft_narrative",
       toolDescription: "Draft the report narrative.",
       schema: NarrativeZ,
+      maxTokens: 800,
       content: [{ type: "text", text: payload }],
     });
     return out.narrative;

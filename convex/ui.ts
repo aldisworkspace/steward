@@ -4,19 +4,35 @@ import { ruleLabel } from "../lib/ruleLabels";
 
 const STATUS_RANK: Record<string, number> = { blocked: 0, needs_review: 1, auto: 2 };
 
+function isInboxResolved(
+  txnId: string,
+  entries: { txnId: string; state: string }[],
+  resolvedTxnIds: Set<string>,
+): boolean {
+  const entry = entries.find((e) => e.txnId === txnId);
+  if (entry && (entry.state === "approved" || entry.state === "rejected")) return true;
+  return resolvedTxnIds.has(txnId);
+}
+
 export const dashboardStats = query({
   args: {},
   handler: async (ctx) => {
-    const [decisions, txns] = await Promise.all([
+    const [decisions, txns, entries, resolutions] = await Promise.all([
       ctx.db.query("decisions").collect(),
       ctx.db.query("transactions").collect(),
+      ctx.db.query("proposedEntries").collect(),
+      ctx.db.query("inboxResolutions").collect(),
     ]);
+    const resolvedTxnIds = new Set(resolutions.map((r) => r.txnId));
     const byTxn = new Map(txns.map((t) => [t.txnId, t]));
     const exceptions = decisions.filter((d) => d.status !== "auto");
+    const openExceptions = exceptions.filter(
+      (d) => !isInboxResolved(d.txnId, entries, resolvedTxnIds),
+    );
     let atRiskCents = 0;
     const breakdown: { label: string; cents: number }[] = [];
     const breakdownMap = new Map<string, number>();
-    for (const d of exceptions) {
+    for (const d of openExceptions) {
       const t = byTxn.get(d.txnId);
       if (!t || t.amountCents >= 0) continue;
       let risk = d.atRiskCents ?? 0;
@@ -31,11 +47,12 @@ export const dashboardStats = query({
     return {
       total: decisions.length,
       clean: decisions.filter((d) => d.status === "auto").length,
-      needYou: exceptions.length,
+      needYou: openExceptions.length,
+      resolved: exceptions.length - openExceptions.length,
       atRiskCents,
       atRiskBreakdown: breakdown,
-      blocked: exceptions.filter((d) => d.status === "blocked").length,
-      review: exceptions.filter((d) => d.status === "needs_review").length,
+      blocked: openExceptions.filter((d) => d.status === "blocked").length,
+      review: openExceptions.filter((d) => d.status === "needs_review").length,
     };
   },
 });
@@ -43,12 +60,14 @@ export const dashboardStats = query({
 export const inboxQueue = query({
   args: {},
   handler: async (ctx) => {
-    const [decisions, txns, glRows, entries] = await Promise.all([
+    const [decisions, txns, glRows, entries, resolutions] = await Promise.all([
       ctx.db.query("decisions").collect(),
       ctx.db.query("transactions").collect(),
       ctx.db.query("glRows").collect(),
       ctx.db.query("proposedEntries").collect(),
+      ctx.db.query("inboxResolutions").collect(),
     ]);
+    const resolvedTxnIds = new Set(resolutions.map((r) => r.txnId));
     const byTxn = new Map(txns.map((t) => [t.txnId, t]));
     const glByRef = new Map(glRows.map((g) => [g.bankRef, g]));
     const entryByTxn = new Map(entries.filter((e) => e.state === "proposed").map((e) => [e.txnId, e]));
@@ -56,6 +75,7 @@ export const inboxQueue = query({
 
     const rows = decisions
       .filter((d) => d.status !== "auto")
+      .filter((d) => !isInboxResolved(d.txnId, entries, resolvedTxnIds))
       .map((d) => {
         const t = byTxn.get(d.txnId);
         const g = glByRef.get(d.txnId);
@@ -174,7 +194,7 @@ export const grantsSheets = query({
       const lineMeta: Record<string, { overCents: number; overPct: number }> = {};
       for (const bl of terms?.budgetLines ?? []) {
         const spent = spentByLine.get(`${gid}:${bl.code}`) ?? 0;
-        const budget = bl.amount * 100;
+        const budget = Math.round(bl.amount * 100);
         const cap = terms?.lineVarianceLimitPct
           ? Math.round(budget * (1 + terms.lineVarianceLimitPct / 100))
           : budget;

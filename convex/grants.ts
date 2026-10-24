@@ -1,14 +1,19 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { assertDemoPasscode } from "./passcode";
 
 export const generateUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => ctx.storage.generateUploadUrl(),
+  args: { passcode: v.optional(v.string()) },
+  handler: async (ctx, { passcode }) => {
+    assertDemoPasscode(passcode);
+    return ctx.storage.generateUploadUrl();
+  },
 });
 
 export const registerGrant = mutation({
-  args: { storageId: v.id("_storage"), fileName: v.string() },
-  handler: async (ctx, { storageId, fileName }) => {
+  args: { storageId: v.id("_storage"), fileName: v.string(), passcode: v.optional(v.string()) },
+  handler: async (ctx, { storageId, fileName, passcode }) => {
+    assertDemoPasscode(passcode);
     const existing = await ctx.db
       .query("grants")
       .withIndex("by_fileName", (q) => q.eq("fileName", fileName))
@@ -52,8 +57,9 @@ export const getByFileName = query({
 
 /** Clear error state so extractGrant can retry (PDF already in storage). */
 export const resetExtractErrors = mutation({
-  args: {},
-  handler: async (ctx) => {
+  args: { passcode: v.optional(v.string()) },
+  handler: async (ctx, { passcode }) => {
+    assertDemoPasscode(passcode);
     const grants = await ctx.db.query("grants").collect();
     let n = 0;
     for (const g of grants) {

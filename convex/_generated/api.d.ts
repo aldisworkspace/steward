@@ -11,11 +11,15 @@
 import type * as agent from "../agent.js";
 import type * as agentInternal from "../agentInternal.js";
 import type * as approvals from "../approvals.js";
+import type * as approverGuard from "../approverGuard.js";
 import type * as dashboard from "../dashboard.js";
+import type * as demoAuth from "../demoAuth.js";
 import type * as grants from "../grants.js";
 import type * as ingest from "../ingest.js";
+import type * as passcode from "../passcode.js";
 import type * as pdfText from "../pdfText.js";
 import type * as report from "../report.js";
+import type * as runGuard from "../runGuard.js";
 import type * as ui from "../ui.js";
 
 import type {
@@ -28,11 +32,15 @@ declare const fullApi: ApiFromModules<{
   agent: typeof agent;
   agentInternal: typeof agentInternal;
   approvals: typeof approvals;
+  approverGuard: typeof approverGuard;
   dashboard: typeof dashboard;
+  demoAuth: typeof demoAuth;
   grants: typeof grants;
   ingest: typeof ingest;
+  passcode: typeof passcode;
   pdfText: typeof pdfText;
   report: typeof report;
+  runGuard: typeof runGuard;
   ui: typeof ui;
 }>;
 

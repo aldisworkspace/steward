@@ -108,4 +108,12 @@ export default defineSchema({
     usageOutput: v.number(),
     errors: v.array(v.string()),
   }),
+
+  inboxResolutions: defineTable({
+    txnId: v.string(),
+    resolution: v.union(v.literal("acknowledged"), v.literal("overridden")),
+    by: v.string(),
+    at: v.string(),
+    note: v.string(),
+  }).index("by_txnId", ["txnId"]),
 });
