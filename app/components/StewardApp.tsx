@@ -9,11 +9,16 @@ import { fmtRisk, fmtSentenceAmount, fmtTableAmount, relativeTime } from "../for
 import { getDemoPasscode, hasDemoWriteAccess, initDemoPasscodeFromUrl } from "../lib/demoPasscode";
 import { messageFromConvexError } from "../lib/convexError";
 import { CaseFile } from "./CaseFile";
+import { CommandPalette, type Command } from "./CommandPalette";
+import { InboxQueue } from "./InboxQueue";
+import { OverviewTab } from "./OverviewTab";
 import { RedPenStrike } from "./RedPenStrike";
+import { TopBar } from "./TopBar";
 import { WhyDrawer } from "./WhyDrawer";
 import { YourDataTab } from "./YourDataTab";
+import type { InboxFilter } from "@/lib/inboxFilters";
 
-type Tab = "inbox" | "transactions" | "grants" | "report" | "proof" | "yourdata";
+type Tab = "overview" | "inbox" | "transactions" | "grants" | "report" | "proof" | "yourdata";
 
 const STEWARD_ACTOR = { id: "steward", label: "Steward (agent)" } as const;
 
@@ -30,12 +35,13 @@ export function StewardApp() {
   const demoGate = useQuery(api.demoAuth.gate);
   const runAgent = useAction(api.agent.runAgent);
   const resetRun = useMutation(api.ingest.resetRunState);
-  const resetExtractErrors = useMutation(api.grants.resetExtractErrors);
-  const extractGrant = useAction(api.agent.extractGrant);
   const regenerateNarrative = useAction(api.report.regenerateNarrative);
   const triggerMorningCheck = useMutation(api.deadlines.triggerMorningCheck);
 
-  const [tab, setTab] = useState<Tab>("inbox");
+  const [tab, setTab] = useState<Tab>("overview");
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
+  const [journalFilter, setJournalFilter] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [actor, setActor] = useState<"approver" | "steward">("approver");
   const [whyOpen, setWhyOpen] = useState(false);
@@ -43,15 +49,10 @@ export function StewardApp() {
   const [seedLoading, setSeedLoading] = useState(false);
   const [runLoading, setRunLoading] = useState(false);
   const [txnFilter, setTxnFilter] = useState<"all" | "clean" | "exceptions">("all");
-  const [prevNeedYou, setPrevNeedYou] = useState<number | null>(null);
-  const [countAnim, setCountAnim] = useState(false);
-  const [riskOpen, setRiskOpen] = useState(false);
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [statusNote, setStatusNote] = useState<string | null>(null);
   const [passcodeReady, setPasscodeReady] = useState(false);
   const caseData = useQuery(api.ui.caseFile, selected ? { txnId: selected } : "skip");
-  const grantList = useQuery(api.grants.list);
-  const grantsReady = (grantList ?? []).filter((g) => g.status === "ready").length >= 1;
   const showBadge = loaded || (counts && counts.transactions > 0);
   const actingAsSteward = actor === "steward";
   const approverLabel = workspace?.approverLabel ?? "A. Okafor (Executive Director)";
@@ -70,15 +71,6 @@ export function StewardApp() {
   useEffect(() => {
     if (!selected && exceptions.length) setSelected(exceptions[0].txnId);
   }, [exceptions, selected]);
-
-  useEffect(() => {
-    if (stats && prevNeedYou !== null && stats.needYou < prevNeedYou && stats.needYou === 0) {
-      setCountAnim(true);
-      const t = setTimeout(() => setCountAnim(false), 700);
-      return () => clearTimeout(t);
-    }
-    if (stats) setPrevNeedYou(stats.needYou);
-  }, [stats, prevNeedYou]);
 
   const onKey = useCallback(
     (e: KeyboardEvent) => {
@@ -170,32 +162,58 @@ export function StewardApp() {
     }
   }
 
-  async function retryGrant(grantDocId: string) {
-    if (!canWrite) return;
-    setInlineError(null);
-    try {
-      await resetExtractErrors({ passcode: getDemoPasscode() });
-      await extractGrant({ grantDocId: grantDocId as never, passcode: getDemoPasscode() });
-    } catch (e) {
-      setInlineError(messageFromConvexError(e));
+  useEffect(() => {
+    function onCmd(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCmdOpen(true);
+      }
     }
-  }
+    window.addEventListener("keydown", onCmd);
+    return () => window.removeEventListener("keydown", onCmd);
+  }, []);
 
-  const statusLine = useMemo(() => {
-    if (run?.status === "running") {
-      const n = stats?.total ?? counts?.transactions ?? 0;
-      return `Steward is reviewing ${n} transactions…`;
-    }
-    if (!counts?.transactions) return null;
-    if (stats?.needYou === 0 && counts?.transactions) return "Everything reconciles. Nothing needs you.";
-    if (!stats) return "Loading review…";
-    const resolved = stats.resolved ?? 0;
-    const resolvedBit = resolved > 0 ? `, ${resolved} resolved` : "";
-    return `Steward reviewed ${stats.total} transactions. ${stats.clean} are clean. ${stats.needYou} need you${resolvedBit} — ${fmtRisk(stats.atRiskCents)} of grant charges at risk.`;
-  }, [run, stats, counts]);
-
-  const blocked = exceptions.filter((e) => e.status === "blocked");
-  const review = exceptions.filter((e) => e.status === "needs_review");
+  const paletteCommands = useMemo((): Command[] => {
+    const next = exceptions[0];
+    return [
+      {
+        id: "review-next",
+        label: "Review next item",
+        run: () => {
+          setTab("inbox");
+          if (next) setSelected(next.txnId);
+        },
+      },
+      {
+        id: "run",
+        label: "Run Steward",
+        run: () => void onRunSteward(),
+      },
+      {
+        id: "feed",
+        label: "Bank feed arrives",
+        run: () => void bankFeedSeptOct(),
+      },
+      {
+        id: "report",
+        label: "Draft funder report",
+        run: () => setTab("report"),
+      },
+      {
+        id: "why",
+        label: "Ask Steward why…",
+        run: () => {
+          setTab("inbox");
+          setWhyOpen(true);
+        },
+      },
+      {
+        id: "actor",
+        label: "Switch acting user",
+        run: () => setActor((a) => (a === "approver" ? "steward" : "approver")),
+      },
+    ];
+  }, [exceptions]);
 
   if (!counts?.transactions) {
     return (
@@ -207,7 +225,7 @@ export function StewardApp() {
             type="button"
             onClick={() => void loadDemo()}
             disabled={seedLoading}
-            className="mt-6 rounded-[4px] bg-ledger px-5 py-2.5 text-[15px] font-medium text-white disabled:opacity-50"
+            className="mt-6 rounded-[6px] bg-money px-5 py-2.5 text-[15px] font-medium text-white disabled:opacity-50"
           >
             {seedLoading ? "Loading…" : "Load July–August"}
           </button>
@@ -218,179 +236,108 @@ export function StewardApp() {
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      <header className="border-b border-rule bg-sheet px-6 py-3 flex flex-wrap items-center gap-4">
-        <span className="text-[17px] font-semibold">Steward</span>
-        <span className="text-[15px] text-ink-2">{orgDisplay}</span>
-        {showBadge && !isCustomData && (
-          <span className="rounded-[4px] border border-pencil/30 bg-pencil-wash px-2 py-0.5 text-[13px] text-pencil">
-            Synthetic demo data
-          </span>
-        )}
-        {isCustomData && (
-          <span className="rounded-[4px] border border-rule px-2 py-0.5 text-[13px] text-ink-2">
-            Your data — not stored beyond this demo workspace
-          </span>
-        )}
-        {passcodeReady && demoGate?.requiresPasscode && !canWrite && (
-          <span className="text-[13px] text-ink-2">View-only demo</span>
-        )}
-        <div className="ml-auto flex items-center gap-2 text-[13px]">
-          <label htmlFor="actor" className="text-ink-2">
-            Acting as
-          </label>
-          <select
-            id="actor"
-            className="rounded-[4px] border border-rule bg-sheet px-2 py-1 text-[13px]"
-            value={actor}
-            onChange={(e) => setActor(e.target.value as "approver" | "steward")}
-          >
-            <option value="approver">{approverLabel}</option>
-            <option value="steward">{STEWARD_ACTOR.label}</option>
-          </select>
-        </div>
-      </header>
+      <TopBar
+        orgDisplay={orgDisplay}
+        showSyntheticBadge={!!showBadge}
+        isCustomData={isCustomData}
+        viewOnly={passcodeReady && !!demoGate?.requiresPasscode && !canWrite}
+        runStatus={run?.status}
+        runProgress={run?.progress}
+        actor={actor}
+        setActor={setActor}
+        approverLabel={approverLabel}
+        stewardLabel={STEWARD_ACTOR.label}
+        onOpenCommand={() => setCmdOpen(true)}
+      />
 
-      <div className="border-b border-rule bg-sheet px-6 py-4">
-        <p
-          className={`text-[32px] font-semibold leading-[1.2] ${stats?.needYou === 0 ? "text-ledger" : "text-ink"} ${countAnim ? "count-animate" : ""}`}
-        >
-          {statusLine}
-          {stats && stats.atRiskCents > 0 && stats.needYou > 0 && (
-            <span className="relative ml-2 inline-block align-middle">
-              <button
-                type="button"
-                aria-label="At-risk breakdown"
-                className="text-[15px] font-normal text-ink-2 underline"
-                onClick={() => setRiskOpen((o) => !o)}
-              >
-                ⓘ
-              </button>
-              {riskOpen && (
-                <div className="absolute left-0 top-full z-20 mt-2 w-64 rounded-[6px] border border-rule bg-sheet p-3 text-[13px] font-normal text-ink shadow-none">
-                  <p className="font-medium text-ink-2">At-risk breakdown</p>
-                  <ul className="mt-2 space-y-1">
-                    {(stats.atRiskBreakdown ?? []).map((b) => (
-                      <li key={b.label} className="flex justify-between gap-2">
-                        <span>{b.label}</span>
-                        <span className="tabular">{fmtRisk(b.cents)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </span>
-          )}
-        </p>
-        {(inlineError || statusNote) && (
-          <p className="mt-2 text-[13px] text-redpen" role="alert">
-            {inlineError ?? statusNote}
-          </p>
-        )}
-        {run?.status === "error" && run.errors.length > 0 && (
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <p className="text-[13px] text-redpen">{run.errors[0]}</p>
+      <nav className="border-b border-rule bg-sheet">
+        <div className="mx-auto flex max-w-[1280px] gap-6 px-6 text-[15px]">
+          {(
+            [
+              ["overview", "Overview"],
+              ["inbox", "Inbox"],
+              ["transactions", "Transactions"],
+              ["grants", "Grants"],
+              ["report", "Report"],
+              ["proof", "Proof"],
+              ["yourdata", "Your data"],
+            ] as const
+          ).map(([id, label]) => (
             <button
+              key={id}
               type="button"
-              onClick={() => void onRunSteward()}
-              className="rounded-[4px] border border-redpen px-2 py-1 text-[13px] text-redpen"
+              onClick={() => setTab(id)}
+              className={`border-b-2 py-3 ${tab === id ? "border-money font-medium text-ink" : "border-transparent text-ink-2"}`}
             >
-              Retry run
+              {label}
+              {id === "inbox" && stats && stats.needYou > 0 && (
+                <span className="ml-1.5 rounded-full bg-attention-tint px-1.5 text-[12px] text-attention">
+                  {stats.needYou}
+                </span>
+              )}
+            </button>
+          ))}
+          <div className="ml-auto flex items-center gap-3 py-2 text-[13px] text-ink-2">
+            <button type="button" onClick={() => void onReset()} className="underline">
+              Reset
+            </button>
+            <button type="button" onClick={() => void loadDemo()} disabled={seedLoading} className="underline">
+              Reload demo
             </button>
           </div>
-        )}
-        <div className="mt-3 flex flex-wrap gap-3 text-[13px]">
-          <button type="button" onClick={() => void onReset()} className="text-ink-2 underline">
-            Reset
-          </button>
-          <button type="button" onClick={() => void loadDemo()} disabled={seedLoading} className="text-ink-2 underline">
-            Load July–August
-          </button>
-          <button
-            type="button"
-            onClick={() => void bankFeedSeptOct()}
-            disabled={seedLoading || !counts?.transactions}
-            className="text-ledger underline disabled:opacity-40"
-          >
-            Bank feed: September–October arrives
-          </button>
-          <button
-            type="button"
-            disabled={!canWrite || !grantsReady || runLoading || run?.status === "running"}
-            onClick={() => void onRunSteward()}
-            className="text-ledger underline disabled:opacity-40"
-          >
-            Run Steward
-          </button>
         </div>
-        {(grantList ?? []).length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {(grantList ?? []).map((g) => (
-              <span
-                key={g._id}
-                className={`inline-flex items-center gap-2 rounded-[4px] border px-2 py-1 text-[13px] ${
-                  g.status === "ready"
-                    ? "border-ledger/40 text-ledger"
-                    : g.status === "error"
-                      ? "border-redpen/40 text-redpen"
-                      : "border-rule text-ink-2"
-                }`}
-              >
-                {g.fileName.replace(".pdf", "")}: {g.status}
-                {g.status === "error" && g.error && (
-                  <span className="max-w-[200px] truncate" title={g.error}>
-                    {g.error}
-                  </span>
-                )}
-                {g.status === "error" && canWrite && (
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => void retryGrant(g._id)}
-                  >
-                    Retry
-                  </button>
-                )}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <nav className="flex gap-6 border-b border-rule bg-sheet px-6 text-[15px]">
-        {(
-          [
-            ["inbox", "Inbox"],
-            ["transactions", "Transactions"],
-            ["grants", "Grants"],
-            ["report", "Report"],
-            ["proof", "Proof"],
-            ["yourdata", "Your data"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`border-b-2 py-3 ${tab === id ? "border-ledger font-medium text-ink" : "border-transparent text-ink-2"}`}
-          >
-            {label}
-          </button>
-        ))}
       </nav>
 
+      {(inlineError || statusNote) && (
+        <p className="mx-auto max-w-[1280px] px-6 py-2 text-[13px] text-redpen" role="alert">
+          {inlineError ?? statusNote}
+        </p>
+      )}
+      {run?.status === "error" && run.errors.length > 0 && (
+        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-3 px-6 py-2">
+          <p className="text-[13px] text-redpen">{run.errors[0]}</p>
+          <button
+            type="button"
+            onClick={() => void onRunSteward()}
+            className="rounded-[4px] border border-redpen px-2 py-1 text-[13px] text-redpen"
+          >
+            Retry run
+          </button>
+        </div>
+      )}
+
+      {tab === "overview" && (
+        <OverviewTab
+          stats={stats ?? undefined}
+          grants={grants}
+          ledger={ledger}
+          queue={exceptions}
+          runStatus={run?.status}
+          runProgress={run?.progress}
+          audit={audit}
+          onReviewInbox={() => setTab("inbox")}
+          onBankFeed={() => void bankFeedSeptOct()}
+          onDraftReport={() => setTab("report")}
+          onSankeyOutcome={(outcome) => {
+            setTab("inbox");
+            setInboxFilter(outcome === "disallowed" ? "disallowed" : "all");
+          }}
+          onJournalFilter={(action) => {
+            setJournalFilter(action);
+            setTab("inbox");
+          }}
+        />
+      )}
+
       {tab === "inbox" && (
-        <div className="grid min-h-[calc(100vh-220px)] grid-cols-[300px_1fr_280px]">
-          <aside className="border-r border-rule bg-paper">
-            {blocked.length > 0 && (
-              <QueueGroup title={`Blocked  ${blocked.length}`} rows={blocked} selected={selected} onSelect={setSelected} />
-            )}
-            {review.length > 0 && (
-              <QueueGroup title={`Review  ${review.length}`} rows={review} selected={selected} onSelect={setSelected} />
-            )}
-            {exceptions.length === 0 && (
-              <p className="p-4 text-[15px] text-ledger">Everything reconciles. Nothing needs you.</p>
-            )}
-          </aside>
+        <div className="mx-auto grid min-h-[calc(100vh-140px)] max-w-[1440px] grid-cols-[320px_1fr_280px]">
+          <InboxQueue
+            rows={exceptions}
+            selected={selected}
+            onSelect={setSelected}
+            filter={inboxFilter}
+            setFilter={setInboxFilter}
+          />
           <section className="relative border-r border-rule bg-sheet">
             <CaseFile
               data={caseData}
@@ -407,6 +354,8 @@ export function StewardApp() {
             audit={audit}
             run={run}
             canWrite={canWrite}
+            filterAction={journalFilter}
+            onClearFilter={() => setJournalFilter(null)}
             onMorningCheck={() => triggerMorningCheck({ passcode: getDemoPasscode() })}
           />
         </div>
@@ -437,6 +386,17 @@ export function StewardApp() {
         />
       )}
 
+      <CommandPalette
+        open={cmdOpen}
+        onClose={() => setCmdOpen(false)}
+        commands={paletteCommands}
+        transactions={ledger ?? []}
+        onJumpTxn={(txnId) => {
+          setTab("inbox");
+          setSelected(txnId);
+        }}
+      />
+
       <WhyDrawer
         txnId={selected}
         open={whyOpen}
@@ -448,80 +408,47 @@ export function StewardApp() {
   );
 }
 
-function QueueGroup({
-  title,
-  rows,
-  selected,
-  onSelect,
-}: {
-  title: string;
-  rows: {
-    txnId: string;
-    amountCents: number;
-    description: string;
-    reason: string;
-    ruleId?: string | null;
-    status: string;
-    hasPrecedent?: boolean;
-  }[];
-  selected: string | null;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <div>
-      <p className="px-3 py-2 text-[13px] font-medium text-ink-2">{title}</p>
-      {rows.map((r) => (
-        <button
-          key={r.txnId}
-          type="button"
-          onClick={() => onSelect(r.txnId)}
-          className={`flex h-14 w-full flex-col justify-center border-l-[3px] px-3 text-left ${
-            r.status === "blocked" ? "border-l-redpen" : "border-l-pencil"
-          } ${selected === r.txnId ? "border-l-ink bg-sheet" : "border-l-transparent hover:bg-sheet/60"}`}
-        >
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="truncate text-[15px] font-medium">{r.description}</span>
-            <span className="tabular shrink-0 text-[15px] font-semibold">{fmtTableAmount(r.amountCents)}</span>
-          </div>
-          <p className="line-clamp-2 text-[13px] text-ink-2" title={r.ruleId ?? undefined}>
-            {r.reason}
-            {r.hasPrecedent ? " Ⓟ" : ""}
-          </p>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function JournalPanel({
   audit,
   run,
   canWrite,
   onMorningCheck,
+  filterAction,
+  onClearFilter,
 }: {
   audit: { at: string; actor: string; action: string; why: string; targetId: string }[] | undefined;
   run: { progress: string; status: string } | null | undefined;
   canWrite: boolean;
   onMorningCheck: () => void;
+  filterAction: string | null;
+  onClearFilter: () => void;
 }) {
+  const rows = (audit ?? []).filter((a) => !filterAction || a.action === filterAction);
   return (
     <aside className="overflow-y-auto bg-paper p-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-[13px] font-medium text-ink-2">Journal</h2>
-        {canWrite && (
-          <button type="button" className="text-[12px] text-ledger underline" onClick={onMorningCheck}>
-            Run morning check
-          </button>
-        )}
+        <div className="flex gap-2">
+          {filterAction && (
+            <button type="button" className="text-[12px] text-sky underline" onClick={onClearFilter}>
+              Clear filter
+            </button>
+          )}
+          {canWrite && (
+            <button type="button" className="text-[12px] text-money underline" onClick={onMorningCheck}>
+              Run morning check
+            </button>
+          )}
+        </div>
       </div>
       {run?.status === "running" && (
-        <p className="journal-item-new mt-3 text-[13px] text-ink-2">{run.progress}</p>
+        <p className="mt-3 text-[13px] text-ink-2">{run.progress}</p>
       )}
       <ul className="mt-3 space-y-3">
-        {(audit ?? []).map((a, i) => (
+        {rows.map((a, i) => (
           <li
             key={`${a.at}-${i}`}
-            className={`${i === 0 ? "journal-item-new" : ""} whitespace-normal text-[13px] leading-[1.45]`}
+            className="whitespace-normal text-[13px] leading-[1.45]"
           >
             <span className={a.actor === "steward" ? "text-ink-2" : "text-ink"}>{formatAudit(a)}</span>
             <span className="text-ink-2"> · {relativeTime(a.at)}</span>

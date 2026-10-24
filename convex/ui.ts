@@ -89,6 +89,7 @@ export const inboxQueue = query({
         return {
           txnId: d.txnId,
           status: d.status,
+          grantId: d.grantId,
           amountCents: t?.amountCents ?? 0,
           description: t?.description ?? "",
           reason,

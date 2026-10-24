@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { useEffect, useState } from "react";
 import { api } from "@/convex/_generated/api";
@@ -11,7 +10,9 @@ import { vendorKey } from "@/lib/vendorKey";
 import { stewardCodingLabel } from "@/lib/codingLabel";
 import type { GrantTerms } from "@/lib/types";
 import { fmtSentenceAmount, fmtTableAmount } from "../format";
+import { EvidenceChip } from "./EvidenceChip";
 import { RedPenStrike } from "./RedPenStrike";
+import { RubberStamp } from "./RubberStamp";
 
 type CaseData = {
   txn: { txnId: string; date: string; description: string; amountCents: number; memo: string } | null;
@@ -103,6 +104,14 @@ function CaseFileInner({
   const [actionError, setActionError] = useState<string | null>(null);
   const [precedentScope, setPrecedentScope] = useState<"txn" | "vendor">("txn");
   const [rulingType, setRulingType] = useState<RulingType>("allow");
+  const [entryStamp, setEntryStamp] = useState<"approved" | "returned" | null>(null);
+  const [stampAnimate, setStampAnimate] = useState(false);
+  const stampDate = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const stampBy = actorLabel.replace(/\s*\(.*\)$/, "");
+
+  useEffect(() => {
+    setStampAnimate(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }, []);
 
   function defaultRuling(ruleId: string | null | undefined): RulingType {
     if (ruleId === "R-PRIOR-APPROVAL") return "prior_approval_granted";
@@ -173,6 +182,7 @@ function CaseFileInner({
           note: "Approved in inbox review",
           passcode,
         });
+        setEntryStamp("approved");
         onStatusLine("Entry approved");
       } catch (e) {
         const msg = messageFromConvexError(e);
@@ -222,6 +232,7 @@ function CaseFileInner({
         });
         setRejectOpen(false);
         setRejectNote("");
+        setEntryStamp("returned");
         onStatusLine("Entry rejected");
       } catch (e) {
         const msg = messageFromConvexError(e);
@@ -304,7 +315,7 @@ function CaseFileInner({
             <h2 className="text-[22px] font-semibold leading-[1.2] text-ink">{txn.description}</h2>
             <p className="mt-1 text-[13px] text-ink-2">{txn.date}</p>
           </div>
-          <p className="tabular text-[32px] font-semibold leading-[1.2] text-ink">
+          <p className="font-display tabular text-[44px] font-bold leading-[1.1] text-ink">
             {fmtSentenceAmount(txn.amountCents)}
           </p>
         </div>
@@ -315,16 +326,28 @@ function CaseFileInner({
           ) : (
             <span className="text-[15px] text-ink-2">Not yet coded</span>
           )}
-          <span className="text-[17px] font-semibold text-ledger">{stewardLabel}</span>
+          <span className="text-[17px] font-semibold text-money">{stewardLabel}</span>
         </div>
 
-        <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-          {bankEv && <Cell label="Bank Ⓑ" body={bankEv.note} disagree={false} />}
+        <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3">
+          {bankEv && <EvidenceChip source="bank" label="Bank Ⓑ" body={bankEv.note} />}
           {glEv && (
-            <Cell label="Books Ⓛ" body={glEv.note} disagree={stewardLabel !== bkLabel && !!bkLabel} />
+            <EvidenceChip
+              source="gl"
+              label="Books Ⓛ"
+              body={
+                <>
+                  {glEv.note}
+                  {stewardLabel !== bkLabel && bkLabel && (
+                    <p className="mt-2 border-b-2 border-redpen text-ink-2">Disagrees with bookkeeper</p>
+                  )}
+                </>
+              }
+            />
           )}
           {clauses.length > 0 && (
-            <Cell
+            <EvidenceChip
+              source="contract"
               label="Contract Ⓒ"
               body={
                 <div className="space-y-3">
@@ -336,10 +359,14 @@ function CaseFileInner({
                   ))}
                 </div>
               }
-              disagree={decision.status === "blocked"}
             />
           )}
-          {timeEv && <Cell label="Time record Ⓣ" body={timeEv.note} disagree={false} />}
+          {timeEv && <EvidenceChip source="time_record" label="Time record Ⓣ" body={timeEv.note} />}
+          {evidence
+            .filter((e) => e.source === "precedent")
+            .map((e) => (
+              <EvidenceChip key={e.ref} source="precedent" label={`Precedent Ⓟ ${e.ref}`} body={e.note} />
+            ))}
         </div>
 
         <div className="mt-8 max-w-[75ch]">
@@ -356,7 +383,15 @@ function CaseFileInner({
         </div>
 
         {entry && lines.length > 0 && (
-          <div className="mt-8">
+          <div className="relative mt-8">
+            {entryStamp && (
+              <RubberStamp
+                kind={entryStamp}
+                by={stampBy}
+                dateLabel={stampDate}
+                animate={stampAnimate}
+              />
+            )}
             <h3 className="text-[17px] font-semibold text-ink">Proposed journal entry</h3>
             <table className="mt-3 w-full border-collapse text-[13px]">
               <thead>
@@ -387,7 +422,7 @@ function CaseFileInner({
                 </tr>
               </tfoot>
             </table>
-            {balanced && <p className="mt-2 text-[13px] font-medium text-ledger">Balanced</p>}
+            {balanced && <p className="mt-2 text-[13px] font-medium text-money">Balanced</p>}
           </div>
         )}
 
@@ -418,7 +453,7 @@ function CaseFileInner({
                 type="button"
                 disabled={!canWrite}
                 onClick={() => void onApprove()}
-                className="rounded-[4px] bg-ledger px-4 py-2 text-[15px] font-medium text-white disabled:opacity-40"
+                className="rounded-[6px] bg-money px-4 py-2 text-[15px] font-medium text-white disabled:opacity-40"
               >
                 Approve entry
               </button>
@@ -437,7 +472,7 @@ function CaseFileInner({
                 type="button"
                 disabled={!canWrite}
                 onClick={() => (ackOpen ? void onApprove() : setAckOpen(true))}
-                className="rounded-[4px] bg-ledger px-4 py-2 text-[15px] font-medium text-white disabled:opacity-40"
+                className="rounded-[6px] bg-money px-4 py-2 text-[15px] font-medium text-white disabled:opacity-40"
               >
                 Acknowledge
               </button>
@@ -608,19 +643,3 @@ function PrecedentFields({
   );
 }
 
-function Cell({
-  label,
-  body,
-  disagree,
-}: {
-  label: string;
-  body: ReactNode;
-  disagree: boolean;
-}) {
-  return (
-    <div className={`rounded-[4px] border border-rule p-3 ${disagree ? "border-b-2 border-b-redpen" : ""}`}>
-      <p className="text-[13px] font-medium text-ink-2">{label}</p>
-      <div className="mt-2 text-[13px] text-ink">{body}</div>
-    </div>
-  );
-}

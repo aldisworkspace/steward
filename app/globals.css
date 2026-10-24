@@ -1,35 +1,56 @@
 @import "tailwindcss";
 
 :root {
-  --paper: #f4f6f5;
+  --navy: #0e1b2c;
+  --navy-2: #1c2e45;
+  --paper: #eef2f6;
   --sheet: #ffffff;
-  --ink: #1b2430;
-  --ink-2: #5b6673;
-  --rule: #dce3e0;
-  --ledger: #0f5c4a;
-  --redpen: #c2362b;
-  --pencil: #a86a12;
-  --ledger-wash: #e6f0ec;
-  --redpen-wash: #f8e7e5;
-  --pencil-wash: #f6eedd;
+  --ink: #14202e;
+  --ink-2: #5a6878;
+  --rule: #dce3ea;
+  --money: #0e7c5a;
+  --money-tint: #ddf3ea;
+  --attention: #f2a93b;
+  --attention-tint: #fdf1dc;
+  --redpen: #e0433a;
+  --redpen-tint: #fce4e2;
+  --sky: #4c8df6;
+  --slate: #64748b;
+  /* legacy aliases */
+  --ledger: var(--money);
+  --pencil: var(--attention);
+  --ledger-wash: var(--money-tint);
+  --redpen-wash: var(--redpen-tint);
+  --pencil-wash: var(--attention-tint);
   --font-sans: var(--font-public-sans), system-ui, sans-serif;
   --font-serif: var(--font-newsreader), Georgia, serif;
+  --font-display: var(--font-bricolage), var(--font-public-sans), system-ui, sans-serif;
 }
 
 @theme inline {
+  --color-navy: var(--navy);
+  --color-navy-2: var(--navy-2);
   --color-paper: var(--paper);
   --color-sheet: var(--sheet);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-rule: var(--rule);
-  --color-ledger: var(--ledger);
+  --color-money: var(--money);
+  --color-money-tint: var(--money-tint);
+  --color-attention: var(--attention);
+  --color-attention-tint: var(--attention-tint);
   --color-redpen: var(--redpen);
-  --color-pencil: var(--pencil);
-  --color-ledger-wash: var(--ledger-wash);
-  --color-redpen-wash: var(--redpen-wash);
-  --color-pencil-wash: var(--pencil-wash);
+  --color-redpen-tint: var(--redpen-tint);
+  --color-sky: var(--sky);
+  --color-slate: var(--slate);
+  --color-ledger: var(--money);
+  --color-pencil: var(--attention);
+  --color-ledger-wash: var(--money-tint);
+  --color-redpen-wash: var(--redpen-tint);
+  --color-pencil-wash: var(--attention-tint);
   --font-sans: var(--font-public-sans), system-ui, sans-serif;
   --font-serif: var(--font-newsreader), Georgia, serif;
+  --font-display: var(--font-display);
 }
 
 html {
@@ -48,12 +69,16 @@ body {
   font-family: var(--font-serif);
 }
 
+.font-display {
+  font-family: var(--font-display);
+}
+
 .tabular {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
 :focus-visible {
-  outline: 2px solid var(--ledger);
+  outline: 2px solid var(--sky);
   outline-offset: 2px;
 }
 
@@ -79,7 +104,49 @@ body {
   }
 }
 
-@keyframes journal-in {
+@keyframes presence-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.35);
+  }
+}
+
+.presence-dot-running {
+  animation: presence-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes stamp-drop {
+  from {
+    opacity: 0;
+    transform: rotate(-6deg) scale(1.4);
+  }
+  to {
+    opacity: 0.7;
+    transform: rotate(-6deg) scale(1);
+  }
+}
+
+.stamp-animate {
+  animation: stamp-drop 220ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .presence-dot-running,
+  .stamp-animate {
+    animation: none;
+  }
+  .stamp-animate {
+    opacity: 0.7;
+    transform: rotate(-6deg) scale(1);
+  }
+}
+
+@keyframes sankey-draw {
   from {
     opacity: 0;
   }
@@ -88,26 +155,14 @@ body {
   }
 }
 
-.journal-item-new {
-  animation: journal-in 150ms ease-out;
-}
-
-@keyframes count-down {
-  from {
-    opacity: 0.6;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.count-animate {
-  animation: count-down 600ms ease-out;
+.sankey-band-animate {
+  animation: sankey-draw 900ms ease-out forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .count-animate {
+  .sankey-band-animate {
     animation: none;
+    opacity: 1;
   }
 }
 
