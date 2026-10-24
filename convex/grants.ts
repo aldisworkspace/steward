@@ -1,0 +1,51 @@
+import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
+
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => ctx.storage.generateUploadUrl(),
+});
+
+export const registerGrant = mutation({
+  args: { storageId: v.id("_storage"), fileName: v.string() },
+  handler: async (ctx, { storageId, fileName }) => {
+    const existing = await ctx.db
+      .query("grants")
+      .withIndex("by_fileName", (q) => q.eq("fileName", fileName))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, { storageId, status: "uploaded", error: undefined });
+      return existing._id;
+    }
+    return await ctx.db.insert("grants", {
+      storageId,
+      fileName,
+      terms: null,
+      status: "uploaded",
+    });
+  },
+});
+
+export const list = query({
+  args: {},
+  handler: async (ctx) => {
+    const grants = await ctx.db.query("grants").collect();
+    return grants.map((g) => ({
+      _id: g._id,
+      fileName: g.fileName,
+      grantId: g.grantId ?? (g.terms as { grantId?: string } | null)?.grantId ?? null,
+      status: g.status,
+      error: g.error,
+      budgetLineCount:
+        g.terms && typeof g.terms === "object" && g.terms !== null && "budgetLines" in g.terms
+          ? (g.terms as { budgetLines: unknown[] }).budgetLines.length
+          : 0,
+    }));
+  },
+});
+
+export const getByFileName = query({
+  args: { fileName: v.string() },
+  handler: async (ctx, { fileName }) =>
+    ctx.db.query("grants").withIndex("by_fileName", (q) => q.eq("fileName", fileName)).first(),
+});

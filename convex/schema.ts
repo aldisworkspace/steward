@@ -1,51 +1,22 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-const evidence = v.object({
-  source: v.union(
-    v.literal("bank"),
-    v.literal("gl"),
-    v.literal("contract"),
-    v.literal("time_record"),
-    v.literal("precedent"),
-    v.literal("human"),
-    v.literal("rule"),
-  ),
-  ref: v.string(),
-  note: v.string(),
-});
-
-const grantTerms = v.object({
-  grantId: v.string(),
-  funder: v.string(),
-  program: v.string(),
-  periodStart: v.string(),
-  periodEnd: v.string(),
-  totalAward: v.number(),
-  budgetLines: v.array(
-    v.object({ code: v.string(), name: v.string(), amount: v.number() }),
-  ),
-  lineVarianceLimitPct: v.union(v.number(), v.null()),
-  unallowable: v.array(v.object({ rule: v.string(), clauseRef: v.string() })),
-  priorApproval: v.array(
-    v.object({
-      rule: v.string(),
-      thresholdUsd: v.union(v.number(), v.null()),
-      clauseRef: v.string(),
-    }),
-  ),
-  indirectCapPct: v.union(v.number(), v.null()),
-  reportDue: v.union(v.string(), v.null()),
-  restrictedPurpose: v.string(),
-});
-
 export default defineSchema({
   grants: defineTable({
-    grantId: v.string(),
-    fileId: v.string(),
-    terms: v.union(grantTerms, v.null()),
-    status: v.string(),
-  }).index("by_grantId", ["grantId"]),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    grantId: v.optional(v.string()),
+    terms: v.union(v.any(), v.null()),
+    status: v.union(
+      v.literal("uploaded"),
+      v.literal("extracting"),
+      v.literal("ready"),
+      v.literal("error"),
+    ),
+    error: v.optional(v.string()),
+  })
+    .index("by_fileName", ["fileName"])
+    .index("by_grantId", ["grantId"]),
 
   transactions: defineTable({
     txnId: v.string(),
@@ -84,19 +55,11 @@ export default defineSchema({
     txnId: v.string(),
     grantId: v.union(v.string(), v.null()),
     budgetLine: v.union(v.string(), v.null()),
-    splits: v.optional(
-      v.array(
-        v.object({
-          grantId: v.union(v.string(), v.null()),
-          budgetLine: v.union(v.string(), v.null()),
-          amount: v.number(),
-        }),
-      ),
-    ),
+    splits: v.optional(v.any()),
     status: v.union(v.literal("auto"), v.literal("needs_review"), v.literal("blocked")),
     confidence: v.number(),
     rationale: v.string(),
-    evidence: v.array(evidence),
+    evidence: v.any(),
     ruleHits: v.array(v.string()),
   }).index("by_txnId", ["txnId"]),
 
@@ -105,15 +68,7 @@ export default defineSchema({
     txnId: v.string(),
     date: v.string(),
     memo: v.string(),
-    lines: v.array(
-      v.object({
-        account: v.string(),
-        class: v.union(v.string(), v.null()),
-        budgetLine: v.union(v.string(), v.null()),
-        debit: v.number(),
-        credit: v.number(),
-      }),
-    ),
+    lines: v.any(),
     state: v.union(
       v.literal("proposed"),
       v.literal("approved"),
@@ -139,5 +94,15 @@ export default defineSchema({
     targetId: v.string(),
     why: v.string(),
     evidence: v.array(v.string()),
+  }),
+
+  runs: defineTable({
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+    status: v.union(v.literal("running"), v.literal("done"), v.literal("error")),
+    progress: v.string(),
+    usageInput: v.number(),
+    usageOutput: v.number(),
+    errors: v.array(v.string()),
   }),
 });
