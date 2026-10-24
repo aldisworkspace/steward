@@ -17,6 +17,8 @@ import { CommandPalette, type Command } from "./CommandPalette";
 import { ContextPanel, type PanelMode } from "./ContextPanel";
 import { StatusBar } from "./StatusBar";
 import { InboxQueue } from "./InboxQueue";
+import { groupInboxRows } from "@/lib/inboxGroups";
+import { matchesInboxFilter } from "@/lib/inboxFilters";
 import { NavRail } from "./NavRail";
 import { OverviewTab } from "./OverviewTab";
 import { RedPenStrike } from "./RedPenStrike";
@@ -47,7 +49,7 @@ export function StewardApp() {
   const needsOverview = tab === "overview" || tab === "inbox";
   const stats = useQuery(api.ui.dashboardStats, needsOverview ? {} : "skip");
   const queue = useQuery(api.ui.inboxQueue, tab === "inbox" ? {} : "skip");
-  const resolvedQueue = useQuery(api.ui.inboxResolved, tab === "inbox" && inboxFilter === "resolved" ? {} : "skip");
+  const resolvedQueue = useQuery(api.ui.inboxResolved, tab === "inbox" && inboxFilter === "done" ? {} : "skip");
   const run = useQuery(api.dashboard.latestRun);
   const audit = useQuery(api.ui.auditFeed, tab === "overview" ? {} : "skip");
   const grants = useQuery(
@@ -71,6 +73,7 @@ export function StewardApp() {
 
   const [cmdOpen, setCmdOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
+  const [whyTxnId, setWhyTxnId] = useState<string | null>(null);
   const [actor, setActor] = useState<"approver" | "steward">("approver");
   const selected = caseId;
   const setSelected = setCaseId;
@@ -127,16 +130,30 @@ export function StewardApp() {
   );
 
   const inboxRowsBase =
-    inboxFilter === "resolved"
-      ? (resolvedQueue ?? []).map((r) => ({ ...r, resolved: true as const }))
+    inboxFilter === "done"
+      ? (resolvedQueue ?? []).map((r) => ({ ...r, resolved: true as const, atRiskCents: 0 }))
       : exceptions.map((r) => ({ ...r, resolved: false as const }));
 
   const inboxRows = inboxRowsBase.filter((r) => matchesFundFilter(r.grantId ?? null, fundFilter));
 
+  const inboxVisibleTxnIds = useMemo(() => {
+    const filtered = inboxRows.filter((r) =>
+      matchesInboxFilter(r.ruleId, r.status, inboxFilter, r.resolved),
+    );
+    return groupInboxRows(filtered).flatMap((g) =>
+      g.kind === "group" ? g.rows.map((r) => r.txnId) : [g.row.txnId],
+    );
+  }, [inboxRows, inboxFilter]);
+
+  const inboxAtRiskCents = useMemo(
+    () => exceptions.reduce((a, r) => a + ((r as { atRiskCents?: number }).atRiskCents ?? 0), 0),
+    [exceptions],
+  );
+
   useEffect(() => {
-    if (tab !== "inbox" || inboxFilter === "resolved") return;
-    if (!selected && inboxRows.length) setSelected(inboxRows[0].txnId);
-  }, [tab, inboxFilter, inboxRows, selected, setSelected]);
+    if (tab !== "inbox" || inboxFilter === "done") return;
+    if (!selected && inboxVisibleTxnIds.length) setSelected(inboxVisibleTxnIds[0]!);
+  }, [tab, inboxFilter, inboxVisibleTxnIds, selected, setSelected]);
 
   const panelOpen = panelMode !== null;
 
@@ -151,20 +168,20 @@ export function StewardApp() {
       ) {
         return;
       }
-      if (tab !== "inbox" || !inboxRows.length) return;
-      const idx = inboxRows.findIndex((x) => x.txnId === selected);
+      if (tab !== "inbox" || !inboxVisibleTxnIds.length) return;
+      const idx = inboxVisibleTxnIds.findIndex((x) => x === selected);
       if (e.key === "j" || e.key === "J") {
         e.preventDefault();
-        setSelected(inboxRows[Math.min(idx + 1, inboxRows.length - 1)]?.txnId ?? selected);
+        setSelected(inboxVisibleTxnIds[Math.min(idx + 1, inboxVisibleTxnIds.length - 1)] ?? selected);
       }
       if (e.key === "k" || e.key === "K") {
         e.preventDefault();
-        setSelected(inboxRows[Math.max(idx - 1, 0)]?.txnId ?? selected);
+        setSelected(inboxVisibleTxnIds[Math.max(idx - 1, 0)] ?? selected);
       }
       if (e.key === "?" && selected) setPanelMode("why");
       else if (e.key === "?") setHelpOpen(true);
     },
-    [tab, inboxRows, selected, setSelected, cmdOpen, panelOpen, helpOpen, setPanelMode],
+    [tab, inboxVisibleTxnIds, selected, setSelected, cmdOpen, panelOpen, helpOpen, setPanelMode],
   );
 
   useEffect(() => {
@@ -361,7 +378,9 @@ export function StewardApp() {
         onOpenCommand={() => setCmdOpen(true)}
       />
       <div className="flex min-h-0 flex-1">
-        <NavRail tab={tab} onTab={setTab} inboxCount={stats?.needYou ?? 0} />
+        <div className="relative w-16 shrink-0">
+          <NavRail tab={tab} onTab={setTab} inboxCount={stats?.needYou ?? 0} />
+        </div>
         <div className="flex min-w-0 flex-1 flex-col">
           {adminMode && (
             <div className="flex items-center justify-end gap-3 border-b border-rule bg-sheet px-4 py-2 text-[13px] text-ink-2">
@@ -427,7 +446,7 @@ export function StewardApp() {
               setTxnFilter("clean", fundFilterParam(nav.grantId));
               return;
             }
-            const filter = nav.outcome === "disallowed" ? "disallowed" : "needs_you";
+            const filter = nav.outcome === "disallowed" ? "not_allowed" : "all";
             setInboxFilter(filter, fundFilterParam(nav.grantId));
           }}
           onGrantInbox={(grantId) => setInboxFilter("all", grantId)}
@@ -436,10 +455,13 @@ export function StewardApp() {
       )}
 
       {tab === "inbox" && (
-        <div className="grid min-h-[calc(100vh-8rem)] grid-cols-12 gap-2">
-          <div className="col-span-12 lg:col-span-4">
+        <div className="grid h-[calc(100dvh-7rem)] grid-cols-[minmax(340px,30%)_1fr] gap-2">
+          <div className="min-h-0 overflow-y-auto">
             <InboxQueue
               rows={inboxRows}
+              atRiskCents={inboxAtRiskCents}
+              openCount={exceptions.length}
+              doneCount={stats?.resolved ?? 0}
               grants={grantTermsList}
               fundFilter={fundFilter}
               onClearFund={() => setInboxFilter(inboxFilter, null)}
@@ -516,7 +538,7 @@ export function StewardApp() {
               }}
             />
           </div>
-          <section className="relative col-span-12 min-h-[480px] rounded-[8px] border border-rule bg-sheet lg:col-span-8">
+          <section className="relative min-h-0 overflow-y-auto rounded-[8px] border border-rule bg-sheet">
             {caseData === undefined && selected ? (
               <CaseSkeleton />
             ) : (
@@ -531,7 +553,10 @@ export function StewardApp() {
                 helpOpen={helpOpen}
                 panelOpen={panelOpen}
                 onStatusLine={setStatusNote}
-                onWhy={() => setPanelMode("why")}
+                onWhy={() => {
+                  setWhyTxnId(selected);
+                  setPanelMode("why");
+                }}
                 onResolved={() => {
                   const rest = exceptions.filter((e) => e.txnId !== selected);
                   setSelected(rest[0]?.txnId ?? null);
@@ -547,7 +572,7 @@ export function StewardApp() {
                 onActionDone={(info) => {
                   if (info.kind === "approve") {
                     setStatusToast({
-                      message: "Entry approved",
+                      message: "Correction approved",
                       undo: () => {
                         void undoApprove({
                           entryId: info.entryId,
@@ -563,7 +588,7 @@ export function StewardApp() {
                     });
                   } else {
                     setStatusToast({
-                      message: "Decision recorded",
+                      message: "Agreed — Steward's call stands",
                       undo: () => {
                         void undoResolution({
                           txnId: info.txnId,
@@ -626,7 +651,7 @@ export function StewardApp() {
       <ContextPanel
         mode={panelMode}
         onClose={() => setPanelMode(null)}
-        txnId={selected}
+        txnId={panelMode === "why" ? whyTxnId : selected}
         passcode={getDemoPasscode()}
         canWrite={canWrite}
       />

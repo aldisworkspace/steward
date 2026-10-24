@@ -25,12 +25,13 @@ const VALID_TABS = new Set<AppTab>([
 
 const VALID_FILTERS = new Set<InboxFilter>([
   "all",
-  "disallowed",
-  "needs_you",
-  "prior_approval",
-  "bookkeeper",
-  "duplicates",
-  "resolved",
+  "not_allowed",
+  "approval",
+  "payroll",
+  "books",
+  "duplicate",
+  "other",
+  "done",
 ]);
 
 export function useAppUrlState() {
@@ -47,7 +48,16 @@ export function useAppUrlState() {
   const fundFilter = searchParams.get("fund");
   const inboxFilter = useMemo((): InboxFilter => {
     const f = searchParams.get("filter") ?? "all";
-    return VALID_FILTERS.has(f as InboxFilter) ? (f as InboxFilter) : "all";
+    const legacy: Record<string, InboxFilter> = {
+      disallowed: "not_allowed",
+      needs_you: "all",
+      prior_approval: "approval",
+      bookkeeper: "books",
+      duplicates: "duplicate",
+      resolved: "done",
+    };
+    const mapped = legacy[f] ?? f;
+    return VALID_FILTERS.has(mapped as InboxFilter) ? (mapped as InboxFilter) : "all";
   }, [searchParams]);
 
   const txnFilter = useMemo((): "all" | "clean" | "exceptions" | "blocked" => {

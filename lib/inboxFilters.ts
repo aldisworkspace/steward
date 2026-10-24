@@ -1,11 +1,36 @@
 export type InboxFilter =
   | "all"
-  | "disallowed"
-  | "needs_you"
-  | "prior_approval"
-  | "bookkeeper"
-  | "duplicates"
-  | "resolved";
+  | "not_allowed"
+  | "approval"
+  | "payroll"
+  | "books"
+  | "duplicate"
+  | "other"
+  | "done";
+
+export type InboxCategory =
+  | "not_allowed"
+  | "approval"
+  | "payroll"
+  | "books"
+  | "duplicate"
+  | "other";
+
+export function inboxCategory(
+  ruleId: string | null | undefined,
+  status: string,
+): InboxCategory {
+  if (status === "blocked" || ruleId?.startsWith("R-UNALLOWABLE") || ruleId === "R-PERIOD") {
+    return "not_allowed";
+  }
+  if (ruleId === "R-PRIOR-APPROVAL" || ruleId === "R-LINE-OVERRUN") return "approval";
+  if (ruleId === "R-EFFORT") return "payroll";
+  if (ruleId === "R-GL-DISAGREE" || ruleId === "R-DEPOSIT-MISMATCH" || ruleId === "R-GL-ORPHAN") {
+    return "books";
+  }
+  if (ruleId === "R-DUPLICATE") return "duplicate";
+  return "other";
+}
 
 export function matchesInboxFilter(
   ruleId: string | null | undefined,
@@ -13,14 +38,16 @@ export function matchesInboxFilter(
   filter: InboxFilter,
   resolved?: boolean,
 ): boolean {
-  if (filter === "resolved") return !!resolved;
+  if (filter === "done") return !!resolved;
   if (resolved) return false;
   if (filter === "all") return true;
-  if (filter === "disallowed") return status === "blocked";
-  if (filter === "needs_you") return status === "needs_review";
-  if (filter === "prior_approval") return ruleId === "R-PRIOR-APPROVAL";
-  if (filter === "bookkeeper") return ruleId === "R-GL-DISAGREE" || ruleId === "R-DEPOSIT-MISMATCH";
-  if (filter === "duplicates") return ruleId === "R-DUPLICATE";
+  const cat = inboxCategory(ruleId, status);
+  if (filter === "not_allowed") return cat === "not_allowed";
+  if (filter === "approval") return cat === "approval";
+  if (filter === "payroll") return cat === "payroll";
+  if (filter === "books") return cat === "books";
+  if (filter === "duplicate") return cat === "duplicate";
+  if (filter === "other") return cat === "other";
   return true;
 }
 
@@ -28,17 +55,22 @@ export function filterLabel(f: InboxFilter): string {
   switch (f) {
     case "all":
       return "All";
-    case "disallowed":
-      return "Disallowed";
-    case "needs_you":
-      return "Needs you";
-    case "prior_approval":
-      return "Needs approval";
-    case "bookkeeper":
-      return "Bookkeeper errors";
-    case "duplicates":
+    case "not_allowed":
+      return "Not allowed";
+    case "approval":
+      return "Funder approval";
+    case "payroll":
+      return "Payroll";
+    case "books":
+      return "Books don't match";
+    case "duplicate":
       return "Duplicates";
-    case "resolved":
-      return "Resolved";
+    case "other":
+      return "Other";
+    case "done":
+      return "Done";
   }
 }
+
+export const PRIMARY_FILTERS: InboxFilter[] = ["all", "not_allowed", "approval", "payroll"];
+export const MORE_FILTERS: InboxFilter[] = ["books", "duplicate", "other", "done"];
