@@ -502,9 +502,9 @@ function CaseFileInner({
             )}
             {evidence
               .filter((e) => e.source === "precedent")
-              .map((e) => (
+              .map((e, eIdx) => (
                 <button
-                  key={e.ref}
+                  key={`${e.ref}-${eIdx}`}
                   type="button"
                   className="rounded-full border border-attention/50 bg-attention-tint px-2 py-1 text-[12px]"
                   onClick={() => setEvidenceOpen(true)}
@@ -536,8 +536,8 @@ function CaseFileInner({
               label="Grant agreement"
               body={
                 <div className="space-y-3">
-                  {clauses.map((c) => (
-                    <div key={c.ref}>
+                  {clauses.map((c, cIdx) => (
+                    <div key={`${c.ref}-${cIdx}`}>
                       <p className="font-serif text-[16px] text-ink">{c.rule}</p>
                       <p className="mt-1 text-[13px] text-ink-2">{c.ref}</p>
                     </div>
@@ -549,8 +549,8 @@ function CaseFileInner({
           {timeEv && <EvidenceChip source="time_record" label="Time sheet" body={timeEv.note} />}
           {evidence
             .filter((e) => e.source === "precedent")
-            .map((e) => (
-              <EvidenceChip key={e.ref} source="precedent" label="Past ruling" body={e.note} />
+            .map((e, eIdx) => (
+              <EvidenceChip key={`${e.ref}-${eIdx}`} source="precedent" label="Past ruling" body={e.note} />
             ))}
         </div>
           )}
@@ -559,7 +559,7 @@ function CaseFileInner({
         {checks.length > 0 && (
           <ul className="mt-6 max-w-[75ch] space-y-1 text-[13px] text-ink-2">
             {checks.map((c, i) => (
-              <li key={i} title={c.ruleId ?? undefined}>
+              <li key={`${c.ruleId ?? "check"}-${i}`} title={c.ruleId ?? undefined}>
                 {c.label}: {c.message}
               </li>
             ))}

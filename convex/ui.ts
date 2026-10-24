@@ -1,10 +1,30 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { computeFundBreakdown } from "../lib/fundBreakdown";
+import { computeInboxOpenMetrics } from "../lib/inboxOpenMetrics";
 import { isInboxResolved } from "../lib/inboxResolved";
 import { ruleLabel } from "../lib/ruleLabels";
 
 const STATUS_RANK: Record<string, number> = { blocked: 0, needs_review: 1, auto: 2 };
+
+export const inboxBadge = query({
+  args: {},
+  handler: async (ctx) => {
+    const [decisions, txns, entries, resolutions] = await Promise.all([
+      ctx.db.query("decisions").collect(),
+      ctx.db.query("transactions").collect(),
+      ctx.db.query("proposedEntries").collect(),
+      ctx.db.query("inboxResolutions").collect(),
+    ]);
+    const resolvedTxnIds = new Set(resolutions.map((r) => r.txnId));
+    return computeInboxOpenMetrics({
+      decisions,
+      transactions: txns.map((t) => ({ txnId: t.txnId, amountCents: t.amountCents })),
+      entries: entries.map((e) => ({ txnId: e.txnId, state: e.state })),
+      resolutionTxnIds: resolvedTxnIds,
+    });
+  },
+});
 
 export const dashboardStats = query({
   args: {},
@@ -21,7 +41,12 @@ export const dashboardStats = query({
     const openExceptions = exceptions.filter(
       (d) => !isInboxResolved(d.txnId, entries, resolvedTxnIds),
     );
-    let atRiskCents = 0;
+    const { atRiskCents } = computeInboxOpenMetrics({
+      decisions,
+      transactions: txns.map((t) => ({ txnId: t.txnId, amountCents: t.amountCents })),
+      entries: entries.map((e) => ({ txnId: e.txnId, state: e.state })),
+      resolutionTxnIds: resolvedTxnIds,
+    });
     const breakdown: { label: string; cents: number }[] = [];
     const breakdownMap = new Map<string, number>();
     for (const d of openExceptions) {
@@ -29,7 +54,6 @@ export const dashboardStats = query({
       if (!t || t.amountCents >= 0) continue;
       const risk = d.atRiskCents ?? 0;
       if (risk <= 0) continue;
-      atRiskCents += risk;
       const label = d.ruleHits[0] ? ruleLabel(d.ruleHits[0]) : "Steward's judgment";
       breakdownMap.set(label, (breakdownMap.get(label) ?? 0) + risk);
     }

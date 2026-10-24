@@ -159,14 +159,14 @@ export function OverviewTab({
           </div>
         </div>
         <div className="mt-4 space-y-2">
-          {topLines.map((bl) => {
+          {topLines.map((bl, blIdx) => {
             const cap = t.lineVarianceLimitPct
               ? bl.lineBudget * (1 + t.lineVarianceLimitPct / 100)
               : bl.lineBudget;
             const fill = bl.lineBudget ? Math.min(100, (bl.lineSpent / bl.lineBudget) * 100) : 0;
             const capPct = bl.lineBudget ? Math.min(100, (cap / bl.lineBudget) * 100) : 100;
             return (
-              <div key={bl.code}>
+              <div key={`${bl.code}-${blIdx}`}>
                 <div className="flex justify-between text-[12px]">
                   <span>
                     {bl.name} <span className="text-ink-2">{bl.code}</span>

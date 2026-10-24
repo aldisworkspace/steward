@@ -103,8 +103,8 @@ export function WhyDrawer({
                   <p className="text-[15px] text-ink">{m.text}</p>
                   {m.cited && m.cited.length > 0 && (
                     <div className="flex flex-wrap gap-1">
-                      {m.cited.map((c) => (
-                        <span key={c} className="rounded-[4px] border border-rule px-2 py-0.5 text-[13px] text-ink-2">
+                      {m.cited.map((c, cIdx) => (
+                        <span key={`${c}-${cIdx}`} className="rounded-[4px] border border-rule px-2 py-0.5 text-[13px] text-ink-2">
                           {c}
                         </span>
                       ))}

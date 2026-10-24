@@ -46,6 +46,7 @@ export function StewardApp() {
     setTxnFilter,
   } = useAppUrlState();
   const counts = useQuery(api.ingest.counts);
+  const inboxBadge = useQuery(api.ui.inboxBadge);
   const needsOverview = tab === "overview" || tab === "inbox";
   const stats = useQuery(api.ui.dashboardStats, needsOverview ? {} : "skip");
   const queue = useQuery(api.ui.inboxQueue, tab === "inbox" ? {} : "skip");
@@ -116,6 +117,11 @@ export function StewardApp() {
     initDemoPasscodeFromUrl();
     setPasscodeReady(true);
   }, []);
+
+  useEffect(() => {
+    const open = inboxBadge?.open ?? 0;
+    document.title = open > 0 ? `(${open}) Steward` : "Steward";
+  }, [inboxBadge?.open]);
 
   useEffect(() => {
     if (!statusToast) return;
@@ -380,7 +386,7 @@ export function StewardApp() {
       />
       <div className="flex min-h-0 flex-1">
         <div className="relative w-16 shrink-0">
-          <NavRail tab={tab} onTab={setTab} inboxCount={stats?.needYou ?? 0} />
+          <NavRail tab={tab} onTab={setTab} inboxCount={inboxBadge?.open ?? 0} />
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           {adminMode && (
@@ -892,7 +898,7 @@ function GrantsTab({
               {fmtSentenceAmount(t.totalAward * 100)}
             </p>
             <div className="mt-6 space-y-4">
-              {t.budgetLines.map((bl) => {
+              {t.budgetLines.map((bl, blIdx) => {
                 const spent = g.spentByLine[`${t.grantId}:${bl.code}`] ?? 0;
                 const budget = bl.amount * 100;
                 const cap = t.lineVarianceLimitPct ? budget * (1 + t.lineVarianceLimitPct / 100) : budget;
@@ -901,7 +907,7 @@ function GrantsTab({
                 const overMeta = g.lineMeta?.[`${t.grantId}:${bl.code}`];
                 const overBarPct = budget && spent > budget ? Math.min(100, ((spent - budget) / budget) * 100) : 0;
                 return (
-                  <div key={bl.code}>
+                  <div key={`${bl.code}-${blIdx}`}>
                     <div className="flex justify-between text-[13px]">
                       <span>
                         {bl.name} <span className="text-ink-2">{bl.code}</span>
@@ -935,8 +941,8 @@ function GrantsTab({
               })}
             </div>
             <ul className="mt-6 space-y-2 border-t border-rule pt-4">
-              {(t.unallowable ?? []).map((u) => (
-                <li key={u.clauseRef} className="text-[15px]">
+              {(t.unallowable ?? []).map((u, uIdx) => (
+                <li key={`${u.clauseRef}-${uIdx}`} className="text-[15px]">
                   <span className="font-serif text-[16px]">{u.rule}</span>
                   <span className="mt-1 block text-[13px] text-ink-2">{u.clauseRef}</span>
                 </li>
@@ -1032,8 +1038,8 @@ function GrantReportSheet({
           </tr>
         </thead>
         <tbody>
-          {lines.map((l) => (
-            <tr key={l.code} className="border-b border-rule">
+          {lines.map((l, lIdx) => (
+            <tr key={`${l.code}-${lIdx}`} className="border-b border-rule">
               <td className="py-2">
                 {l.code} {l.name}
               </td>
