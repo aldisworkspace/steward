@@ -134,6 +134,19 @@ export function useAppUrlState() {
     [replaceParams],
   );
 
+  // One replace so a resolved txn id is not overwritten by a later stale replace.
+  const openResolvedInboxCase = useCallback(
+    (txnId: string, filter: InboxFilter) => {
+      replaceParams((p) => {
+        p.set("tab", "inbox");
+        p.set("case", txnId);
+        p.set("filter", filter);
+        p.delete("fund");
+      });
+    },
+    [replaceParams],
+  );
+
   return {
     tab,
     caseId,
@@ -145,5 +158,6 @@ export function useAppUrlState() {
     setInboxFilter,
     setTxnFilter,
     setFundFilter,
+    openResolvedInboxCase,
   };
 }

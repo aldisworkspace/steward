@@ -165,12 +165,37 @@ export const undoApproveEntry = mutation({
   args: { entryId: v.string(), by: v.string(), passcode: v.optional(v.string()) },
   handler: async (ctx, { entryId, by, passcode }) => {
     assertDemoPasscode(passcode);
-    const entry = (await ctx.db.query("proposedEntries").collect()).find((e) => e.id === entryId);
+    const entries = await ctx.db.query("proposedEntries").collect();
+    const entry = entries.find((e) => e.id === entryId);
     if (!entry) throw new Error("Entry not found");
     await assertHumanApprover(ctx, by, entry.txnId);
     if (entry.state !== "approved") throw new Error("Only approved entries can be undone");
-    await ctx.db.patch(entry._id, { state: "proposed", approvedBy: undefined });
+    await ctx.db.patch(entry._id, { state: "proposed", approvedBy: null });
     const at = new Date().toISOString();
+    // A transaction can have several entries. Reopen it only after its last
+    // approved entry is undone, preserving any independent human resolution.
+    const stillApproved = entries.some(
+      (other) => other._id !== entry._id && other.txnId === entry.txnId &&
+        (other.state === "approved" || other.state === "posted"),
+    );
+    if (!stillApproved) {
+      const resolutions = await ctx.db
+        .query("inboxResolutions")
+        .withIndex("by_txnId", (q) => q.eq("txnId", entry.txnId))
+        .collect();
+      for (const resolution of resolutions) {
+        if (resolution.resolution !== "approved_entry") continue;
+        await ctx.db.delete(resolution._id);
+        await ctx.db.insert("auditLog", {
+          at,
+          actor: by,
+          action: "undo_resolution",
+          targetId: entry.txnId,
+          why: `Approval of ${entryId} undone by ${by}`,
+          evidence: [entryId, resolution._id],
+        });
+      }
+    }
     await ctx.db.insert("auditLog", {
       at,
       actor: by,

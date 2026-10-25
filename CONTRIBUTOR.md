@@ -62,4 +62,4 @@ View-only: open `/app` without `?key=`. Write/seed: `/app?key=<passcode>`.
 3. Smoke: `/`, view-only `/app`, `/app?key=…` → Load July–August → auto-run → inbox → Black Cat deep link → Ask why → Steward approve refused → approve as A. Okafor → undo → ⌘K bank feed → auto-run; no console errors.
 4. PR to `main` with updated URLs only after smoke passes.
 
-**Checks before PR:** `npx tsc --noEmit`, `npx eslint app lib convex --quiet`, `npm run build`, all `scripts/test-*.ts` and `scripts/check-*.ts`.
+**Checks before PR:** `npx next typegen` (generates `LayoutProps` on a fresh checkout), `npx tsc --noEmit`, `npx eslint app lib convex --quiet`, `npm run build`, all `scripts/test-*.ts` and `scripts/check-*.ts`, and `scripts/verify-judge-scenario.ts`. Include `scripts/test-approvals.ts` for the approval/undo regression. A build with a placeholder Convex URL checks compilation only; the live smoke test still needs the existing backend.
