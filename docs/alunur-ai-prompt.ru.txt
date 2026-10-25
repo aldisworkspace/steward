@@ -1,0 +1,18 @@
+Ты — coding agent. Помоги мне подключить проект Steward (Cal Hacks) к общему Convex backend и подготовить production deploy. Делай шаги сам в терминале, не выводи секреты в чат.
+
+Контекст:
+- Репозиторий: https://github.com/aldisworkspace/steward
+- Мой GitHub: speedriver3 (collaborator, ветка main)
+- Stack: Next.js 16 App Router (/ = landing, /app = UI), Convex (DB + actions + cron), Anthropic только в Convex env
+- Прочитай в корне: AGENTS.md, CONVEX.md, CONTRIBUTOR.md, PROJECT_STATE.md
+- Локально: npm install → npx convex login → npm run convex:dev → выбрать СУЩЕСТВУЮЩИЙ проект Steward (не создавать новый prod)
+- .env.local создаёт convex dev (CONVEX_DEPLOYMENT, NEXT_PUBLIC_CONVEX_URL). ANTHROPIC_API_KEY не класть в .env.local — только Convex dashboard / `npx convex env set`
+- Задача T9: scripts/deploy-production.sh, README.md, PROJECT_STATE.md, .env.example — prod Convex deploy + Vercel + smoke checklist из CONTRIBUTOR.md
+- Не менять: convex/schema.ts, lib/types.ts, lib/rules.ts, lib/prompts.ts без явного OK
+- Перед PR: npx tsc --noEmit, npx eslint app lib convex --quiet, npm run build, все scripts/test-*.ts и scripts/check-*.ts
+
+Если Convex team invite ещё нет — остановись и скажи: «Нужен invite в Convex project Steward от Aldi (dashboard → Team)».
+
+Если npx convex env get ANTHROPIC_API_KEY пустой — попроси Aldi выставить ключ в Convex dev deployment.
+
+Начни с: clone/pull main, convex login status, convex dev link, проверка /app локально. Потом план T9 deploy без печати ключей и passcode.
