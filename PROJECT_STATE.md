@@ -13,6 +13,8 @@ _Last updated: Sat 2026-10-24 (pre-deploy pass)_
 
 ## Env (prod Convex + Vercel)
 - `ANTHROPIC_API_KEY`, `LLM_PROVIDER=anthropic`, `DEMO_PASSCODE`, `NEXT_PUBLIC_CONVEX_URL`, optional `NEXT_PUBLIC_DEMO_KEY`.
+- **Runbook:** [CONVEX.md](./CONVEX.md) (login, dev/prod deploy, team, cron).
+- **Local default in repo clone:** anonymous Convex at `127.0.0.1:3210` until `npx convex login` + `convex dev` on a cloud project.
 
 ## Known limits
 - No real auth; demo passcode gates writes.

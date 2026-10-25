@@ -23,11 +23,12 @@ Next.js (App Router), Convex, Anthropic Claude (`claude-haiku-5-5` bulk coding, 
 
 ```bash
 npm install
-npx convex dev          # sets CONVEX_DEPLOYMENT + NEXT_PUBLIC_CONVEX_URL
+npx convex login        # once per machine
+npm run convex:dev      # or: npx convex dev — writes .env.local
 npm run dev             # http://localhost:3000 and http://localhost:3000/app
 ```
 
-Copy `.env.example` to `.env.local` and set secrets in the Convex dashboard (`ANTHROPIC_API_KEY`, optional `DEMO_PASSCODE`). Never commit keys.
+**Convex setup (dev/prod, env, team):** see **[CONVEX.md](./CONVEX.md)**. Secrets live in the Convex dashboard only (`ANTHROPIC_API_KEY`, `LLM_PROVIDER`, `DEMO_PASSCODE`). Never commit keys.
 
 ### Demo seed
 

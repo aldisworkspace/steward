@@ -15,10 +15,12 @@
 
 ## Convex (development)
 
+Full runbook: **[CONVEX.md](./CONVEX.md)** (Russian/English commands).
+
 1. Install deps: `npm install`
 2. Log in: `npx convex login` (device flow at [auth.convex.dev/device](https://auth.convex.dev/device)).
 3. **Project access:** ask **Aldi** to add your Convex account to the **Steward** team project in [dashboard.convex.dev](https://dashboard.convex.dev) → Project → Settings → Team (same project Aldi uses for this repo).
-4. Link dev: from repo root, run `npx convex dev` and select **existing project** (do not create a duplicate prod deployment). This writes `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` into `.env.local` (gitignored).
+4. Link dev: `npm run convex:dev` and select **existing project** (do not create a duplicate prod deployment). This writes `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` into `.env.local` (gitignored).
 5. Read **AGENTS.md** and **PROJECT_STATE.md** before changing code. Do not edit `convex/schema.ts` or `lib/types.ts` without explicit approval.
 
 ## API keys (approved)
