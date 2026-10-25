@@ -1,40 +1,61 @@
 "use client";
 
-import { Check } from "lucide-react";
 import { useState } from "react";
+import { Clerk } from "./LandingMarks";
+
+const SOURCES = [
+  { label: "Bank", value: "−$482.50", marked: false },
+  { label: "Ledger", value: "Program supplies", marked: true },
+  { label: "Contract", value: "§4.7", marked: false },
+  { label: "Time records", value: "Staff allocation", marked: false },
+];
 
 export function SourcesDisagreeDemo() {
   return (
-    <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[12px]">
-      <div className="rounded-[6px] border border-rule bg-paper p-2 text-ink-2">Bank</div>
-      <div className="rounded-[6px] border border-rule bg-paper p-2 text-ink-2">
-        <span className="border-b-2 border-redpen pb-0.5 text-ink">Books</span>
-      </div>
-      <div className="rounded-[6px] border border-rule bg-paper p-2 text-ink-2">Contract</div>
-    </div>
+    <dl className="mt-8 max-w-[40rem] border-t border-rule">
+      {SOURCES.map((source) => (
+        <div
+          key={source.label}
+          className="grid grid-cols-[minmax(7.5rem,11rem)_minmax(0,1fr)] items-baseline gap-4 border-b border-rule py-3.5"
+        >
+          <dt className="text-[13px] text-ink-2">{source.label}</dt>
+          <dd className={`min-w-0 break-words text-[15px] text-ink ${source.label === "Bank" ? "tabular" : ""}`}>
+            {source.marked ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="border-b-2 border-redpen pb-0.5">{source.value}</span>
+                <Clerk className="text-ink-2" />
+              </span>
+            ) : (
+              source.value
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
 export function DefendDemo() {
   const [sent, setSent] = useState(false);
   return (
-    <div className="mt-1">
-      <div className="flex gap-2 rounded-[6px] bg-paper p-2">
-        <p className="flex-1 text-[14px] text-ink-2">“Could this be team building?”</p>
+    <div className="mt-4">
+      <div className="flex items-center gap-3">
+        <p className="min-w-0 flex-1 text-[14px] leading-snug text-ink">“Could this be team building?”</p>
         <button
           type="button"
-          className={`chip-button shrink-0 rounded-[6px] border border-ink-2 bg-sheet px-3 py-1.5 text-[13px] font-medium text-ink transition-transform active:scale-95 ${
-            sent ? "bento-send-pop bg-money-tint" : ""
+          aria-pressed={sent}
+          aria-label="Send the sample question. This does not call the model."
+          className={`landing-control chip-button inline-flex min-h-11 shrink-0 items-center rounded-[6px] border bg-sheet px-3 text-[13px] font-medium text-ink ${
+            sent ? "border-money bg-money-tint" : "border-rule"
           }`}
-          onClick={() => {
-            setSent(true);
-            window.setTimeout(() => setSent(false), 600);
-          }}
+          onClick={() => setSent((open) => !open)}
         >
-          Send
+          {sent ? "Sent" : "Send"}
         </button>
       </div>
-      <p className="mt-2 text-[13px] text-ink">Stands by it — cites §4.7 and prior rulings.</p>
+      <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
+        Sample reply: it stands by §4.7. This button does not call the model.
+      </p>
     </div>
   );
 }
@@ -42,28 +63,20 @@ export function DefendDemo() {
 export function ApproveDemo() {
   const [clicked, setClicked] = useState(false);
   return (
-    <div>
+    <div className="mt-4">
       <button
         type="button"
-        className={`chip-button rounded-[6px] border border-ink-2 bg-sheet px-4 py-2 text-[14px] font-semibold text-ink transition-all hover:bg-paper hover:brightness-105 active:scale-95 ${
-          clicked ? "bento-approve-shake border-redpen text-redpen" : ""
+        aria-pressed={clicked}
+        aria-describedby="example-approve-note"
+        className={`landing-control chip-button inline-flex min-h-11 items-center rounded-[6px] border bg-sheet px-4 text-[14px] font-semibold ${
+          clicked ? "border-redpen text-redpen" : "border-rule text-ink"
         }`}
-        onClick={() => {
-          setClicked(true);
-          window.setTimeout(() => setClicked(false), 1200);
-        }}
+        onClick={() => setClicked((open) => !open)}
       >
-        {clicked ? (
-          <span className="inline-flex items-center gap-1">
-            <Check size={16} aria-hidden />
-            Blocked
-          </span>
-        ) : (
-          "Approve"
-        )}
+        {clicked ? "Not allowed" : "Approve"}
       </button>
-      <p className="mt-2 text-[13px]">
-        Segregation of duties: Steward proposes entries but cannot approve them.
+      <p id="example-approve-note" className="mt-2 select-text text-[13px] leading-relaxed text-ink-2">
+        Example only. Steward can propose an entry. It cannot approve it, post it, or move money.
       </p>
     </div>
   );
