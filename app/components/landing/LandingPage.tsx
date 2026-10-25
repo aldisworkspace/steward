@@ -174,22 +174,30 @@ export function LandingPage() {
             </thead>
             <tbody>
               <tr className="border-b border-rule">
-                <td className="py-3 pr-4">Demo set (tuned)</td>
+                <td className="py-3 pr-4">Demo set (used during development)</td>
                 <td className="py-3 pr-4">12 of 12</td>
-                <td className="py-3 pr-4">1</td>
-                <td className="py-3">84 of 85</td>
+                <td className="py-3 pr-4">0</td>
+                <td className="py-3">85 of 85</td>
               </tr>
               <tr className="border-b border-rule">
-                <td className="py-3 pr-4">Hold-out set (not used for tuning)</td>
+                <td className="py-3 pr-4">
+                  Hold-out 1 (written before development finished; rules edited later — not fully independent)
+                </td>
                 <td className="py-3 pr-4">15 of 15</td>
-                <td className="py-3 pr-4">1</td>
-                <td className="py-3">52 of 53</td>
+                <td className="py-3 pr-4">0</td>
+                <td className="py-3">53 of 53</td>
+              </tr>
+              <tr className="border-b border-rule">
+                <td className="py-3 pr-4">Hold-out 2 (sealed: never seen by the code until this run)</td>
+                <td className="py-3 pr-4">17 of 17</td>
+                <td className="py-3 pr-4">0</td>
+                <td className="py-3">42 of 42</td>
               </tr>
             </tbody>
           </table>
           <p className="mt-4 max-w-[70ch] text-[14px] text-ink-2">
-            Both sets are synthetic and written by the builder. Rules alone catch 8 of 15 planted issues on the hold-out;
-            Claude catches the rest when the model is allowed to reason over contract text.
+            All sets are synthetic. Sealed run at commit <code className="text-ink">fc4ba9b</code> · 2026-10-25 — real
+            Claude extraction + coding; misses and false positives: none.
           </p>
         </section>
 

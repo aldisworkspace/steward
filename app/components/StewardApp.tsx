@@ -1109,24 +1109,44 @@ function GrantReportSheet({
   );
 }
 
+type EvalPublic = {
+  label?: string;
+  recall?: string;
+  precision?: string;
+  cleanRowAccuracy?: string;
+  commit?: string;
+  evaluatedAt?: string;
+  tokens?: { input: number; output: number };
+  misses?: string[];
+  falsePositives?: string[];
+};
+
 function ProofTab({ run }: { run: { usageInput: number; usageOutput: number } | null | undefined }) {
-  const [demoEval, setDemoEval] = useState<Record<string, unknown> | null>(null);
-  const [holdout, setHoldout] = useState<Record<string, unknown> | null>(null);
+  const [rows, setRows] = useState<EvalPublic[]>([]);
   useEffect(() => {
-    fetch("/eval-result.json")
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setDemoEval)
-      .catch(() => setDemoEval(null));
-    fetch("/eval-result-holdout.json")
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setHoldout)
-      .catch(() => setHoldout(null));
+    const paths = ["/eval-result.json", "/eval-result-holdout.json", "/eval-result-holdout2.json"];
+    void Promise.all(
+      paths.map((p) =>
+        fetch(p)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ),
+    ).then((data) => setRows(data.filter(Boolean) as EvalPublic[]));
   }, []);
+  const commit = rows[0]?.commit;
+  const evaluatedAt = rows[0]?.evaluatedAt?.slice(0, 10);
   return (
-    <div className="max-w-[75ch] space-y-6 p-6 text-[15px]">
+    <div className="max-w-[90ch] space-y-6 p-6 text-[15px]">
       <h2 className="text-[22px] font-semibold">How we know it works</h2>
       <p className="text-ink-2">
-        Demo set uses synthetic Valencia Youth Collective data. Model calls are real; funders and transactions are fictional.
+        Synthetic datasets only; model calls are real Anthropic extraction + coding (`scripts/eval-offline.ts`).
+        {commit ? (
+          <>
+            {" "}
+            Sealed at commit <span className="font-mono text-ink">{commit}</span>
+            {evaluatedAt ? ` · ${evaluatedAt}` : null}.
+          </>
+        ) : null}
       </p>
       <table className="w-full border-collapse text-[13px]">
         <thead>
@@ -1139,40 +1159,51 @@ function ProofTab({ run }: { run: { usageInput: number; usageOutput: number } | 
           </tr>
         </thead>
         <tbody>
-          <tr className="border-b border-rule">
-            <td className="py-2">Demo set</td>
-            <td className="py-2">{(demoEval?.issueRecall as string) ?? "—"}</td>
-            <td className="py-2">{(demoEval?.issuePrecision as string) ?? "—"}</td>
-            <td className="py-2">{(demoEval?.codingAccuracy as string) ?? "—"}</td>
-            <td className="py-2">
-              {run ? `${run.usageInput} in / ${run.usageOutput} out` : "—"}
-            </td>
-          </tr>
-          <tr className="border-b border-rule">
-            <td className="py-2">Hold-out set</td>
-            <td className="py-2">{((holdout?.recall ?? holdout?.issueRecall) as string) ?? "—"}</td>
-            <td className="py-2">{((holdout?.precision ?? holdout?.issuePrecision) as string) ?? "—"}</td>
-            <td className="py-2">{((holdout?.cleanRowAccuracy ?? holdout?.codingAccuracy) as string) ?? "—"}</td>
-            <td className="py-2 text-ink-2">
-              {holdout?.tokens
-                ? `${(holdout.tokens as { input: number; output: number }).input} in / ${(holdout.tokens as { input: number; output: number }).output} out`
-                : holdout
-                  ? "—"
-                  : "No hold-out eval yet."}
-            </td>
-          </tr>
+          {rows.map((row) => (
+            <tr key={row.label ?? row.recall} className="border-b border-rule align-top">
+              <td className="max-w-[22rem] py-2 pr-3">{row.label ?? row.recall ?? "—"}</td>
+              <td className="py-2">{row.recall ?? "—"}</td>
+              <td className="py-2">{row.precision ?? "—"}</td>
+              <td className="py-2">{row.cleanRowAccuracy ?? "—"}</td>
+              <td className="py-2 text-ink-2">
+                {row.tokens ? `${row.tokens.input} in / ${row.tokens.output} out` : "—"}
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
-      {Array.isArray(demoEval?.misses) && (demoEval!.misses as string[]).length > 0 ? (
-        <div>
-          <p className="text-[13px] font-medium text-ink-2">Misses</p>
-          <ul className="mt-2 list-disc pl-5 text-[13px] text-ink-2">
-            {(demoEval!.misses as string[]).slice(0, 8).map((m) => (
-              <li key={m}>{m}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      <p className="text-[13px] text-ink-2">
+        Live session tokens (latest run):{" "}
+        {run ? `${run.usageInput} in / ${run.usageOutput} out` : "—"}
+      </p>
+      {rows.some((r) => (r.misses?.length ?? 0) > 0 || (r.falsePositives?.length ?? 0) > 0) ? (
+        rows.map((row) => (
+          <div key={row.label}>
+            {(row.misses?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-[13px] font-medium text-ink-2">{row.label} — misses</p>
+                <ul className="mt-2 list-disc pl-5 text-[13px] text-ink-2">
+                  {row.misses!.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {(row.falsePositives?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-[13px] font-medium text-ink-2">{row.label} — false positives</p>
+                <ul className="mt-2 list-disc pl-5 text-[13px] text-ink-2">
+                  {row.falsePositives!.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ))
+      ) : (
+        <p className="text-[13px] text-ink-2">Misses and false positives: none on all sets.</p>
+      )}
     </div>
   );
 }

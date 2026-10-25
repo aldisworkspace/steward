@@ -63,7 +63,15 @@ npx tsx scripts/eval.ts
 
 ## Eval (sealed run)
 
-<!-- EVAL_TABLE -->
+Sealed offline evaluation at commit **`fc4ba9b`** (2026-10-25). Real Anthropic calls via `scripts/eval-offline.ts`; answer keys read only for scoring.
+
+| Set | Planted caught | False alarms | Clean coding |
+|-----|----------------|--------------|--------------|
+| Demo set (used during development) | 12 / 12 | 0 | 85 / 85 |
+| Hold-out 1 (written before development finished; rules edited later — not fully independent) | 15 / 15 | 0 | 53 / 53 |
+| Hold-out 2 (sealed: never seen by the code until this run) | 17 / 17 | 0 | 42 / 42 |
+
+Misses and false positives: none on all three sets.
 
 ## License
 

@@ -1,0 +1,22 @@
+{
+  "dataset": "steward-holdout2",
+  "label": "Hold-out 2 (sealed: never seen by the code until this run)",
+  "commit": "fc4ba9b",
+  "evaluatedAt": "2026-10-25T03:27:01-07:00",
+  "issues": 17,
+  "recall": "17/17",
+  "precision": "17/17",
+  "issueRecall": "17/17",
+  "issuePrecision": "17/17",
+  "cleanRowAccuracy": "42/42",
+  "codingAccuracy": "42/42",
+  "tokens": {
+    "input": 12203,
+    "output": 12552
+  },
+  "seconds": 36,
+  "errors": [],
+  "misses": [],
+  "falsePositives": [],
+  "codingMisses": []
+}

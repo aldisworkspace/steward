@@ -1,7 +1,22 @@
 {
+  "dataset": "steward-data",
+  "label": "Demo set (used during development)",
+  "commit": "fc4ba9b",
+  "evaluatedAt": "2026-10-25T03:27:01-07:00",
+  "issues": 12,
+  "recall": "12/12",
+  "precision": "12/12",
   "issueRecall": "12/12",
-  "issuePrecision": "12/13",
-  "codingAccuracy": "84/85",
-  "misses": ["T0009 COSTCO WHSE #0144 want GA-2026-114:A3 got null:null"],
-  "falsePositives": ["T0009"]
+  "issuePrecision": "12/12",
+  "cleanRowAccuracy": "85/85",
+  "codingAccuracy": "85/85",
+  "tokens": {
+    "input": 21940,
+    "output": 17517
+  },
+  "seconds": 41,
+  "errors": [],
+  "misses": [],
+  "falsePositives": [],
+  "codingMisses": []
 }

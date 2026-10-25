@@ -1,20 +1,22 @@
 {
   "dataset": "steward-holdout",
+  "label": "Hold-out 1 (written before development finished; rules edited later — not fully independent)",
+  "commit": "fc4ba9b",
+  "evaluatedAt": "2026-10-25T03:27:01-07:00",
   "issues": 15,
   "recall": "15/15",
-  "precision": "15/16",
-  "cleanRowAccuracy": "52/53",
+  "precision": "15/15",
+  "issueRecall": "15/15",
+  "issuePrecision": "15/15",
+  "cleanRowAccuracy": "53/53",
+  "codingAccuracy": "53/53",
   "tokens": {
-    "input": 13813,
-    "output": 13032
+    "input": 13713,
+    "output": 13534
   },
-  "seconds": 61,
+  "seconds": 37,
   "errors": [],
   "misses": [],
-  "falsePositives": [
-    "T0021"
-  ],
-  "codingMisses": [
-    "T0021 AMTRAK want PCAC-26-0412:C-5 got null:null"
-  ]
+  "falsePositives": [],
+  "codingMisses": []
 }
