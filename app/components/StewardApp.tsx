@@ -47,6 +47,7 @@ export function StewardApp() {
     setCaseId,
     setInboxFilter,
     setTxnFilter,
+    openResolvedInboxCase,
   } = useAppUrlState();
   const searchParams = useSearchParams();
   const deepLinkCase = caseId ?? searchParams.get("vendor");
@@ -141,10 +142,16 @@ export function StewardApp() {
     const resolved = resolveCaseDeepLink(deepLinkParam, rows, notAllowedTxnIds);
     if (!resolved) return;
     deepLinkHandled.current = deepLinkParam;
-    setCaseId(resolved);
-    setTab("inbox");
-    setInboxFilter("not_allowed");
-  }, [deepLinkParam, ledger, queue, setCaseId, setTab, setInboxFilter]);
+    if (
+      resolved === deepLinkParam &&
+      tab === "inbox" &&
+      inboxFilter === "not_allowed" &&
+      !fundFilter
+    ) {
+      return;
+    }
+    openResolvedInboxCase(resolved, "not_allowed");
+  }, [deepLinkParam, ledger, queue, openResolvedInboxCase, tab, inboxFilter, fundFilter]);
 
   useEffect(() => {
     const open = inboxBadge?.open ?? 0;
@@ -158,6 +165,10 @@ export function StewardApp() {
   }, [statusToast]);
 
   const exceptions = queue ?? [];
+  const inboxSelectionRef = useRef({ tab, selected, exceptions });
+  useEffect(() => {
+    inboxSelectionRef.current = { tab, selected, exceptions };
+  }, [tab, selected, exceptions]);
 
   const grantTermsList = useMemo(
     () => (grants ?? []).map((g) => g.terms as GrantTerms | null).filter(Boolean) as GrantTerms[],
@@ -399,11 +410,21 @@ export function StewardApp() {
           <button
             type="button"
             onClick={() => void loadDemo()}
-            disabled={seedLoading}
+            disabled={seedLoading || !canWrite}
             className="mt-6 rounded-[6px] bg-money px-5 py-2 text-[14px] font-medium text-white disabled:opacity-50"
           >
             {seedLoading ? "Loading…" : "Load July–August"}
           </button>
+          {inlineError && (
+            <p className="mt-4 text-[13px] text-redpen" role="alert">
+              {inlineError}
+            </p>
+          )}
+          {!inlineError && passcodeReady && !!demoGate?.requiresPasscode && !canWrite && (
+            <p className="mt-4 text-[13px] text-ink-2">
+              View-only demo — add ?key= to the URL for write access.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -527,7 +548,15 @@ export function StewardApp() {
               setFilter={(f) => setInboxFilter(f, fundFilter)}
               approveAllBusy={approveAllBusy}
               onApproveAll={(txnIds) => {
-                if (!canWrite || actingAsSteward || approveAllBusy) return;
+                if (actingAsSteward) {
+                  setInlineError("Switch acting user to an approver to take action.");
+                  return;
+                }
+                if (!canWrite) {
+                  setInlineError("View-only demo — add ?key= to the URL for write access.");
+                  return;
+                }
+                if (approveAllBusy) return;
                 const rowsByTxn = new Map(inboxRows.map((r) => [r.txnId, r]));
                 const entryIds = txnIds
                   .map((id) => rowsByTxn.get(id)?.entryId)
@@ -613,8 +642,10 @@ export function StewardApp() {
                   setWhyTxnId(selected);
                   setPanelMode("why");
                 }}
-                onResolved={() => {
-                  const rest = exceptions.filter((e) => e.txnId !== selected);
+                onResolved={(txnId) => {
+                  const current = inboxSelectionRef.current;
+                  if (current.tab !== "inbox" || current.selected !== txnId) return;
+                  const rest = current.exceptions.filter((e) => e.txnId !== txnId);
                   setSelected(rest[0]?.txnId ?? null);
                 }}
                 onRollback={(txnId) => {

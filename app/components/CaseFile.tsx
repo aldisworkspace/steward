@@ -56,7 +56,7 @@ type CaseFileProps = {
   canWrite: boolean;
   onStatusLine: (m: string | null) => void;
   onWhy: () => void;
-  onResolved?: () => void;
+  onResolved?: (txnId: string) => void;
   onRollback?: (txnId: string) => void;
   onActionFailed?: (message: string) => void;
   onActionDone?: (
@@ -107,7 +107,6 @@ function CaseFileInner({
   onStatusLine,
   onWhy,
   onResolved,
-  onRollback,
   onActionFailed,
   onActionDone,
   spentByLine = {},
@@ -153,6 +152,8 @@ function CaseFileInner({
     () => typeof window === "undefined" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
   const mountedRef = useRef(true);
+  const actionPendingRef = useRef(false);
+  const [actionPending, setActionPending] = useState(false);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -221,66 +222,73 @@ function CaseFileInner({
   const cr = lines.reduce((a, l) => a + l.credit, 0);
   const balanced = dr === cr && lines.length > 0;
 
-  async function onApprove() {
-    if (!canWrite) return;
+  // The ref closes the gap before React renders disabled controls. Completion
+  // feedback belongs to the app even if selecting another case unmounts us.
+  async function runReviewAction(action: () => Promise<void>) {
+    if (actionPendingRef.current) return;
+    actionPendingRef.current = true;
+    setActionPending(true);
     setActionError(null);
-    if (entry) {
-      const txnId = txn.txnId;
-      onResolved?.();
-      try {
+    try {
+      await action();
+    } catch (error) {
+      const message = messageFromConvexError(error);
+      onActionFailed?.(message);
+      onStatusLine(message);
+      if (mountedRef.current) setActionError(message);
+    } finally {
+      actionPendingRef.current = false;
+      if (mountedRef.current) setActionPending(false);
+    }
+  }
+
+  async function onApprove() {
+    if (!canWrite || actingAsSteward || actionPendingRef.current) return;
+    if (!entry) {
+      if (!ackNote.trim() && !ackOpen) {
+        setAckOpen(true);
+        return;
+      }
+      if (!ackNote.trim()) return;
+    }
+    const txnId = txn.txnId;
+    await runReviewAction(async () => {
+      if (entry) {
+        const entryId = entry.id;
         await approve({
-          entryId: entry.id,
+          entryId,
           by: actorLabel,
           note: "Approved in inbox review",
           passcode,
         });
-        if (!mountedRef.current) return;
-        setEntryStamp("approved");
-        onActionDone?.({ kind: "approve", entryId: entry.id, txnId });
-      } catch (e) {
-        const msg = messageFromConvexError(e);
-        if (!mountedRef.current) return;
-        onRollback?.(txnId);
-        onActionFailed?.(msg);
-        setActionError(msg);
+        onActionDone?.({ kind: "approve", entryId, txnId });
+        onResolved?.(txnId);
+        if (mountedRef.current) setEntryStamp("approved");
+      } else {
+        await acknowledge({
+          txnId,
+          by: actorLabel,
+          note: ackNote.trim(),
+          passcode,
+          precedentScope,
+          rulingType,
+          grantScope,
+        });
+        onActionDone?.({ kind: "ack", txnId });
+        onResolved?.(txnId);
+        if (mountedRef.current) {
+          setAckOpen(false);
+          setAckNote("");
+        }
       }
-      return;
-    }
-    if (!ackNote.trim() && !ackOpen) {
-      setAckOpen(true);
-      return;
-    }
-    if (!ackNote.trim()) return;
-    const txnId = txn.txnId;
-    onResolved?.();
-    try {
-      await acknowledge({
-        txnId: txnId,
-        by: actorLabel,
-        note: ackNote.trim(),
-        passcode,
-        precedentScope,
-        rulingType,
-        grantScope,
-      });
-      if (!mountedRef.current) return;
-      setAckOpen(false);
-      setAckNote("");
-      onActionDone?.({ kind: "ack", txnId });
-    } catch (e) {
-      const msg = messageFromConvexError(e);
-      if (!mountedRef.current) return;
-      onRollback?.(txnId);
-      onActionFailed?.(msg);
-      setActionError(msg);
-    }
+    });
   }
 
   async function onRejectSubmit() {
-    if (!canWrite || !rejectNote.trim()) return;
-    setActionError(null);
-    if (entry) {
-      try {
+    if (!canWrite || actingAsSteward || !rejectNote.trim()) return;
+    const txnId = txn.txnId;
+    await runReviewAction(async () => {
+      if (entry) {
         await reject({
           entryId: entry.id,
           by: actorLabel,
@@ -290,42 +298,31 @@ function CaseFileInner({
           rulingType,
           grantScope,
         });
+        onStatusLine("Entry rejected");
+        onResolved?.(txnId);
+        if (mountedRef.current) setEntryStamp("returned");
+      } else {
+        await overrideDecision({
+          txnId,
+          by: actorLabel,
+          note: rejectNote.trim(),
+          passcode,
+          precedentScope,
+          rulingType,
+          grantScope,
+        });
+        onStatusLine("Override recorded");
+      }
+      if (mountedRef.current) {
         setRejectOpen(false);
         setRejectNote("");
-        setEntryStamp("returned");
-        onStatusLine("Entry rejected");
-        onResolved?.();
-      } catch (e) {
-        const msg = messageFromConvexError(e);
-        setActionError(msg);
-        onStatusLine(msg);
       }
-      return;
-    }
-    try {
-      await overrideDecision({
-        txnId: txn.txnId,
-        by: actorLabel,
-        note: rejectNote.trim(),
-        passcode,
-        precedentScope,
-        rulingType,
-        grantScope,
-      });
-      setRejectOpen(false);
-      setRejectNote("");
-      onStatusLine("Override recorded");
-    } catch (e) {
-      const msg = messageFromConvexError(e);
-      setActionError(msg);
-      onStatusLine(msg);
-    }
+    });
   }
 
   async function onOverrideSubmit() {
-    if (!canWrite || !overrideNote.trim()) return;
-    setActionError(null);
-    try {
+    if (!canWrite || actingAsSteward || !overrideNote.trim()) return;
+    await runReviewAction(async () => {
       await overrideDecision({
         txnId: txn.txnId,
         by: actorLabel,
@@ -335,14 +332,12 @@ function CaseFileInner({
         rulingType,
         grantScope,
       });
-      setOverrideOpen(false);
-      setOverrideNote("");
       onStatusLine("Override recorded");
-    } catch (e) {
-      const msg = messageFromConvexError(e);
-      setActionError(msg);
-      onStatusLine(msg);
-    }
+      if (mountedRef.current) {
+        setOverrideOpen(false);
+        setOverrideNote("");
+      }
+    });
   }
 
   useEffect(() => {
@@ -358,7 +353,7 @@ function CaseFileInner({
       ) {
         return;
       }
-      if (!canWrite) return;
+      if (!canWrite || actingAsSteward || actionPendingRef.current) return;
       if (e.key === "a" || e.key === "A") {
         e.preventDefault();
         void onApprove();
@@ -375,7 +370,7 @@ function CaseFileInner({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canWrite, rejectOpen, ackOpen, overrideOpen, entry, cmdOpen, helpOpen, panelOpen]);
+  }, [canWrite, actingAsSteward, rejectOpen, ackOpen, overrideOpen, entry, cmdOpen, helpOpen, panelOpen]);
 
   const bankEv = evidence.find((e) => e.source === "bank");
   const glEv = evidence.find((e) => e.source === "gl");
@@ -687,7 +682,7 @@ function CaseFileInner({
             <>
               <button
                 type="button"
-                disabled={!canWrite}
+                disabled={!canWrite || actingAsSteward || actionPending}
                 onClick={() => setRejectOpen(true)}
                 className="rounded-[4px] border border-rule px-4 py-2 text-[15px] font-medium text-ink disabled:opacity-40"
               >
@@ -695,7 +690,7 @@ function CaseFileInner({
               </button>
               <button
                 type="button"
-                disabled={!canWrite}
+                disabled={!canWrite || actingAsSteward || actionPending}
                 onClick={() => void onApprove()}
                 className="rounded-[6px] bg-money px-4 py-2 text-[14px] font-semibold text-white hover:brightness-95 disabled:opacity-50"
               >
@@ -706,7 +701,7 @@ function CaseFileInner({
             <>
               <button
                 type="button"
-                disabled={!canWrite}
+                disabled={!canWrite || actingAsSteward || actionPending}
                 onClick={() => setOverrideOpen(true)}
                 className="rounded-[4px] border border-rule px-4 py-2 text-[15px] font-medium text-ink disabled:opacity-40"
               >
@@ -714,7 +709,7 @@ function CaseFileInner({
               </button>
               <button
                 type="button"
-                disabled={!canWrite}
+                disabled={!canWrite || actingAsSteward || actionPending}
                 onClick={() => (ackOpen ? void onApprove() : setAckOpen(true))}
                 className="rounded-[6px] bg-money px-4 py-2 text-[14px] font-semibold text-white hover:brightness-95 disabled:opacity-50"
               >
@@ -749,12 +744,12 @@ function CaseFileInner({
             onChange={(e) => setAckNote(e.target.value)}
           />
           <div className="mt-3 flex justify-end gap-2">
-            <button type="button" className="text-[13px] text-ink-2" onClick={() => setAckOpen(false)}>
+            <button type="button" className="text-[13px] text-ink-2" disabled={actionPending} onClick={() => setAckOpen(false)}>
               Cancel
             </button>
             <button
               type="button"
-              disabled={!ackNote.trim()}
+              disabled={!canWrite || actingAsSteward || actionPending || !ackNote.trim()}
               onClick={() => void onApprove()}
               className="rounded-[4px] bg-ledger px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-40"
             >
@@ -774,12 +769,12 @@ function CaseFileInner({
             onChange={(e) => setOverrideNote(e.target.value)}
           />
           <div className="mt-3 flex justify-end gap-2">
-            <button type="button" className="text-[13px] text-ink-2" onClick={() => setOverrideOpen(false)}>
+            <button type="button" className="text-[13px] text-ink-2" disabled={actionPending} onClick={() => setOverrideOpen(false)}>
               Cancel
             </button>
             <button
               type="button"
-              disabled={!overrideNote.trim()}
+              disabled={!canWrite || actingAsSteward || actionPending || !overrideNote.trim()}
               onClick={() => void onOverrideSubmit()}
               className="rounded-[4px] bg-pencil px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-40"
             >
@@ -808,12 +803,12 @@ function CaseFileInner({
             onChange={(e) => setRejectNote(e.target.value)}
           />
           <div className="mt-3 flex justify-end gap-2">
-            <button type="button" className="text-[13px] text-ink-2" onClick={() => setRejectOpen(false)}>
+            <button type="button" className="text-[13px] text-ink-2" disabled={actionPending} onClick={() => setRejectOpen(false)}>
               Cancel
             </button>
             <button
               type="button"
-              disabled={!rejectNote.trim()}
+              disabled={!canWrite || actingAsSteward || actionPending || !rejectNote.trim()}
               onClick={() => void onRejectSubmit()}
               className="rounded-[4px] bg-pencil px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-40"
             >

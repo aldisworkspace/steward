@@ -28,6 +28,21 @@ _Last updated: Sun 2026-10-25 (T9 deployment readiness)_
   was performed during this readiness change.
 - On a fresh checkout, run `npx next typegen` before `npx tsc --noEmit`.
 
+## Demo hardening (integration, October 25)
+- Cursor's UI changes atomically resolve deep links, preserve approval results
+  and Undo feedback after async mutations, and expose seed/view-only errors.
+  Acting as Steward disables review actions in addition to server-side guards.
+- Undoing the last approved entry now clears its approval-only inbox
+  resolutions, preserves independent resolutions and audit history, and resets
+  `approvedBy` to the schema's required `null` value. Offline mutation regression
+  coverage is in `scripts/test-approvals.ts`.
+- `QA_HACKATHON.md` records Grok's findings against the original base commit.
+  `docs/hackathon-submission.md` contains Muse's draft with integration corrections;
+  neither document certifies a live deployment or a sealed evaluation.
+- Integrated checks: TypeScript, lint, seven offline scripts, and a production
+  build using an explicitly non-live placeholder Convex URL passed. The live
+  demo, real model calls and approval/undo against Convex still need testing.
+
 ## Submission
 - **Deadline:** Sun 2026-10-25 09:00 PT Devpost.
 - **Eval table:** filled in README after final sealed run (`<!-- EVAL_TABLE -->`).

@@ -49,6 +49,7 @@ npx tsc --noEmit
 npx eslint app lib convex --quiet
 npm run build
 npx tsx scripts/test-rules.ts
+npx tsx scripts/test-approvals.ts
 npx tsx scripts/test-precedents.ts
 npx tsx scripts/test-pipeline.ts
 npx tsx scripts/check-fund-breakdown.ts
