@@ -1,6 +1,6 @@
 # Contributor onboarding — speedriver3
 
-**Contact:** aseke7799@gmail.com · GitHub **[@speedriver3](https://github.com/speedriver3)**
+**Contact:** GitHub **[@speedriver3](https://github.com/speedriver3)**
 
 ## GitHub
 
@@ -38,7 +38,7 @@ Local Next.js does **not** need the Anthropic key in `.env.local` for normal UI 
 |---|---|
 | **Production URL** | *Not deployed yet* — target is Vercel + Convex prod (see `scripts/deploy-production.sh`). |
 | **Local** | `npm run dev` → [http://localhost:3000](http://localhost:3000) (landing), [http://localhost:3000/app](http://localhost:3000/app) (app). |
-| **Demo passcode (planned prod)** | Owner will confirm after deploy; intended value for next prod cut: `53154b415817` (`?key=` for write access when `DEMO_PASSCODE` is set). |
+| **Demo passcode (prod)** | Owner shares out-of-band; use `/app?key=<passcode>` when `DEMO_PASSCODE` is set. |
 
 View-only: open `/app` without `?key=`. Write/seed: `/app?key=<passcode>`.
 

@@ -112,7 +112,7 @@ export function LandingPage() {
               </a>
             </div>
             <p className="mt-4 text-[13px] text-ink-2">
-              Live demo on synthetic data · Real Claude calls · Built solo at Cal Hacks 13.0
+              Live demo on synthetic data · Real Claude calls · Built at Cal Hacks 13.0
             </p>
           </div>
           <HeroMiniCase />

@@ -33,7 +33,9 @@ export const UNALLOWABLE_TERM_PATTERNS: { id: string; txn: RegExp; termRule: Reg
   { id: "fines", txn: /citation|violation|penalt|\bfine[sd]?\b|late fee/i, termRule: /fine|penalt|violation/i, label: "fines and penalties" },
   { id: "fundraising", txn: /gala|benefit|fundrais|donor (event|dinner)|auction/i, termRule: /fundrais/i, label: "fundraising" },
   { id: "alcohol_staff", txn: /\bbar\b|brewery|winery|wine|liquor|happy hour/i,
-    termRule: /alcohol|hospitality|staff (meals|appreciation)/i, label: "alcohol / staff entertainment" },
+    termRule: /alcohol|hospitality|staff (meals|appreciation)/i, label: "Alcohol or staff event" },
+  { id: "staff_event", txn: /staff (appreciation|party|outing|retreat|celebration)|appreciation (night|dinner|event|party)|holiday party|team[- ]building/i,
+    termRule: /staff (meals|appreciation)|entertainment|social activit|recreation|team-building/i, label: "Alcohol or staff event" },
   { id: "lobbying", txn: /lobby|lobbying/i,
     termRule: /lobby|legislat|advocacy|appropriations|influence/i, label: "lobbying" },
 ];
