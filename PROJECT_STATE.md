@@ -1,8 +1,8 @@
-# PROJECT_STATE — Cal Hacks 13.0 (solo)
+# PROJECT_STATE — Cal Hacks 13.0
 
-_Last updated: Sat 2026-10-24 (pre-deploy pass)_
+_Last updated: Sun 2026-10-25 (T9 deployment readiness)_
 
-## Deployed
+## Implemented routes (production URL not yet verified)
 - **Landing:** `/` — hero, bento, proof; no Convex.
 - **App:** `/app` — full UI; passcode via `?key=` or `NEXT_PUBLIC_DEMO_KEY` on marketing links.
 - **Deep link:** `/app?tab=inbox&case=black-cat` resolves to BLACK CAT transaction after load.
@@ -18,6 +18,15 @@ _Last updated: Sat 2026-10-24 (pre-deploy pass)_
 - No real auth; demo passcode gates writes.
 - Rules use generic keyword heuristics only; nuanced cases rely on `categorizeConcern` + model.
 - Hold-out fixtures are for offline eval only — never tuned against in app code.
+
+## Deployment readiness (T9)
+- Added the previously missing `scripts/deploy-production.sh`. Its default
+  `--check` mode makes no network calls; `--deploy` is the Vercel Production
+  build command and injects the matching Convex production URL into Next.js.
+- Production Convex/Vercel access, remote secrets, live URL, and the full smoke
+  checklist in `CONTRIBUTOR.md` still need verification. No production deployment
+  was performed during this readiness change.
+- On a fresh checkout, run `npx next typegen` before `npx tsc --noEmit`.
 
 ## Submission
 - **Deadline:** Sun 2026-10-25 09:00 PT Devpost.

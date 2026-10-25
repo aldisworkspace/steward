@@ -44,6 +44,7 @@ Optional: set `NEXT_PUBLIC_DEMO_KEY` so marketing links append `?key=` automatic
 ## Quality checks
 
 ```bash
+npx next typegen
 npx tsc --noEmit
 npx eslint app lib convex --quiet
 npm run build
@@ -54,6 +55,40 @@ npx tsx scripts/check-fund-breakdown.ts
 npx tsx scripts/check-at-risk.ts
 npx tsx scripts/verify-judge-scenario.ts
 ```
+
+`next typegen` generates the route helpers used by `LayoutProps` on a fresh
+checkout. Builds require the actual `NEXT_PUBLIC_CONVEX_URL` for the existing
+Steward deployment. A build with a placeholder URL checks compilation only;
+it does not verify that the live demo works.
+
+## Production deployment (T9)
+
+Production hosting and the live demo URL are still pending verification.
+Use the existing Steward Convex project and Vercel project; do not create a
+second production backend.
+
+1. In **Convex production**, configure `ANTHROPIC_API_KEY`,
+   `LLM_PROVIDER=anthropic`, and `DEMO_PASSCODE` through the dashboard.
+2. In **Vercel Production**, configure a production `CONVEX_DEPLOY_KEY` from
+   that same Convex deployment and the matching `DEMO_PASSCODE`. Keep the
+   deployment key out of Preview environments. `NEXT_PUBLIC_DEMO_KEY` is
+   optional and public; omit it unless the demo write passcode is deliberately
+   meant to be shared with every landing-page visitor.
+3. Set the Vercel **Production Build Command** to
+   `bash scripts/deploy-production.sh --deploy`. Convex supplies its production
+   URL to the Next.js build, preventing a stale development URL from being
+   embedded in the frontend. Use a separate build command for Preview.
+4. With production variables already available in a local build environment,
+   `bash scripts/deploy-production.sh --check` validates local prerequisites
+   without deploying or contacting Convex. This does not verify remote secrets.
+5. After deployment, run the smoke checklist in `CONTRIBUTOR.md`, including
+   read-only access, write passcode, seed/auto-run, Black Cat evidence, refused
+   Steward self-approval, human approval/undo, and bank-feed updates. Record
+   production URLs only after the checks pass.
+
+The script builds and deploys Convex when explicitly run with `--deploy`;
+Vercel publishes the frontend. It does not configure secrets, seed data, or
+certify the demo. See the [Convex Vercel deployment guide](https://docs.convex.dev/production/hosting/vercel).
 
 Offline eval (answer keys — not used by app code):
 
