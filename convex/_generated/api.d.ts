@@ -20,6 +20,7 @@ import type * as deadlines from "../deadlines.js";
 import type * as demoAuth from "../demoAuth.js";
 import type * as grants from "../grants.js";
 import type * as ingest from "../ingest.js";
+import type * as packages from "../packages.js";
 import type * as passcode from "../passcode.js";
 import type * as pdfText from "../pdfText.js";
 import type * as precedentUtil from "../precedentUtil.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   demoAuth: typeof demoAuth;
   grants: typeof grants;
   ingest: typeof ingest;
+  packages: typeof packages;
   passcode: typeof passcode;
   pdfText: typeof pdfText;
   precedentUtil: typeof precedentUtil;

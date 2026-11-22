@@ -180,7 +180,26 @@ export default defineSchema({
     dataSource: v.union(v.literal("demo"), v.literal("custom")),
     /** Grant-charged lines at or above this need a receipt (default $75). */
     receiptThresholdCents: v.optional(v.number()),
+    // Name-based roles until real auth lands (see convex/approverGuard.ts).
+    programApprovers: v.optional(v.array(v.string())),
+    preparers: v.optional(v.array(v.string())),
+    reviewers: v.optional(v.array(v.string())),
   }).index("by_key", ["key"]),
+
+  /** Monthly/quarterly billing package (invoice + expenditure report) per grant and period. */
+  packages: defineTable({
+    grantId: v.string(),
+    periodStart: v.string(),
+    periodEnd: v.string(),
+    invoiceNo: v.string(),
+    status: v.union(v.literal("draft"), v.literal("ready_for_review"), v.literal("signed"), v.literal("exported")),
+    preparedBy: v.union(v.string(), v.null()),
+    reviewedBy: v.union(v.string(), v.null()),
+    /** buildPackage() output frozen at signing (null until signed). */
+    snapshot: v.union(v.any(), v.null()),
+    createdAt: v.string(),
+    signedAt: v.union(v.string(), v.null()),
+  }).index("by_grant_period", ["grantId", "periodStart"]),
 
   inboxResolutions: defineTable({
     txnId: v.string(),

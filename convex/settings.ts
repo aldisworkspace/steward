@@ -10,18 +10,34 @@ export const DEFAULTS = {
   receiptThresholdCents: 75_00,
 };
 
+/** Fictional default role holders; editable in settings. Name-based until real auth. */
+export const DEFAULT_ROLES = {
+  preparers: ["J. Rivera (Staff Accountant)"],
+  programApprovers: ["M. Chen (Program Director)"],
+};
+
 export async function getSettingsDoc(ctx: QueryCtx) {
   const row = await ctx.db
     .query("workspaceSettings")
     .withIndex("by_key", (q) => q.eq("key", "default"))
     .first();
-  if (!row) return DEFAULTS;
+  if (!row) return { ...DEFAULTS, ...rolesFor(DEFAULTS) };
   return {
     organizationName: row.organizationName,
     approverName: row.approverName,
     approverTitle: row.approverTitle,
     dataSource: row.dataSource,
     receiptThresholdCents: row.receiptThresholdCents ?? DEFAULTS.receiptThresholdCents,
+    ...rolesFor(row),
+  };
+}
+
+function rolesFor(row: { approverName: string; approverTitle: string; programApprovers?: string[]; preparers?: string[]; reviewers?: string[] }) {
+  const primary = `${row.approverName} (${row.approverTitle})`;
+  return {
+    preparers: row.preparers ?? DEFAULT_ROLES.preparers,
+    reviewers: row.reviewers ?? [primary, "Controller"],
+    programApprovers: row.programApprovers ?? [...DEFAULT_ROLES.programApprovers, primary],
   };
 }
 
@@ -36,6 +52,9 @@ export const get = query({
       approverLabel: `${s.approverName} (${s.approverTitle})`,
       dataSource: s.dataSource,
       receiptThresholdCents: s.receiptThresholdCents,
+      preparers: s.preparers,
+      reviewers: s.reviewers,
+      programApprovers: s.programApprovers,
     };
   },
 });
