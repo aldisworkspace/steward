@@ -133,19 +133,25 @@ export function reconcileGlToBank(glLines: Txn[], bank: BankLine[]): Reconciliat
     return hit;
   };
 
+  // Bills post on the invoice date and reach the bank later as a check (tier 3), never same-day.
+  const isBill = (t: Txn) => /\bbill\b/i.test(t.txnType ?? "") && !/payment/i.test(t.txnType ?? "");
+
   // 1. exact amount
   for (const t of glLines) {
+    if (isBill(t)) continue;
     const b = best(t.amountCents, t.date, textOf(t), false);
     if (!b) continue;
     usedBank.add(b.lineId);
     matches.set(t.txnId, { bankLineId: b.lineId, tier: "exact", bankAmountCents: b.amountCents });
   }
 
-  // 2. split payments: GL lines sharing date + document number (or vendor) that sum to one bank line
+  // 2. split payments: GL lines sharing date + document number (or vendor) that sum to one bank line;
+  //    payroll: all paycheck lines of one pay date sum to the payroll ACH.
   const groups = new Map<string, Txn[]>();
   for (const t of glLines) {
-    if (matches.has(t.txnId)) continue;
-    const key = `${t.date}|${(t.docRef || t.vendor || t.description).trim().toUpperCase()}`;
+    if (matches.has(t.txnId) || isBill(t)) continue;
+    const isPaycheck = /paycheck/i.test(t.txnType ?? "") || (isPayrollTxn(t) && !/journal|accrual|allocation/i.test(t.txnType ?? ""));
+    const key = isPaycheck ? `PAYROLL|${t.date}` : `${t.date}|${(t.docRef || t.vendor || t.description).trim().toUpperCase()}`;
     groups.set(key, [...(groups.get(key) ?? []), t]);
   }
   for (const members of groups.values()) {
@@ -159,7 +165,35 @@ export function reconcileGlToBank(glLines: Txn[], bank: BankLine[]): Reconciliat
     }
   }
 
-  // 3. near match: same vendor words and date window, different amount (same direction)
+  // 3. checks clear later: a bank "CHECK nnnn" pays a Bill or Check line (or one bill's lines) dated up
+  //    to 45 days before it, same amount; the closest earlier date wins.
+  const CLEAR_DAYS = 45;
+  for (const b of bank) {
+    if (usedBank.has(b.lineId) || b.amountCents >= 0 || !/\bCHECK\b|\bCHK\b/i.test(b.description)) continue;
+    const open = glLines.filter((t) => !matches.has(t.txnId) && /bill|check/i.test(t.txnType ?? "") && t.date <= b.date &&
+      daysBetween(t.date, b.date) <= CLEAR_DAYS);
+    const byDoc = new Map<string, Txn[]>();
+    for (const t of open) if (t.docRef) byDoc.set(`${t.vendor}|${t.docRef}`, [...(byDoc.get(`${t.vendor}|${t.docRef}`) ?? []), t]);
+    // A multi-line bill is paid as a whole. A single line of a multi-line document only counts when the
+    // document repeats that same amount (the same invoice entered twice: the bank paid it once).
+    const whole: Txn[][] = [...byDoc.values()].filter((g) => g.length > 1 && g.reduce((a, t) => a + t.amountCents, 0) === b.amountCents);
+    const singles = open.filter((t) => {
+      if (t.amountCents !== b.amountCents) return false;
+      const doc = byDoc.get(`${t.vendor}|${t.docRef}`) ?? [t];
+      return doc.length <= 1 || doc.filter((x) => x.amountCents === t.amountCents).length > 1;
+    });
+    const options: Txn[][] = [...singles.map((t) => [t]), ...whole];
+    if (!options.length) continue;
+    options.sort((x, y) => daysBetween(x[0]!.date, b.date) - daysBetween(y[0]!.date, b.date));
+    usedBank.add(b.lineId);
+    const members = options[0]!;
+    for (const t of members) {
+      matches.set(t.txnId, { bankLineId: b.lineId, tier: members.length > 1 ? "group" : "exact", bankAmountCents: b.amountCents,
+        ...(members.length > 1 ? { groupTxnIds: members.map((m) => m.txnId) } : {}) });
+    }
+  }
+
+  // 4. near match: same vendor words and date window, different amount (same direction)
   for (const t of glLines) {
     if (matches.has(t.txnId) || NON_CASH_TYPE.test(t.txnType ?? "") || isPayrollTxn(t)) continue;
     const b = best(null, t.date, textOf(t), true);

@@ -1,12 +1,70 @@
-import { readFile } from "fs/promises";
+import { readdir, readFile } from "fs/promises";
 import path from "path";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { parseBank, parseGl, parseStaff } from "@/lib/parse";
+import { parseGlDetail } from "@/lib/parseGlDetail";
 import type { Precedent } from "@/lib/types";
 
 export const maxDuration = 300;
+
+const V2_GRANTS = ["contract_city_FS-27-0412.pdf", "grant_foundation_RF-26-118.pdf"] as const;
+const RECEIPT_TYPES: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg" };
+
+/**
+ * SYNTHETIC v2 demo (GL-first): GL detail is the primary record, bank statement and receipts are
+ * evidence. Never reads expected_v2.json (answer key, eval scripts only).
+ */
+async function seedV2(client: ConvexHttpClient, passcode: string | undefined) {
+  const dir = path.join(process.cwd(), "steward-data-v2");
+  const [glText, bankText, staffText, precedentsText] = await Promise.all([
+    readFile(path.join(dir, "gl_detail_qb.csv"), "utf-8"),
+    readFile(path.join(dir, "bank_statement.csv"), "utf-8"),
+    readFile(path.join(dir, "staff_allocation.csv"), "utf-8"),
+    readFile(path.join(dir, "precedents.json"), "utf-8"),
+  ]);
+  const gl = parseGlDetail(glText);
+  if (gl.error) throw new Error(`GL detail: ${gl.error}`);
+  const bankLines = parseBank(bankText).map((t, i) => ({
+    lineId: `B${String(i + 1).padStart(4, "0")}`, date: t.date, description: t.description, amountCents: t.amountCents, memo: t.memo,
+  }));
+  const precedents = (JSON.parse(precedentsText) as Omit<Precedent, "id">[]).map((p) => ({ date: p.date, by: p.by, ruling: p.ruling, scope: p.scope }));
+
+  // Keep already-extracted v2 grants; everything else (e.g. the legacy demo grants) is dropped.
+  const existing = await Promise.all(V2_GRANTS.map((f) => client.query(api.grants.getByFileName, { fileName: f })));
+  const keepIds = existing.filter((g) => g?._id).map((g) => g!._id as Id<"grants">);
+  await client.mutation(api.ingest.startGlWorkspace, {
+    passcode, lines: gl.lines, bankLines, staffAllocations: parseStaff(staffText), grantDocIds: keepIds,
+    dataSource: "demo", precedents, clearReceipts: true,
+  });
+
+  const grantResults = [];
+  for (const fileName of V2_GRANTS) grantResults.push(await ensureGrantPdf(client, dir, fileName, passcode));
+
+  // Receipts: upload, then let Steward read them (a few at a time to stay inside the route timeout).
+  const files = (await readdir(path.join(dir, "receipts"))).filter((f) => RECEIPT_TYPES[f.split(".").pop()!.toLowerCase()]).sort();
+  const receiptResults: { fileName: string; ok: boolean; error?: string }[] = [];
+  for (let i = 0; i < files.length; i += 6) {
+    receiptResults.push(...(await Promise.all(files.slice(i, i + 6).map(async (fileName) => {
+      try {
+        const type = RECEIPT_TYPES[fileName.split(".").pop()!.toLowerCase()]!;
+        const bytes = await readFile(path.join(dir, "receipts", fileName));
+        const uploadUrl = await client.mutation(api.receipts.generateUploadUrl, { passcode });
+        const res = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": type }, body: bytes });
+        if (!res.ok) throw new Error("upload failed");
+        const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+        const receiptId = await client.mutation(api.receipts.register, { storageId, fileName, contentType: type, passcode });
+        const out = await client.action(api.receiptsAgent.extractReceipt, { receiptId, passcode });
+        return { fileName, ok: out.ok, error: out.error };
+      } catch (e) {
+        return { fileName, ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+    }))));
+  }
+  await client.mutation(api.ingest.maybeAutoRunPipeline, { passcode });
+  return { glLines: gl.lines.length, glSkipped: gl.skipped.length, bankLines: bankLines.length, grantResults, receiptResults };
+}
 
 const DEMO_GRANTS = [
   "grant_A_federal_passthrough.pdf",
@@ -83,6 +141,18 @@ export async function POST(req: Request) {
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return Response.json({ ok: false, error: message }, { status: 403 });
+  }
+
+  if (new URL(req.url).searchParams.get("set") === "v2") {
+    try {
+      const client = new ConvexHttpClient(url);
+      const result = await seedV2(client, passcode);
+      const failed = result.grantResults.some((g) => g.error) || result.receiptResults.some((r) => !r.ok);
+      return Response.json({ ok: !failed, ...result, counts: await client.query(api.ingest.counts, {}),
+        error: failed ? "Some grant or receipt extractions failed (see grantResults / receiptResults)." : undefined });
+    } catch (e) {
+      return Response.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    }
   }
 
   const dataDir = path.join(process.cwd(), "steward-data");

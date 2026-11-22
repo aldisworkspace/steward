@@ -116,6 +116,32 @@ async function main() {
     assert.notEqual(d("L0004").status, "blocked");
   });
 
+  await check("payroll lines of one pay date sum to the ACH; bills clear later by check; duplicate bill entry", () => {
+    const pay = (id: string, who: string, cents: number, cls: string | null) =>
+      gl(id, "2026-07-03", who, cents, cls, cls ? "A1" : null, { txnType: "Paycheck", docRef: `DD${id}`, account: "6010 Salaries & Wages" });
+    const lines = [
+      pay("P1", "Ana Ruiz", -100000, "GA-2026-114"), pay("P2", "Ana Ruiz", -50000, null), pay("P3", "Bo Li", -80000, "GA-2026-114"),
+      gl("R1", "2026-09-01", "Corliss Holdings", -250000, "GA-2026-114", "A3", { txnType: "Bill", docRef: "NC-9" }),
+      gl("R2", "2026-09-01", "Corliss Holdings", -125000, null, null, { txnType: "Bill", docRef: "NC-9" }),
+      gl("Q1", "2026-08-26", "Quill Eval", -125000, "HLF-26-031", "B4", { txnType: "Bill", docRef: "Q-1" }),
+      gl("D1", "2026-08-19", "Alder Print", -31767, "GA-2026-114", "A3", { txnType: "Bill", docRef: "4471" }),
+      gl("D2", "2026-08-20", "Alder Print", -31767, "GA-2026-114", "A3", { txnType: "Bill", docRef: "4471" }),
+    ];
+    const bankLines = [
+      bank("B1", "2026-07-03", "PAYROLL SVC ACH DEBIT", -230000),
+      bank("B2", "2026-08-28", "CHECK 10448", -31767),
+      bank("B3", "2026-09-02", "CHECK 10451", -125000),
+      bank("B4", "2026-09-09", "CHECK 10443", -375000),
+    ];
+    const r = reconcileGlToBank(lines, bankLines);
+    assert.deepEqual(["P1", "P2", "P3"].map((id) => r.matches.get(id)?.bankLineId), ["B1", "B1", "B1"]);
+    assert.equal(r.matches.get("Q1")?.bankLineId, "B3", "a single-line bill, not half of the rent bill");
+    assert.deepEqual([r.matches.get("R1")?.bankLineId, r.matches.get("R2")?.bankLineId], ["B4", "B4"]);
+    assert.equal(r.matches.get("D2")?.bankLineId, "B2");
+    assert.equal(r.matches.has("D1"), false, "the second entry of the same invoice was never paid");
+    assert.deepEqual(r.unrecorded, []);
+  });
+
   if (failures) { console.log(`\n${failures} reconciliation check(s) failed`); process.exit(1); }
   console.log("\nAll reconciliation checks passed");
 }
