@@ -35,6 +35,19 @@ const VALID_FILTERS = new Set<InboxFilter>([
   "done",
 ]);
 
+export function isTxnId(value: string): boolean {
+  return /^T\d+$/i.test(value.trim());
+}
+
+/** Atomic URL update: undefined leaves a param alone, null removes it. */
+export type AppParamsUpdate = {
+  tab?: AppTab;
+  filter?: string | null;
+  case?: string | null;
+  fund?: string | null;
+  vendor?: string | null;
+};
+
 export function useAppUrlState() {
   const router = useRouter();
   const pathname = usePathname();
@@ -45,7 +58,10 @@ export function useAppUrlState() {
     return VALID_TABS.has(t as AppTab) ? (t as AppTab) : "overview";
   }, [searchParams]);
 
-  const caseId = searchParams.get("case");
+  const caseParam = searchParams.get("case");
+  /** Only a real txn id (e.g. T0034) selects a case; slugs like "black-cat" are deep links to resolve. */
+  const caseId = caseParam && isTxnId(caseParam) ? caseParam : null;
+  const caseSlug = caseParam && !isTxnId(caseParam) ? caseParam : searchParams.get("vendor");
   const fundFilter = searchParams.get("fund");
   const inboxFilter = useMemo((): InboxFilter => {
     const f = searchParams.get("filter") ?? "all";
@@ -75,6 +91,19 @@ export function useAppUrlState() {
       router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
     },
     [pathname, router, searchParams],
+  );
+
+  const setParams = useCallback(
+    (update: AppParamsUpdate) => {
+      replaceParams((p) => {
+        for (const [key, value] of Object.entries(update)) {
+          if (value === undefined) continue;
+          if (value === null) p.delete(key);
+          else p.set(key, value);
+        }
+      });
+    },
+    [replaceParams],
   );
 
   const setTab = useCallback(
@@ -137,6 +166,7 @@ export function useAppUrlState() {
   return {
     tab,
     caseId,
+    caseSlug,
     inboxFilter,
     txnFilter,
     fundFilter,
@@ -145,5 +175,6 @@ export function useAppUrlState() {
     setInboxFilter,
     setTxnFilter,
     setFundFilter,
+    setParams,
   };
 }

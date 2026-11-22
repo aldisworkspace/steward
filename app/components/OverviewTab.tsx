@@ -4,7 +4,7 @@ import { getFundLabel } from "@/lib/fundLabels";
 import type { GrantTerms } from "@/lib/types";
 import { useMemo } from "react";
 import { useNowMs } from "../hooks/useNowMs";
-import { fmtRisk, fmtTableAmount } from "../format";
+import { fmtRisk, fmtTableAmount, plural, reportDueLabel } from "../format";
 import { CountUp } from "./CountUp";
 import { GlossaryTerm } from "./GlossaryTerm";
 import { FundBreakdown, type FundBreakdownNavigate } from "./FundBreakdown";
@@ -167,10 +167,10 @@ export function OverviewTab({
             </p>
             {dueDays !== null && (
               <span className="mt-2 inline-block rounded-full bg-attention-tint px-2 py-0.5 text-[12px] text-ink">
-                Report due {t.reportDue?.slice(5)} · {dueDays} days
+                {reportDueLabel(dueDays)}
               </span>
             )}
-            <p className="mt-2">{openForGrant} open inbox items</p>
+            <p className="mt-2">{plural(openForGrant, "open inbox item")}</p>
           </div>
         </div>
         <div className="mt-4 space-y-2">
@@ -257,7 +257,7 @@ export function OverviewTab({
               onClick={onReviewInbox}
               className="rounded-[6px] bg-money px-4 py-2.5 text-[15px] font-medium text-white"
             >
-              Review {needYou} items
+              Review {plural(needYou, "item")}
             </button>
             <button
               type="button"

@@ -7,10 +7,9 @@ import { fundFilterParam, matchesFundFilter } from "@/lib/fundFilter";
 import { shouldIgnoreAppShortcut } from "@/lib/keyboardGuard";
 import type { GrantTerms } from "@/lib/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { resolveCaseDeepLink } from "@/lib/caseDeepLink";
 import { api } from "@/convex/_generated/api";
-import { fmtRisk, fmtSentenceAmount, fmtTableAmount, relativeTime } from "../format";
+import { fmtRisk, fmtSentenceAmount, fmtTableAmount, plural, relativeTime } from "../format";
 import { getDemoPasscode, hasDemoWriteAccess } from "../lib/demoPasscode";
 import { messageFromConvexError } from "../lib/convexError";
 import { CaseFile } from "./CaseFile";
@@ -40,6 +39,7 @@ export function StewardApp() {
   const {
     tab,
     caseId,
+    caseSlug,
     inboxFilter,
     txnFilter,
     fundFilter,
@@ -47,14 +47,15 @@ export function StewardApp() {
     setCaseId,
     setInboxFilter,
     setTxnFilter,
+    setParams,
   } = useAppUrlState();
-  const searchParams = useSearchParams();
-  const deepLinkCase = caseId ?? searchParams.get("vendor");
+  const deepLinkCase = caseSlug;
   const counts = useQuery(api.ingest.counts);
   const inboxBadge = useQuery(api.ui.inboxBadge);
   const needsOverview = tab === "overview" || tab === "inbox";
   const stats = useQuery(api.ui.dashboardStats, needsOverview ? {} : "skip");
-  const queue = useQuery(api.ui.inboxQueue, tab === "inbox" || deepLinkCase ? {} : "skip");
+  // Overview grant cards count open items from the same query the inbox renders.
+  const queue = useQuery(api.ui.inboxQueue, needsOverview || deepLinkCase ? {} : "skip");
   const resolvedQueue = useQuery(api.ui.inboxResolved, tab === "inbox" && inboxFilter === "done" ? {} : "skip");
   const run = useQuery(api.dashboard.latestRun);
   const audit = useQuery(api.ui.auditFeed, tab === "overview" ? {} : "skip");
@@ -131,20 +132,24 @@ export function StewardApp() {
 
   useEffect(() => {
     if (!deepLinkParam || deepLinkHandled.current === deepLinkParam) return;
+    if (queue === undefined) return;
     const rows =
       ledger?.map((r) => ({ txnId: r.txnId, description: r.description })) ??
       [];
     if (rows.length === 0) return;
-    const notAllowedTxnIds = (queue ?? [])
+    const notAllowedTxnIds = queue
       .filter((r) => r.status === "blocked")
       .map((r) => r.txnId);
     const resolved = resolveCaseDeepLink(deepLinkParam, rows, notAllowedTxnIds);
-    if (!resolved) return;
     deepLinkHandled.current = deepLinkParam;
-    setCaseId(resolved);
-    setTab("inbox");
-    setInboxFilter("not_allowed");
-  }, [deepLinkParam, ledger, queue, setCaseId, setTab, setInboxFilter]);
+    // One atomic URL write: separate setters each rebuild from the same stale params and undo each other.
+    setParams({
+      tab: "inbox",
+      filter: resolved && notAllowedTxnIds.includes(resolved) ? "not_allowed" : "all",
+      case: resolved,
+      vendor: null,
+    });
+  }, [deepLinkParam, ledger, queue, setParams]);
 
   useEffect(() => {
     const open = inboxBadge?.open ?? 0;
@@ -187,8 +192,9 @@ export function StewardApp() {
 
   useEffect(() => {
     if (tab !== "inbox" || inboxFilter === "done") return;
+    if (deepLinkCase) return; // a slug deep link is still resolving; don't race it
     if (!selected && inboxVisibleTxnIds.length) setSelected(inboxVisibleTxnIds[0]!);
-  }, [tab, inboxFilter, inboxVisibleTxnIds, selected, setSelected]);
+  }, [tab, inboxFilter, inboxVisibleTxnIds, selected, setSelected, deepLinkCase]);
 
   const panelOpen = panelMode !== null;
 
@@ -1099,7 +1105,7 @@ function GrantReportSheet({
       </table>
       {excludedCount > 0 && (
         <p className="mt-4 text-[13px] text-ink-2">
-          Excluded pending your review: {excludedCount} items, {fmtRisk(excludedCents)}
+          Excluded pending your review: {plural(excludedCount, "item")}, {fmtRisk(excludedCents)}
         </p>
       )}
       <p className="mt-6 text-[13px] text-ink-2">

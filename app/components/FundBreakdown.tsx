@@ -1,7 +1,7 @@
 "use client";
 
 import type { BreakdownSegment, FundBreakdownResult, FundBreakdownRow } from "@/lib/fundBreakdown";
-import { fmtRisk } from "../format";
+import { fmtRisk, plural } from "../format";
 
 export type FundBreakdownNavigate = {
   grantId: string | null;
@@ -76,7 +76,7 @@ function SegmentBar({
     >
       {segments.map((s) => {
         const style = SEGMENT_STYLE[s.key];
-        const pctLabel = `${fmtWhole(s.cents)} · ${s.count} item${s.count === 1 ? "" : "s"} ${style.label}`;
+        const pctLabel = `${fmtWhole(s.cents)} · ${plural(s.count, "item")} ${style.label}`;
         return (
           <button
             key={s.key}
@@ -173,7 +173,7 @@ export function FundBreakdown({
                     className="shrink-0 text-[13px] font-medium text-[#2563EB] underline-offset-2 hover:underline"
                     onClick={() => onNavigate({ grantId: row.grantId, segment: "all_open" })}
                   >
-                    {row.openCount} items →
+                    {plural(row.openCount, "item")} →
                   </button>
                 )}
               </div>
