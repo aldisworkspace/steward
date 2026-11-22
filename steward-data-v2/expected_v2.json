@@ -1,0 +1,1566 @@
+{
+  "_label": "SYNTHETIC \u2014 generated for testing. Answer key \u2014 the app must never read this file.",
+  "conventions": {
+    "dates": "ISO YYYY-MM-DD (the GL CSV itself uses MM/DD/YYYY)",
+    "amount": "2-decimal string exactly as in the GL Amount column",
+    "cents": "*Cents fields are integers",
+    "packageTotals": "expectedInvoiceTotalCents = contract rows dated in the period, minus rows whose issue is 'blocked', with the indirect line restated to the correctly computed amount; needs_review rows are included at booked amount. cleanOnlyTotalCents additionally drops every needs_review and related row."
+  },
+  "issues": [
+    {
+      "id": "D-a",
+      "kind": "receipt_missing",
+      "glRef": {
+        "date": "2026-08-11",
+        "num": "",
+        "name": "Office Depot",
+        "amount": "166.22",
+        "class": "FS-27-0412:C3",
+        "account": "6115 Office Supplies"
+      },
+      "expectedRule": "\u00a77.1",
+      "expectedStatus": "needs_review",
+      "note": "Office Depot charge coded to FS-27-0412:C3 with empty memo and no receipt; a second Office Depot charge the same week is coded to RF-26-118:F2 and does have a receipt. [Policy: a missing receipt is a documentation gap -> needs_review, not blocked.]",
+      "evidence": {
+        "sameWeekOtherCharge": {
+          "date": "2026-08-13",
+          "num": "9404",
+          "name": "Office Depot",
+          "amount": "133.29",
+          "class": "RF-26-118:F2",
+          "account": "6115 Office Supplies"
+        },
+        "sameWeekOtherReceipt": "2026-08-13_office-depot_3784.pdf"
+      }
+    },
+    {
+      "id": "D-b",
+      "kind": "receipt_amount_mismatch",
+      "glRef": {
+        "date": "2026-07-14",
+        "num": "7731",
+        "name": "Amazon",
+        "amount": "142.15",
+        "class": "FS-27-0412:C3",
+        "account": "6110 Program Supplies"
+      },
+      "expectedRule": "\u00a77.1",
+      "expectedStatus": "needs_review",
+      "note": "Receipt total 142.16 is $0.01 higher than the GL amount 142.15.",
+      "evidence": {
+        "receipt": "2026-07-14_amazon_1512.pdf",
+        "receiptTotalCents": 14216,
+        "glAmountCents": 14215
+      }
+    },
+    {
+      "id": "D-c",
+      "kind": "indirect_rate",
+      "glRef": {
+        "date": "2026-10-31",
+        "num": "JE-2610-03",
+        "name": "",
+        "amount": "1006.60",
+        "class": "FS-27-0412:C7",
+        "account": "6900 Indirect Cost Allocation"
+      },
+      "expectedRule": "\u00a75.1; \u00a78.2",
+      "expectedStatus": "blocked",
+      "note": "October C7 indirect booked 1006.60 but 10% of October C1 salaries (10065.23) is 1006.52 (difference 0.08); the bookkeeper used a whole-dollar salary summary as the base. Invoice would be returned in full.",
+      "correctIndirectCents": 100652,
+      "bookedIndirectCents": 100660,
+      "baseCents": 1006523
+    },
+    {
+      "id": "D-d",
+      "kind": "unallowable_cost",
+      "glRef": {
+        "date": "2026-10-09",
+        "num": "",
+        "name": "Casa Lumbre Cocina",
+        "amount": "486.87",
+        "class": "FS-27-0412:C3",
+        "account": "6160 Meals & Entertainment"
+      },
+      "expectedRule": "\u00a76.2",
+      "expectedStatus": "blocked",
+      "note": "Staff appreciation dinner at a restaurant coded to FS-27-0412:C3 (entertainment / staff meal).",
+      "evidence": {
+        "receipt": "2026-10-09_casa-lumbre-cocina_6566.pdf"
+      }
+    },
+    {
+      "id": "D-e",
+      "kind": "budget_line_variance",
+      "glRef": {
+        "date": "2026-10-05",
+        "num": "1618",
+        "name": "Costco",
+        "amount": "2288.53",
+        "class": "FS-27-0412:C3",
+        "account": "6110 Program Supplies"
+      },
+      "expectedRule": "\u00a78.1",
+      "expectedStatus": "blocked",
+      "note": "Cumulative C3 through October reaches 7122.44 (all booked rows) against an annual line of 4800.00; the 10% ceiling is 5280.00. This October charge is the one that crosses the ceiling (true whether or not other flagged rows are excluded).",
+      "evidence": {
+        "receipt": "2026-10-05_costco_9189.pdf"
+      },
+      "annualLineCents": 480000,
+      "ceilingCents": 528000,
+      "cumulativeThroughOctCents": 712244
+    },
+    {
+      "id": "D-f",
+      "kind": "outside_period",
+      "glRef": {
+        "date": "2026-06-28",
+        "num": "",
+        "name": "Costco",
+        "amount": "211.37",
+        "class": "FS-27-0412:C3",
+        "account": "6110 Program Supplies"
+      },
+      "expectedRule": "\u00a71.2",
+      "expectedStatus": "blocked",
+      "note": "Charge dated 2026-06-28 coded to FS-27-0412, before the contract start date 2026-07-01.",
+      "evidence": {
+        "receipt": "2026-06-28_costco_7380.pdf"
+      }
+    },
+    {
+      "id": "D-g",
+      "kind": "duplicate_charge",
+      "glRef": {
+        "date": "2026-08-20",
+        "num": "4471",
+        "name": "Alder Street Print & Copy",
+        "amount": "317.67",
+        "class": "FS-27-0412:C3",
+        "account": "6140 Printing & Copying"
+      },
+      "expectedRule": "\u00a74.3",
+      "expectedStatus": "needs_review",
+      "note": "Same vendor, amount and bill Num entered on 08/19 and again on 08/20; one vendor invoice and one bank payment exist. The 08/20 entry is the duplicate.",
+      "relatedRefs": [
+        {
+          "date": "2026-08-19",
+          "num": "4471",
+          "name": "Alder Street Print & Copy",
+          "amount": "317.67",
+          "class": "FS-27-0412:C3",
+          "account": "6140 Printing & Copying"
+        }
+      ],
+      "evidence": {
+        "receipt": "2026-08-19_alder-street-print_4471.pdf"
+      }
+    },
+    {
+      "id": "D-h",
+      "kind": "equipment_prior_approval",
+      "glRef": {
+        "date": "2026-09-08",
+        "num": "HCA-3464",
+        "name": "Harborline Commercial Appliance",
+        "amount": "5485.85",
+        "class": "FS-27-0412:C4",
+        "account": "6180 Equipment & Furniture"
+      },
+      "expectedRule": "\u00a77.2",
+      "expectedStatus": "blocked",
+      "note": "Commercial refrigerator, unit cost incl. tax and installation 5485.85 (>= $5,000), coded to C4 with no prior written approval (precedents state none was requested).",
+      "evidence": {
+        "receipt": "2026-09-08_harborline-appliance_3464.pdf"
+      }
+    },
+    {
+      "id": "D-i",
+      "kind": "payroll_allocation_exceeded",
+      "glRef": {
+        "date": "2026-09-11",
+        "num": "DD5126",
+        "name": "David Barton",
+        "amount": "609.23",
+        "class": "RF-26-118:F1",
+        "account": "6010 Salaries & Wages"
+      },
+      "expectedRule": "RF-26-118 \u00a74.2",
+      "expectedStatus": "needs_review",
+      "note": "David Barton is allocated 10% to RF-26-118:F1 (304.62 per paycheck) but the 09/11 paycheck charged 609.23 (20%) to F1.",
+      "allowedCents": 30462,
+      "chargedCents": 60923
+    },
+    {
+      "id": "D-j",
+      "kind": "receipt_ambiguous_match",
+      "glRef": {
+        "date": "2026-09-10",
+        "num": "4521",
+        "name": "Costco",
+        "amount": "95.56",
+        "class": "FS-27-0412:C4",
+        "account": "6120 Participant Support"
+      },
+      "expectedRule": "\u00a77.1",
+      "expectedStatus": "needs_review",
+      "note": "One Costco receipt dated 2026-09-12 for 95.56 matches two GL lines with the same amount (09/10 FS-27-0412:C4 and 09/14 RF-26-118:F3), two days either side; it cannot be assigned, so one of the two lines is effectively undocumented.",
+      "relatedRefs": [
+        {
+          "date": "2026-09-14",
+          "num": "4588",
+          "name": "Costco",
+          "amount": "95.56",
+          "class": "RF-26-118:F3",
+          "account": "6120 Participant Support"
+        }
+      ],
+      "evidence": {
+        "receipt": "2026-09-12_costco_5520.pdf"
+      }
+    }
+  ],
+  "clean": [
+    {
+      "date": "2026-07-03",
+      "num": "DD5101",
+      "name": "David Barton",
+      "amount": "1827.69",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-03",
+      "num": "DD5101",
+      "name": "David Barton",
+      "amount": "913.84",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-03",
+      "num": "DD5101",
+      "name": "David Barton",
+      "amount": "304.62",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-03",
+      "num": "DD5102",
+      "name": "Anthony Ortega",
+      "amount": "2000.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-03",
+      "num": "DD5103",
+      "name": "Erin Smith",
+      "amount": "1280.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-03",
+      "num": "DD5103",
+      "name": "Erin Smith",
+      "amount": "320.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-03",
+      "num": "DD5104",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-03",
+      "num": "DD5104",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-03",
+      "num": "DD5105",
+      "name": "Mackenzie Reese",
+      "amount": "3800.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-17",
+      "num": "DD5106",
+      "name": "David Barton",
+      "amount": "1827.69",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-17",
+      "num": "DD5106",
+      "name": "David Barton",
+      "amount": "913.84",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-17",
+      "num": "DD5106",
+      "name": "David Barton",
+      "amount": "304.62",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-17",
+      "num": "DD5107",
+      "name": "Anthony Ortega",
+      "amount": "2000.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-17",
+      "num": "DD5108",
+      "name": "Erin Smith",
+      "amount": "1280.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-17",
+      "num": "DD5108",
+      "name": "Erin Smith",
+      "amount": "320.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-17",
+      "num": "DD5109",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-17",
+      "num": "DD5109",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-17",
+      "num": "DD5110",
+      "name": "Mackenzie Reese",
+      "amount": "3800.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "DD5111",
+      "name": "David Barton",
+      "amount": "1827.69",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "DD5111",
+      "name": "David Barton",
+      "amount": "913.84",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "DD5111",
+      "name": "David Barton",
+      "amount": "304.62",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "DD5112",
+      "name": "Anthony Ortega",
+      "amount": "2000.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "DD5113",
+      "name": "Erin Smith",
+      "amount": "1280.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "DD5113",
+      "name": "Erin Smith",
+      "amount": "320.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "DD5114",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "DD5114",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "DD5115",
+      "name": "Mackenzie Reese",
+      "amount": "3800.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-14",
+      "num": "DD5116",
+      "name": "David Barton",
+      "amount": "1827.69",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-14",
+      "num": "DD5116",
+      "name": "David Barton",
+      "amount": "913.84",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-14",
+      "num": "DD5116",
+      "name": "David Barton",
+      "amount": "304.62",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-14",
+      "num": "DD5117",
+      "name": "Anthony Ortega",
+      "amount": "2000.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-14",
+      "num": "DD5118",
+      "name": "Erin Smith",
+      "amount": "1280.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-14",
+      "num": "DD5118",
+      "name": "Erin Smith",
+      "amount": "320.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-14",
+      "num": "DD5119",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-14",
+      "num": "DD5119",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-14",
+      "num": "DD5120",
+      "name": "Mackenzie Reese",
+      "amount": "3800.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-28",
+      "num": "DD5121",
+      "name": "David Barton",
+      "amount": "1827.69",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-28",
+      "num": "DD5121",
+      "name": "David Barton",
+      "amount": "913.84",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-28",
+      "num": "DD5121",
+      "name": "David Barton",
+      "amount": "304.62",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-28",
+      "num": "DD5122",
+      "name": "Anthony Ortega",
+      "amount": "2000.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-28",
+      "num": "DD5123",
+      "name": "Erin Smith",
+      "amount": "1280.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-28",
+      "num": "DD5123",
+      "name": "Erin Smith",
+      "amount": "320.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-28",
+      "num": "DD5124",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-28",
+      "num": "DD5124",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-08-28",
+      "num": "DD5125",
+      "name": "Mackenzie Reese",
+      "amount": "3800.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-11",
+      "num": "DD5126",
+      "name": "David Barton",
+      "amount": "1827.69",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-11",
+      "num": "DD5126",
+      "name": "David Barton",
+      "amount": "609.23",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-11",
+      "num": "DD5127",
+      "name": "Anthony Ortega",
+      "amount": "2000.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-11",
+      "num": "DD5128",
+      "name": "Erin Smith",
+      "amount": "1280.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-11",
+      "num": "DD5128",
+      "name": "Erin Smith",
+      "amount": "320.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-11",
+      "num": "DD5129",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-11",
+      "num": "DD5129",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-11",
+      "num": "DD5130",
+      "name": "Mackenzie Reese",
+      "amount": "3800.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-25",
+      "num": "DD5131",
+      "name": "David Barton",
+      "amount": "1827.69",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-25",
+      "num": "DD5131",
+      "name": "David Barton",
+      "amount": "913.84",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-25",
+      "num": "DD5131",
+      "name": "David Barton",
+      "amount": "304.62",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-25",
+      "num": "DD5132",
+      "name": "Anthony Ortega",
+      "amount": "2000.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-25",
+      "num": "DD5133",
+      "name": "Erin Smith",
+      "amount": "1280.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-25",
+      "num": "DD5133",
+      "name": "Erin Smith",
+      "amount": "320.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-25",
+      "num": "DD5134",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-25",
+      "num": "DD5134",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-09-25",
+      "num": "DD5135",
+      "name": "Mackenzie Reese",
+      "amount": "3800.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-09",
+      "num": "DD5136",
+      "name": "David Barton",
+      "amount": "1827.69",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-09",
+      "num": "DD5136",
+      "name": "David Barton",
+      "amount": "913.84",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-09",
+      "num": "DD5136",
+      "name": "David Barton",
+      "amount": "304.62",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-09",
+      "num": "DD5137",
+      "name": "Anthony Ortega",
+      "amount": "2000.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-09",
+      "num": "DD5138",
+      "name": "Erin Smith",
+      "amount": "1280.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-09",
+      "num": "DD5138",
+      "name": "Erin Smith",
+      "amount": "320.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-09",
+      "num": "DD5139",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-09",
+      "num": "DD5139",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-09",
+      "num": "DD5140",
+      "name": "Mackenzie Reese",
+      "amount": "3800.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-23",
+      "num": "DD5141",
+      "name": "David Barton",
+      "amount": "1827.69",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-23",
+      "num": "DD5141",
+      "name": "David Barton",
+      "amount": "913.84",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-23",
+      "num": "DD5141",
+      "name": "David Barton",
+      "amount": "304.62",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-23",
+      "num": "DD5142",
+      "name": "Anthony Ortega",
+      "amount": "2000.00",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-23",
+      "num": "DD5143",
+      "name": "Erin Smith",
+      "amount": "1129.85",
+      "class": "FS-27-0412:C1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-23",
+      "num": "DD5143",
+      "name": "Erin Smith",
+      "amount": "282.46",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-23",
+      "num": "DD5144",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-23",
+      "num": "DD5144",
+      "name": "Michael Martin",
+      "amount": "538.46",
+      "class": "RF-26-118:F1",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-10-23",
+      "num": "DD5145",
+      "name": "Mackenzie Reese",
+      "amount": "3800.00",
+      "class": "General",
+      "account": "6010 Salaries & Wages"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "JE-2607-02",
+      "name": "",
+      "amount": "3371.08",
+      "class": "FS-27-0412:C2",
+      "account": "6020 Payroll Taxes & Benefits"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "JE-2607-02",
+      "name": "",
+      "amount": "3677.72",
+      "class": "General",
+      "account": "6020 Payroll Taxes & Benefits"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "JE-2607-02",
+      "name": "",
+      "amount": "556.43",
+      "class": "RF-26-118:F1",
+      "account": "6020 Payroll Taxes & Benefits"
+    },
+    {
+      "date": "2026-08-31",
+      "num": "JE-2608-02",
+      "name": "",
+      "amount": "2247.38",
+      "class": "FS-27-0412:C2",
+      "account": "6020 Payroll Taxes & Benefits"
+    },
+    {
+      "date": "2026-08-31",
+      "num": "JE-2608-02",
+      "name": "",
+      "amount": "2451.81",
+      "class": "General",
+      "account": "6020 Payroll Taxes & Benefits"
+    },
+    {
+      "date": "2026-08-31",
+      "num": "JE-2608-02",
+      "name": "",
+      "amount": "370.96",
+      "class": "RF-26-118:F1",
+      "account": "6020 Payroll Taxes & Benefits"
+    },
+    {
+      "date": "2026-09-30",
+      "num": "JE-2609-02",
+      "name": "",
+      "amount": "2247.38",
+      "class": "FS-27-0412:C2",
+      "account": "6020 Payroll Taxes & Benefits"
+    },
+    {
+      "date": "2026-09-30",
+      "num": "JE-2609-02",
+      "name": "",
+      "amount": "2384.80",
+      "class": "General",
+      "account": "6020 Payroll Taxes & Benefits"
+    },
+    {
+      "date": "2026-09-30",
+      "num": "JE-2609-02",
+      "name": "",
+      "amount": "437.97",
+      "class": "RF-26-118:F1",
+      "account": "6020 Payroll Taxes & Benefits"
+    },
+    {
+      "date": "2026-10-31",
+      "num": "JE-2610-02",
+      "name": "",
+      "amount": "2214.35",
+      "class": "FS-27-0412:C2",
+      "account": "6020 Payroll Taxes & Benefits"
+    },
+    {
+      "date": "2026-10-31",
+      "num": "JE-2610-02",
+      "name": "",
+      "amount": "2443.55",
+      "class": "General",
+      "account": "6020 Payroll Taxes & Benefits"
+    },
+    {
+      "date": "2026-10-31",
+      "num": "JE-2610-02",
+      "name": "",
+      "amount": "370.96",
+      "class": "RF-26-118:F1",
+      "account": "6020 Payroll Taxes & Benefits"
+    },
+    {
+      "date": "2026-07-07",
+      "num": "7091",
+      "name": "Costco",
+      "amount": "620.52",
+      "class": "FS-27-0412:C3",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-07-07",
+      "num": "7091",
+      "name": "Costco",
+      "amount": "55.05",
+      "class": "General",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-07-07",
+      "num": "7091",
+      "name": "Costco",
+      "amount": "140.12",
+      "class": "RF-26-118:F2",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-07-16",
+      "num": "",
+      "name": "Amazon",
+      "amount": "-24.97",
+      "class": "FS-27-0412:C3",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-07-22",
+      "num": "",
+      "name": "Willowmark Art Supply",
+      "amount": "264.48",
+      "class": "RF-26-118:F2",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-07-29",
+      "num": "2791",
+      "name": "Plaza Discount Mart",
+      "amount": "37.06",
+      "class": "FS-27-0412:C3",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-08-04",
+      "num": "",
+      "name": "Costco",
+      "amount": "1461.02",
+      "class": "FS-27-0412:C3",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-08-04",
+      "num": "",
+      "name": "Costco",
+      "amount": "80.06",
+      "class": "General",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-08-24",
+      "num": "",
+      "name": "Amazon",
+      "amount": "88.77",
+      "class": "FS-27-0412:C3",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-09-04",
+      "num": "",
+      "name": "Willowmark Art Supply",
+      "amount": "638.80",
+      "class": "FS-27-0412:C3",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-09-16",
+      "num": "1677",
+      "name": "Amazon",
+      "amount": "210.87",
+      "class": "FS-27-0412:C3",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-09-16",
+      "num": "1677",
+      "name": "Amazon",
+      "amount": "120.50",
+      "class": "RF-26-118:F2",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-09-20",
+      "num": "8577",
+      "name": "Willowmark Art Supply",
+      "amount": "180.97",
+      "class": "RF-26-118:F2",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-10-20",
+      "num": "",
+      "name": "Willowmark Art Supply",
+      "amount": "155.60",
+      "class": "RF-26-118:F2",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-10-22",
+      "num": "7284",
+      "name": "Amazon",
+      "amount": "91.39",
+      "class": "RF-26-118:F2",
+      "account": "6110 Program Supplies"
+    },
+    {
+      "date": "2026-07-09",
+      "num": "",
+      "name": "Office Depot",
+      "amount": "96.52",
+      "class": "FS-27-0412:C3",
+      "account": "6115 Office Supplies"
+    },
+    {
+      "date": "2026-08-13",
+      "num": "9404",
+      "name": "Office Depot",
+      "amount": "133.29",
+      "class": "RF-26-118:F2",
+      "account": "6115 Office Supplies"
+    },
+    {
+      "date": "2026-08-24",
+      "num": "",
+      "name": "Amazon",
+      "amount": "46.41",
+      "class": "General",
+      "account": "6115 Office Supplies"
+    },
+    {
+      "date": "2026-09-17",
+      "num": "",
+      "name": "Office Depot",
+      "amount": "63.37",
+      "class": "FS-27-0412:C3",
+      "account": "6115 Office Supplies"
+    },
+    {
+      "date": "2026-10-22",
+      "num": "7284",
+      "name": "Amazon",
+      "amount": "39.73",
+      "class": "General",
+      "account": "6115 Office Supplies"
+    },
+    {
+      "date": "2026-10-23",
+      "num": "3324",
+      "name": "Office Depot",
+      "amount": "131.34",
+      "class": "General",
+      "account": "6115 Office Supplies"
+    },
+    {
+      "date": "2026-07-18",
+      "num": "PP-4070",
+      "name": "Pinecrest Prepaid Cards",
+      "amount": "1200.00",
+      "class": "FS-27-0412:C4",
+      "account": "6120 Participant Support"
+    },
+    {
+      "date": "2026-07-21",
+      "num": "6307",
+      "name": "Tres Robles Pizzeria",
+      "amount": "215.28",
+      "class": "FS-27-0412:C4",
+      "account": "6120 Participant Support"
+    },
+    {
+      "date": "2026-08-17",
+      "num": "PP-8289",
+      "name": "Pinecrest Prepaid Cards",
+      "amount": "1500.00",
+      "class": "FS-27-0412:C4",
+      "account": "6120 Participant Support"
+    },
+    {
+      "date": "2026-08-18",
+      "num": "3797",
+      "name": "Tres Robles Pizzeria",
+      "amount": "237.19",
+      "class": "FS-27-0412:C4",
+      "account": "6120 Participant Support"
+    },
+    {
+      "date": "2026-08-30",
+      "num": "",
+      "name": "Plaza Discount Mart",
+      "amount": "51.98",
+      "class": "RF-26-118:F3",
+      "account": "6120 Participant Support"
+    },
+    {
+      "date": "2026-09-15",
+      "num": "PP-5178",
+      "name": "Pinecrest Prepaid Cards",
+      "amount": "1500.00",
+      "class": "FS-27-0412:C4",
+      "account": "6120 Participant Support"
+    },
+    {
+      "date": "2026-09-22",
+      "num": "4067",
+      "name": "Tres Robles Pizzeria",
+      "amount": "197.17",
+      "class": "FS-27-0412:C4",
+      "account": "6120 Participant Support"
+    },
+    {
+      "date": "2026-10-13",
+      "num": "PP-9595",
+      "name": "Pinecrest Prepaid Cards",
+      "amount": "1800.00",
+      "class": "FS-27-0412:C4",
+      "account": "6120 Participant Support"
+    },
+    {
+      "date": "2026-10-15",
+      "num": "",
+      "name": "Tres Robles Pizzeria",
+      "amount": "228.71",
+      "class": "FS-27-0412:C4",
+      "account": "6120 Participant Support"
+    },
+    {
+      "date": "2026-07-24",
+      "num": "",
+      "name": "Port Calloway Transit",
+      "amount": "86.00",
+      "class": "FS-27-0412:C5",
+      "account": "6130 Local Travel & Mileage"
+    },
+    {
+      "date": "2026-07-30",
+      "num": "10446",
+      "name": "Anthony Ortega",
+      "amount": "48.30",
+      "class": "FS-27-0412:C5",
+      "account": "6130 Local Travel & Mileage"
+    },
+    {
+      "date": "2026-08-27",
+      "num": "10452",
+      "name": "Erin Smith",
+      "amount": "61.95",
+      "class": "FS-27-0412:C5",
+      "account": "6130 Local Travel & Mileage"
+    },
+    {
+      "date": "2026-09-24",
+      "num": "8054",
+      "name": "Port Calloway Transit",
+      "amount": "75.00",
+      "class": "FS-27-0412:C5",
+      "account": "6130 Local Travel & Mileage"
+    },
+    {
+      "date": "2026-09-25",
+      "num": "10455",
+      "name": "Anthony Ortega",
+      "amount": "74.82",
+      "class": "FS-27-0412:C5",
+      "account": "6130 Local Travel & Mileage"
+    },
+    {
+      "date": "2026-10-26",
+      "num": "10458",
+      "name": "Erin Smith",
+      "amount": "57.40",
+      "class": "FS-27-0412:C5",
+      "account": "6130 Local Travel & Mileage"
+    },
+    {
+      "date": "2026-07-01",
+      "num": "NC-2607",
+      "name": "Ninth & Corliss Holdings",
+      "amount": "2500.00",
+      "class": "FS-27-0412:C6",
+      "account": "6210 Rent"
+    },
+    {
+      "date": "2026-07-01",
+      "num": "NC-2607",
+      "name": "Ninth & Corliss Holdings",
+      "amount": "1250.00",
+      "class": "General",
+      "account": "6210 Rent"
+    },
+    {
+      "date": "2026-08-01",
+      "num": "NC-2608",
+      "name": "Ninth & Corliss Holdings",
+      "amount": "2500.00",
+      "class": "FS-27-0412:C6",
+      "account": "6210 Rent"
+    },
+    {
+      "date": "2026-08-01",
+      "num": "NC-2608",
+      "name": "Ninth & Corliss Holdings",
+      "amount": "1250.00",
+      "class": "General",
+      "account": "6210 Rent"
+    },
+    {
+      "date": "2026-09-01",
+      "num": "NC-2609",
+      "name": "Ninth & Corliss Holdings",
+      "amount": "2500.00",
+      "class": "FS-27-0412:C6",
+      "account": "6210 Rent"
+    },
+    {
+      "date": "2026-09-01",
+      "num": "NC-2609",
+      "name": "Ninth & Corliss Holdings",
+      "amount": "1250.00",
+      "class": "General",
+      "account": "6210 Rent"
+    },
+    {
+      "date": "2026-10-01",
+      "num": "NC-2610",
+      "name": "Ninth & Corliss Holdings",
+      "amount": "2500.00",
+      "class": "FS-27-0412:C6",
+      "account": "6210 Rent"
+    },
+    {
+      "date": "2026-10-01",
+      "num": "NC-2610",
+      "name": "Ninth & Corliss Holdings",
+      "amount": "1250.00",
+      "class": "General",
+      "account": "6210 Rent"
+    },
+    {
+      "date": "2026-07-15",
+      "num": "",
+      "name": "Port Calloway Power & Water",
+      "amount": "333.69",
+      "class": "General",
+      "account": "6220 Utilities"
+    },
+    {
+      "date": "2026-08-16",
+      "num": "",
+      "name": "Port Calloway Power & Water",
+      "amount": "276.61",
+      "class": "General",
+      "account": "6220 Utilities"
+    },
+    {
+      "date": "2026-09-14",
+      "num": "",
+      "name": "Port Calloway Power & Water",
+      "amount": "338.65",
+      "class": "General",
+      "account": "6220 Utilities"
+    },
+    {
+      "date": "2026-10-17",
+      "num": "",
+      "name": "Port Calloway Power & Water",
+      "amount": "322.96",
+      "class": "General",
+      "account": "6220 Utilities"
+    },
+    {
+      "date": "2026-08-21",
+      "num": "5415",
+      "name": "Linden & Pike Insurance",
+      "amount": "642.00",
+      "class": "General",
+      "account": "6230 Insurance"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "",
+      "name": "Harborstone Community Bank",
+      "amount": "18.00",
+      "class": "General",
+      "account": "6250 Bank Fees"
+    },
+    {
+      "date": "2026-08-31",
+      "num": "",
+      "name": "Harborstone Community Bank",
+      "amount": "18.00",
+      "class": "General",
+      "account": "6250 Bank Fees"
+    },
+    {
+      "date": "2026-09-30",
+      "num": "",
+      "name": "Harborstone Community Bank",
+      "amount": "18.00",
+      "class": "General",
+      "account": "6250 Bank Fees"
+    },
+    {
+      "date": "2026-10-31",
+      "num": "",
+      "name": "Harborstone Community Bank",
+      "amount": "18.00",
+      "class": "General",
+      "account": "6250 Bank Fees"
+    },
+    {
+      "date": "2026-08-26",
+      "num": "QEG-1291",
+      "name": "Quillfeather Evaluation Group",
+      "amount": "1250.00",
+      "class": "RF-26-118:F4",
+      "account": "6310 Contract Services"
+    },
+    {
+      "date": "2026-10-19",
+      "num": "QEG-9976",
+      "name": "Quillfeather Evaluation Group",
+      "amount": "1250.00",
+      "class": "RF-26-118:F4",
+      "account": "6310 Contract Services"
+    },
+    {
+      "date": "2026-08-25",
+      "num": "8104",
+      "name": "Juniper Hall Events",
+      "amount": "1500.00",
+      "class": "General",
+      "account": "6410 Fundraising Events"
+    },
+    {
+      "date": "2026-09-29",
+      "num": "",
+      "name": "Costco",
+      "amount": "209.71",
+      "class": "General",
+      "account": "6410 Fundraising Events"
+    },
+    {
+      "date": "2026-07-31",
+      "num": "JE-2607-03",
+      "name": "",
+      "amount": "1532.31",
+      "class": "FS-27-0412:C7",
+      "account": "6900 Indirect Cost Allocation"
+    },
+    {
+      "date": "2026-08-31",
+      "num": "JE-2608-03",
+      "name": "",
+      "amount": "1021.54",
+      "class": "FS-27-0412:C7",
+      "account": "6900 Indirect Cost Allocation"
+    },
+    {
+      "date": "2026-09-30",
+      "num": "JE-2609-03",
+      "name": "",
+      "amount": "1021.54",
+      "class": "FS-27-0412:C7",
+      "account": "6900 Indirect Cost Allocation"
+    }
+  ],
+  "packages": [
+    {
+      "grant": "FS-27-0412",
+      "period": "2026-07",
+      "dueDate": "2026-08-30",
+      "glBookedTotalCents": 2514732,
+      "expectedInvoiceTotalCents": 2514732,
+      "cleanOnlyTotalCents": 2500517,
+      "byLineCents": {
+        "C1": 1532307,
+        "C2": 337108,
+        "C3": 87128,
+        "C4": 141528,
+        "C5": 13430,
+        "C6": 250000,
+        "C7": 153231
+      },
+      "indirect": {
+        "baseLine": "C1",
+        "baseCents": 1532307,
+        "rateBp": 1000,
+        "correctCents": 153231,
+        "bookedCents": 153231
+      },
+      "excludedIssueIds": [],
+      "expectedChecksFailing": [
+        "outside_period",
+        "receipt_amount_mismatch"
+      ]
+    },
+    {
+      "grant": "FS-27-0412",
+      "period": "2026-08",
+      "dueDate": "2026-09-30",
+      "glBookedTotalCents": 2013479,
+      "expectedInvoiceTotalCents": 1996857,
+      "cleanOnlyTotalCents": 1933323,
+      "byLineCents": {
+        "C1": 1021538,
+        "C2": 224738,
+        "C3": 218513,
+        "C4": 173719,
+        "C5": 6195,
+        "C6": 250000,
+        "C7": 102154
+      },
+      "indirect": {
+        "baseLine": "C1",
+        "baseCents": 1021538,
+        "rateBp": 1000,
+        "correctCents": 102154,
+        "bookedCents": 102154
+      },
+      "excludedIssueIds": [
+        "D-a"
+      ],
+      "expectedChecksFailing": [
+        "duplicate_charge",
+        "receipt_missing"
+      ]
+    },
+    {
+      "grant": "FS-27-0412",
+      "period": "2026-09",
+      "dueDate": "2026-10-30",
+      "glBookedTotalCents": 2432574,
+      "expectedInvoiceTotalCents": 1883989,
+      "cleanOnlyTotalCents": 1874433,
+      "byLineCents": {
+        "C1": 1021538,
+        "C2": 224738,
+        "C3": 91304,
+        "C4": 179273,
+        "C5": 14982,
+        "C6": 250000,
+        "C7": 102154
+      },
+      "indirect": {
+        "baseLine": "C1",
+        "baseCents": 1021538,
+        "rateBp": 1000,
+        "correctCents": 102154,
+        "bookedCents": 102154
+      },
+      "excludedIssueIds": [
+        "D-h"
+      ],
+      "expectedChecksFailing": [
+        "equipment_prior_approval",
+        "receipt_ambiguous_match"
+      ]
+    },
+    {
+      "grant": "FS-27-0412",
+      "period": "2026-10",
+      "dueDate": "2026-11-30",
+      "glBookedTotalCents": 2064769,
+      "expectedInvoiceTotalCents": 1787221,
+      "cleanOnlyTotalCents": 1787221,
+      "byLineCents": {
+        "C1": 1006523,
+        "C2": 221435,
+        "C4": 202871,
+        "C5": 5740,
+        "C6": 250000,
+        "C7": 100652
+      },
+      "indirect": {
+        "baseLine": "C1",
+        "baseCents": 1006523,
+        "rateBp": 1000,
+        "correctCents": 100652,
+        "bookedCents": 100660
+      },
+      "excludedIssueIds": [
+        "D-d",
+        "D-e"
+      ],
+      "expectedChecksFailing": [
+        "budget_line_variance",
+        "indirect_rate",
+        "unallowable_cost"
+      ]
+    }
+  ]
+}

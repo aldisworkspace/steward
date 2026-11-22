@@ -1,0 +1,165 @@
+Date,Transaction Type,Num,Name,Memo/Description,Account,Class,Location,Split,Amount
+07/03/2026,Paycheck,DD5101,David Barton,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1827.69
+07/03/2026,Paycheck,DD5101,David Barton,,6010 Salaries & Wages,General,Family Resource Center,-Split-,913.84
+07/03/2026,Paycheck,DD5101,David Barton,,6010 Salaries & Wages,RF-26-118:F1,Family Resource Center,-Split-,304.62
+07/03/2026,Paycheck,DD5102,Anthony Ortega,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,1010 Operating Checking,2000.00
+07/03/2026,Paycheck,DD5103,Erin Smith,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1280.00
+07/03/2026,Paycheck,DD5103,Erin Smith,,6010 Salaries & Wages,General,Family Resource Center,-Split-,320.00
+07/03/2026,Paycheck,DD5104,Michael Martin,,6010 Salaries & Wages,General,Youth Mentoring,-Split-,538.46
+07/03/2026,Paycheck,DD5104,Michael Martin,PPE 06/27,6010 Salaries & Wages,RF-26-118:F1,Youth Mentoring,-Split-,538.46
+07/03/2026,Paycheck,DD5105,Mackenzie Reese,PPE 06/27,6010 Salaries & Wages,General,Administration,1010 Operating Checking,3800.00
+07/17/2026,Paycheck,DD5106,David Barton,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1827.69
+07/17/2026,Paycheck,DD5106,David Barton,PPE 07/11,6010 Salaries & Wages,General,Family Resource Center,-Split-,913.84
+07/17/2026,Paycheck,DD5106,David Barton,,6010 Salaries & Wages,RF-26-118:F1,Family Resource Center,-Split-,304.62
+07/17/2026,Paycheck,DD5107,Anthony Ortega,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,1010 Operating Checking,2000.00
+07/17/2026,Paycheck,DD5108,Erin Smith,PPE 07/11,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1280.00
+07/17/2026,Paycheck,DD5108,Erin Smith,,6010 Salaries & Wages,General,Family Resource Center,-Split-,320.00
+07/17/2026,Paycheck,DD5109,Michael Martin,,6010 Salaries & Wages,General,Youth Mentoring,-Split-,538.46
+07/17/2026,Paycheck,DD5109,Michael Martin,,6010 Salaries & Wages,RF-26-118:F1,Youth Mentoring,-Split-,538.46
+07/17/2026,Paycheck,DD5110,Mackenzie Reese,,6010 Salaries & Wages,General,Administration,1010 Operating Checking,3800.00
+07/31/2026,Paycheck,DD5111,David Barton,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1827.69
+07/31/2026,Paycheck,DD5111,David Barton,,6010 Salaries & Wages,General,Family Resource Center,-Split-,913.84
+07/31/2026,Paycheck,DD5111,David Barton,,6010 Salaries & Wages,RF-26-118:F1,Family Resource Center,-Split-,304.62
+07/31/2026,Paycheck,DD5112,Anthony Ortega,PPE 07/25,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,1010 Operating Checking,2000.00
+07/31/2026,Paycheck,DD5113,Erin Smith,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1280.00
+07/31/2026,Paycheck,DD5113,Erin Smith,,6010 Salaries & Wages,General,Family Resource Center,-Split-,320.00
+07/31/2026,Paycheck,DD5114,Michael Martin,PPE 07/25,6010 Salaries & Wages,General,Youth Mentoring,-Split-,538.46
+07/31/2026,Paycheck,DD5114,Michael Martin,,6010 Salaries & Wages,RF-26-118:F1,Youth Mentoring,-Split-,538.46
+07/31/2026,Paycheck,DD5115,Mackenzie Reese,,6010 Salaries & Wages,General,Administration,1010 Operating Checking,3800.00
+08/14/2026,Paycheck,DD5116,David Barton,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1827.69
+08/14/2026,Paycheck,DD5116,David Barton,,6010 Salaries & Wages,General,Family Resource Center,-Split-,913.84
+08/14/2026,Paycheck,DD5116,David Barton,PPE 08/08,6010 Salaries & Wages,RF-26-118:F1,Family Resource Center,-Split-,304.62
+08/14/2026,Paycheck,DD5117,Anthony Ortega,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,1010 Operating Checking,2000.00
+08/14/2026,Paycheck,DD5118,Erin Smith,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1280.00
+08/14/2026,Paycheck,DD5118,Erin Smith,,6010 Salaries & Wages,General,Family Resource Center,-Split-,320.00
+08/14/2026,Paycheck,DD5119,Michael Martin,PPE 08/08,6010 Salaries & Wages,General,Youth Mentoring,-Split-,538.46
+08/14/2026,Paycheck,DD5119,Michael Martin,,6010 Salaries & Wages,RF-26-118:F1,Youth Mentoring,-Split-,538.46
+08/14/2026,Paycheck,DD5120,Mackenzie Reese,,6010 Salaries & Wages,General,Administration,1010 Operating Checking,3800.00
+08/28/2026,Paycheck,DD5121,David Barton,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1827.69
+08/28/2026,Paycheck,DD5121,David Barton,,6010 Salaries & Wages,General,Family Resource Center,-Split-,913.84
+08/28/2026,Paycheck,DD5121,David Barton,,6010 Salaries & Wages,RF-26-118:F1,Family Resource Center,-Split-,304.62
+08/28/2026,Paycheck,DD5122,Anthony Ortega,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,1010 Operating Checking,2000.00
+08/28/2026,Paycheck,DD5123,Erin Smith,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1280.00
+08/28/2026,Paycheck,DD5123,Erin Smith,PPE 08/22,6010 Salaries & Wages,General,Family Resource Center,-Split-,320.00
+08/28/2026,Paycheck,DD5124,Michael Martin,PPE 08/22,6010 Salaries & Wages,General,Youth Mentoring,-Split-,538.46
+08/28/2026,Paycheck,DD5124,Michael Martin,PPE 08/22,6010 Salaries & Wages,RF-26-118:F1,Youth Mentoring,-Split-,538.46
+08/28/2026,Paycheck,DD5125,Mackenzie Reese,,6010 Salaries & Wages,General,Administration,1010 Operating Checking,3800.00
+09/11/2026,Paycheck,DD5126,David Barton,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1827.69
+09/11/2026,Paycheck,DD5126,David Barton,PPE 09/05,6010 Salaries & Wages,General,Family Resource Center,-Split-,609.23
+09/11/2026,Paycheck,DD5126,David Barton,,6010 Salaries & Wages,RF-26-118:F1,Family Resource Center,-Split-,609.23
+09/11/2026,Paycheck,DD5127,Anthony Ortega,PPE 09/05,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,1010 Operating Checking,2000.00
+09/11/2026,Paycheck,DD5128,Erin Smith,PPE 09/05,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1280.00
+09/11/2026,Paycheck,DD5128,Erin Smith,,6010 Salaries & Wages,General,Family Resource Center,-Split-,320.00
+09/11/2026,Paycheck,DD5129,Michael Martin,,6010 Salaries & Wages,General,Youth Mentoring,-Split-,538.46
+09/11/2026,Paycheck,DD5129,Michael Martin,,6010 Salaries & Wages,RF-26-118:F1,Youth Mentoring,-Split-,538.46
+09/11/2026,Paycheck,DD5130,Mackenzie Reese,,6010 Salaries & Wages,General,Administration,1010 Operating Checking,3800.00
+09/25/2026,Paycheck,DD5131,David Barton,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1827.69
+09/25/2026,Paycheck,DD5131,David Barton,,6010 Salaries & Wages,General,Family Resource Center,-Split-,913.84
+09/25/2026,Paycheck,DD5131,David Barton,,6010 Salaries & Wages,RF-26-118:F1,Family Resource Center,-Split-,304.62
+09/25/2026,Paycheck,DD5132,Anthony Ortega,PPE 09/19,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,1010 Operating Checking,2000.00
+09/25/2026,Paycheck,DD5133,Erin Smith,PPE 09/19,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1280.00
+09/25/2026,Paycheck,DD5133,Erin Smith,PPE 09/19,6010 Salaries & Wages,General,Family Resource Center,-Split-,320.00
+09/25/2026,Paycheck,DD5134,Michael Martin,,6010 Salaries & Wages,General,Youth Mentoring,-Split-,538.46
+09/25/2026,Paycheck,DD5134,Michael Martin,,6010 Salaries & Wages,RF-26-118:F1,Youth Mentoring,-Split-,538.46
+09/25/2026,Paycheck,DD5135,Mackenzie Reese,,6010 Salaries & Wages,General,Administration,1010 Operating Checking,3800.00
+10/09/2026,Paycheck,DD5136,David Barton,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1827.69
+10/09/2026,Paycheck,DD5136,David Barton,,6010 Salaries & Wages,General,Family Resource Center,-Split-,913.84
+10/09/2026,Paycheck,DD5136,David Barton,,6010 Salaries & Wages,RF-26-118:F1,Family Resource Center,-Split-,304.62
+10/09/2026,Paycheck,DD5137,Anthony Ortega,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,1010 Operating Checking,2000.00
+10/09/2026,Paycheck,DD5138,Erin Smith,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1280.00
+10/09/2026,Paycheck,DD5138,Erin Smith,,6010 Salaries & Wages,General,Family Resource Center,-Split-,320.00
+10/09/2026,Paycheck,DD5139,Michael Martin,,6010 Salaries & Wages,General,Youth Mentoring,-Split-,538.46
+10/09/2026,Paycheck,DD5139,Michael Martin,,6010 Salaries & Wages,RF-26-118:F1,Youth Mentoring,-Split-,538.46
+10/09/2026,Paycheck,DD5140,Mackenzie Reese,,6010 Salaries & Wages,General,Administration,1010 Operating Checking,3800.00
+10/23/2026,Paycheck,DD5141,David Barton,PPE 10/17,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1827.69
+10/23/2026,Paycheck,DD5141,David Barton,,6010 Salaries & Wages,General,Family Resource Center,-Split-,913.84
+10/23/2026,Paycheck,DD5141,David Barton,,6010 Salaries & Wages,RF-26-118:F1,Family Resource Center,-Split-,304.62
+10/23/2026,Paycheck,DD5142,Anthony Ortega,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,1010 Operating Checking,2000.00
+10/23/2026,Paycheck,DD5143,Erin Smith,,6010 Salaries & Wages,FS-27-0412:C1,Family Resource Center,-Split-,1129.85
+10/23/2026,Paycheck,DD5143,Erin Smith,,6010 Salaries & Wages,General,Family Resource Center,-Split-,282.46
+10/23/2026,Paycheck,DD5144,Michael Martin,,6010 Salaries & Wages,General,Youth Mentoring,-Split-,538.46
+10/23/2026,Paycheck,DD5144,Michael Martin,,6010 Salaries & Wages,RF-26-118:F1,Youth Mentoring,-Split-,538.46
+10/23/2026,Paycheck,DD5145,Mackenzie Reese,PPE 10/17,6010 Salaries & Wages,General,Administration,1010 Operating Checking,3800.00
+07/31/2026,Journal Entry,JE-2607-02,,Employer taxes & benefits alloc Jul,6020 Payroll Taxes & Benefits,FS-27-0412:C2,Family Resource Center,2310 Accrued Payroll Liabilities,3371.08
+07/31/2026,Journal Entry,JE-2607-02,,Employer taxes & benefits alloc Jul,6020 Payroll Taxes & Benefits,General,Administration,2310 Accrued Payroll Liabilities,3677.72
+07/31/2026,Journal Entry,JE-2607-02,,Employer taxes & benefits alloc Jul,6020 Payroll Taxes & Benefits,RF-26-118:F1,Youth Mentoring,2310 Accrued Payroll Liabilities,556.43
+08/31/2026,Journal Entry,JE-2608-02,,Employer taxes & benefits alloc Aug,6020 Payroll Taxes & Benefits,FS-27-0412:C2,Family Resource Center,2310 Accrued Payroll Liabilities,2247.38
+08/31/2026,Journal Entry,JE-2608-02,,Employer taxes & benefits alloc Aug,6020 Payroll Taxes & Benefits,General,Administration,2310 Accrued Payroll Liabilities,2451.81
+08/31/2026,Journal Entry,JE-2608-02,,Employer taxes & benefits alloc Aug,6020 Payroll Taxes & Benefits,RF-26-118:F1,Youth Mentoring,2310 Accrued Payroll Liabilities,370.96
+09/30/2026,Journal Entry,JE-2609-02,,Employer taxes & benefits alloc Sep,6020 Payroll Taxes & Benefits,FS-27-0412:C2,Family Resource Center,2310 Accrued Payroll Liabilities,2247.38
+09/30/2026,Journal Entry,JE-2609-02,,Employer taxes & benefits alloc Sep,6020 Payroll Taxes & Benefits,General,Administration,2310 Accrued Payroll Liabilities,2384.80
+09/30/2026,Journal Entry,JE-2609-02,,Employer taxes & benefits alloc Sep,6020 Payroll Taxes & Benefits,RF-26-118:F1,Youth Mentoring,2310 Accrued Payroll Liabilities,437.97
+10/31/2026,Journal Entry,JE-2610-02,,Employer taxes & benefits alloc Oct,6020 Payroll Taxes & Benefits,FS-27-0412:C2,Family Resource Center,2310 Accrued Payroll Liabilities,2214.35
+10/31/2026,Journal Entry,JE-2610-02,,Employer taxes & benefits alloc Oct,6020 Payroll Taxes & Benefits,General,Administration,2310 Accrued Payroll Liabilities,2443.55
+10/31/2026,Journal Entry,JE-2610-02,,Employer taxes & benefits alloc Oct,6020 Payroll Taxes & Benefits,RF-26-118:F1,Youth Mentoring,2310 Accrued Payroll Liabilities,370.96
+06/28/2026,Expense,,Costco,kits,6110 Program Supplies,FS-27-0412:C3,Family Resource Center,2110 Business Credit Card x4417,211.37
+07/07/2026,Expense,7091,Costco,welcome kits,6110 Program Supplies,FS-27-0412:C3,Family Resource Center,-Split-,620.52
+07/07/2026,Expense,7091,Costco,,6110 Program Supplies,General,Administration,-Split-,55.05
+07/07/2026,Expense,7091,Costco,,6110 Program Supplies,RF-26-118:F2,Youth Mentoring,-Split-,140.12
+07/14/2026,Expense,7731,Amazon,books,6110 Program Supplies,FS-27-0412:C3,Family Resource Center,2110 Business Credit Card x4417,142.15
+07/16/2026,Credit Card Credit,,Amazon,return,6110 Program Supplies,FS-27-0412:C3,Family Resource Center,2110 Business Credit Card x4417,-24.97
+07/22/2026,Expense,,Willowmark Art Supply,art supplies,6110 Program Supplies,RF-26-118:F2,Youth Mentoring,2110 Business Credit Card x4417,264.48
+07/29/2026,Expense,2791,Plaza Discount Mart,,6110 Program Supplies,FS-27-0412:C3,Family Resource Center,2110 Business Credit Card x4417,37.06
+08/04/2026,Expense,,Costco,backpacks,6110 Program Supplies,FS-27-0412:C3,Family Resource Center,-Split-,1461.02
+08/04/2026,Expense,,Costco,,6110 Program Supplies,General,Administration,-Split-,80.06
+08/24/2026,Expense,,Amazon,,6110 Program Supplies,FS-27-0412:C3,Family Resource Center,-Split-,88.77
+09/04/2026,Expense,,Willowmark Art Supply,art supplies,6110 Program Supplies,FS-27-0412:C3,Family Resource Center,2110 Business Credit Card x4417,638.80
+09/16/2026,Expense,1677,Amazon,,6110 Program Supplies,FS-27-0412:C3,Family Resource Center,-Split-,210.87
+09/16/2026,Expense,1677,Amazon,,6110 Program Supplies,RF-26-118:F2,Youth Mentoring,-Split-,120.50
+09/20/2026,Expense,8577,Willowmark Art Supply,,6110 Program Supplies,RF-26-118:F2,Youth Mentoring,2110 Business Credit Card x4417,180.97
+10/05/2026,Expense,1618,Costco,program supplies,6110 Program Supplies,FS-27-0412:C3,Family Resource Center,2110 Business Credit Card x4417,2288.53
+10/20/2026,Expense,,Willowmark Art Supply,,6110 Program Supplies,RF-26-118:F2,Youth Mentoring,2110 Business Credit Card x4417,155.60
+10/22/2026,Expense,7284,Amazon,journals,6110 Program Supplies,RF-26-118:F2,Youth Mentoring,-Split-,91.39
+07/09/2026,Expense,,Office Depot,,6115 Office Supplies,FS-27-0412:C3,Family Resource Center,2110 Business Credit Card x4417,96.52
+08/11/2026,Expense,,Office Depot,,6115 Office Supplies,FS-27-0412:C3,Family Resource Center,2110 Business Credit Card x4417,166.22
+08/13/2026,Expense,9404,Office Depot,mentoring journals,6115 Office Supplies,RF-26-118:F2,Youth Mentoring,2110 Business Credit Card x4417,133.29
+08/24/2026,Expense,,Amazon,,6115 Office Supplies,General,Administration,-Split-,46.41
+09/17/2026,Expense,,Office Depot,,6115 Office Supplies,FS-27-0412:C3,Family Resource Center,2110 Business Credit Card x4417,63.37
+10/22/2026,Expense,7284,Amazon,,6115 Office Supplies,General,Administration,-Split-,39.73
+10/23/2026,Expense,3324,Office Depot,admin supplies,6115 Office Supplies,General,Administration,2110 Business Credit Card x4417,131.34
+07/18/2026,Bill,PP-4070,Pinecrest Prepaid Cards,Jul stipends,6120 Participant Support,FS-27-0412:C4,Family Resource Center,2000 Accounts Payable,1200.00
+07/21/2026,Expense,6307,Tres Robles Pizzeria,Family night - participants,6120 Participant Support,FS-27-0412:C4,Family Resource Center,2110 Business Credit Card x4417,215.28
+08/17/2026,Bill,PP-8289,Pinecrest Prepaid Cards,Aug stipends,6120 Participant Support,FS-27-0412:C4,Family Resource Center,2000 Accounts Payable,1500.00
+08/18/2026,Expense,3797,Tres Robles Pizzeria,Family night,6120 Participant Support,FS-27-0412:C4,Family Resource Center,2110 Business Credit Card x4417,237.19
+08/30/2026,Expense,,Plaza Discount Mart,,6120 Participant Support,RF-26-118:F3,Youth Mentoring,2110 Business Credit Card x4417,51.98
+09/10/2026,Expense,4521,Costco,snacks,6120 Participant Support,FS-27-0412:C4,Family Resource Center,2110 Business Credit Card x4417,95.56
+09/14/2026,Expense,4588,Costco,family event snacks,6120 Participant Support,RF-26-118:F3,Youth Mentoring,2110 Business Credit Card x4417,95.56
+09/15/2026,Bill,PP-5178,Pinecrest Prepaid Cards,Sep stipends,6120 Participant Support,FS-27-0412:C4,Family Resource Center,2000 Accounts Payable,1500.00
+09/22/2026,Expense,4067,Tres Robles Pizzeria,family night,6120 Participant Support,FS-27-0412:C4,Family Resource Center,2110 Business Credit Card x4417,197.17
+10/13/2026,Bill,PP-9595,Pinecrest Prepaid Cards,Oct stipends,6120 Participant Support,FS-27-0412:C4,Family Resource Center,2000 Accounts Payable,1800.00
+10/15/2026,Expense,,Tres Robles Pizzeria,family night - participants,6120 Participant Support,FS-27-0412:C4,Family Resource Center,2110 Business Credit Card x4417,228.71
+07/24/2026,Expense,,Port Calloway Transit,passes,6130 Local Travel & Mileage,FS-27-0412:C5,Family Resource Center,2110 Business Credit Card x4417,86.00
+07/30/2026,Check,10446,Anthony Ortega,mileage Jul,6130 Local Travel & Mileage,FS-27-0412:C5,Family Resource Center,1010 Operating Checking,48.30
+08/27/2026,Check,10452,Erin Smith,mileage Aug,6130 Local Travel & Mileage,FS-27-0412:C5,Family Resource Center,1010 Operating Checking,61.95
+09/24/2026,Expense,8054,Port Calloway Transit,youth passes,6130 Local Travel & Mileage,FS-27-0412:C5,Family Resource Center,2110 Business Credit Card x4417,75.00
+09/25/2026,Check,10455,Anthony Ortega,mileage Sep,6130 Local Travel & Mileage,FS-27-0412:C5,Family Resource Center,1010 Operating Checking,74.82
+10/26/2026,Check,10458,Erin Smith,mileage Oct,6130 Local Travel & Mileage,FS-27-0412:C5,Family Resource Center,1010 Operating Checking,57.40
+08/19/2026,Bill,4471,Alder Street Print & Copy,flyers,6140 Printing & Copying,FS-27-0412:C3,Family Resource Center,2000 Accounts Payable,317.67
+08/20/2026,Bill,4471,Alder Street Print & Copy,flyers,6140 Printing & Copying,FS-27-0412:C3,Family Resource Center,2000 Accounts Payable,317.67
+10/09/2026,Expense,,Casa Lumbre Cocina,Staff appreciation dinner,6160 Meals & Entertainment,FS-27-0412:C3,Family Resource Center,2110 Business Credit Card x4417,486.87
+09/08/2026,Bill,HCA-3464,Harborline Commercial Appliance,pantry fridge,6180 Equipment & Furniture,FS-27-0412:C4,Family Resource Center,2000 Accounts Payable,5485.85
+07/01/2026,Bill,NC-2607,Ninth & Corliss Holdings,Jul rent,6210 Rent,FS-27-0412:C6,Family Resource Center,-Split-,2500.00
+07/01/2026,Bill,NC-2607,Ninth & Corliss Holdings,Jul rent,6210 Rent,General,Administration,-Split-,1250.00
+08/01/2026,Bill,NC-2608,Ninth & Corliss Holdings,Aug rent,6210 Rent,FS-27-0412:C6,Family Resource Center,-Split-,2500.00
+08/01/2026,Bill,NC-2608,Ninth & Corliss Holdings,Aug rent,6210 Rent,General,Administration,-Split-,1250.00
+09/01/2026,Bill,NC-2609,Ninth & Corliss Holdings,Sep rent,6210 Rent,FS-27-0412:C6,Family Resource Center,-Split-,2500.00
+09/01/2026,Bill,NC-2609,Ninth & Corliss Holdings,Sep rent,6210 Rent,General,Administration,-Split-,1250.00
+10/01/2026,Bill,NC-2610,Ninth & Corliss Holdings,Oct rent,6210 Rent,FS-27-0412:C6,Family Resource Center,-Split-,2500.00
+10/01/2026,Bill,NC-2610,Ninth & Corliss Holdings,Oct rent,6210 Rent,General,Administration,-Split-,1250.00
+07/15/2026,Expense,,Port Calloway Power & Water,,6220 Utilities,General,Administration,1010 Operating Checking,333.69
+08/16/2026,Expense,,Port Calloway Power & Water,,6220 Utilities,General,Administration,1010 Operating Checking,276.61
+09/14/2026,Expense,,Port Calloway Power & Water,,6220 Utilities,General,Administration,1010 Operating Checking,338.65
+10/17/2026,Expense,,Port Calloway Power & Water,,6220 Utilities,General,Administration,1010 Operating Checking,322.96
+08/21/2026,Bill,5415,Linden & Pike Insurance,,6230 Insurance,General,Administration,2000 Accounts Payable,642.00
+07/31/2026,Expense,,Harborstone Community Bank,,6250 Bank Fees,General,Administration,1010 Operating Checking,18.00
+08/31/2026,Expense,,Harborstone Community Bank,,6250 Bank Fees,General,Administration,1010 Operating Checking,18.00
+09/30/2026,Expense,,Harborstone Community Bank,,6250 Bank Fees,General,Administration,1010 Operating Checking,18.00
+10/31/2026,Expense,,Harborstone Community Bank,,6250 Bank Fees,General,Administration,1010 Operating Checking,18.00
+08/26/2026,Bill,QEG-1291,Quillfeather Evaluation Group,,6310 Contract Services,RF-26-118:F4,Youth Mentoring,2000 Accounts Payable,1250.00
+10/19/2026,Bill,QEG-9976,Quillfeather Evaluation Group,,6310 Contract Services,RF-26-118:F4,Youth Mentoring,2000 Accounts Payable,1250.00
+08/25/2026,Bill,8104,Juniper Hall Events,gala deposit,6410 Fundraising Events,General,Administration,2000 Accounts Payable,1500.00
+09/29/2026,Expense,,Costco,Donor appreciation breakfast,6410 Fundraising Events,General,Administration,2110 Business Credit Card x4417,209.71
+07/31/2026,Journal Entry,JE-2607-03,,Indirect 10% - Jul,6900 Indirect Cost Allocation,FS-27-0412:C7,Family Resource Center,4900 Indirect Cost Recovery,1532.31
+08/31/2026,Journal Entry,JE-2608-03,,Indirect 10% - Aug,6900 Indirect Cost Allocation,FS-27-0412:C7,Family Resource Center,4900 Indirect Cost Recovery,1021.54
+09/30/2026,Journal Entry,JE-2609-03,,Indirect 10% - Sep,6900 Indirect Cost Allocation,FS-27-0412:C7,Family Resource Center,4900 Indirect Cost Recovery,1021.54
+10/31/2026,Journal Entry,JE-2610-03,,Indirect 10% - Oct,6900 Indirect Cost Allocation,FS-27-0412:C7,Family Resource Center,4900 Indirect Cost Recovery,1006.60
