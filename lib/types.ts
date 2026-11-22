@@ -50,7 +50,30 @@ export const DecisionZ = z.object({
 });
 export type Decision = z.infer<typeof DecisionZ>;
 
-export interface Txn { txnId: string; date: string; description: string; amountCents: number; memo: string }
+/**
+ * One primary record. In GL-first workspaces this is a GL detail line (txnId "L0001", source "gl");
+ * in the legacy bank-first path it is a bank transaction (txnId "T0001"). `amountCents` always uses
+ * the bank convention: negative = money out / expense, positive = money in / credit.
+ * A bank outflow with no GL line is kept as a placeholder with source "bank" (txnId "B0001").
+ */
+export interface Txn {
+  txnId: string; date: string; description: string; amountCents: number; memo: string;
+  source?: "gl" | "bank";
+  vendor?: string;
+  account?: string;
+  /** Department / program / location dimension from the GL. */
+  department?: string;
+  /** Invoice, PO or check number. */
+  docRef?: string;
+  /** Transaction type as exported (e.g. "Bill", "Check", "Journal Entry"). */
+  txnType?: string;
+  /** The bookkeeper's coding as exported (also mirrored into glRows for the existing rules). */
+  glClass?: string | null;
+  glBudgetLine?: string | null;
+  enteredBy?: string;
+  /** Program-side sign-off (name-based until real auth). */
+  programApprovedBy?: string | null;
+}
 export interface GlRow { bankRef: string; date: string; description: string; amountCents: number;
   account: string; class: string | null; budgetLine: string | null; enteredBy: string }
 export interface StaffAllocation { employee: string; role: string; biweeklyCents: number;

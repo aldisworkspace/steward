@@ -11,9 +11,7 @@ import {
   type BankColumnMapping,
   type BankColumnRole,
 } from "@/lib/parseFlexible";
-import { parseFlexibleDate, parseFlexibleAmount } from "@/lib/parseFlexible";
-import { parseCsv } from "@/lib/parse";
-import { matchLedgerToBank, suggestLedgerMapping } from "@/lib/matchLedger";
+import { GL_ROLES, parseGlDetail, type GlColumnMapping, type GlColumnRole, type GlLine } from "@/lib/parseGlDetail";
 import type { GrantTerms, StaffAllocation, Txn } from "@/lib/types";
 import { getDemoPasscode } from "../lib/demoPasscode";
 import { messageFromConvexError } from "../lib/convexError";
@@ -38,16 +36,18 @@ export function YourDataTab({
   const extractGrant = useAction(api.agent.extractGrant);
   const confirmTerms = useMutation(api.grants.confirmGrantTerms);
   const startWorkspace = useMutation(api.ingest.startCustomWorkspace);
+  const startGlWorkspace = useMutation(api.ingest.startGlWorkspace);
 
   const [orgName, setOrgName] = useState("");
   const [bankRaw, setBankRaw] = useState<string | null>(null);
   const [bankMapping, setBankMapping] = useState<BankColumnMapping | null>(null);
   const [bankHeaders, setBankHeaders] = useState<string[]>([]);
   const [txns, setTxns] = useState<Txn[]>([]);
-  const [ledgerOrphans, setLedgerOrphans] = useState<{ description: string; date: string; amountCents: number }[]>([]);
-  const [glRows, setGlRows] = useState<
-    { bankRef: string; date: string; description: string; amountCents: number; account: string; class: string | null; budgetLine: string | null; enteredBy: string }[]
-  >([]);
+  const [glRaw, setGlRaw] = useState<string | null>(null);
+  const [glMapping, setGlMapping] = useState<GlColumnMapping | null>(null);
+  const [glHeaders, setGlHeaders] = useState<string[]>([]);
+  const [glLines, setGlLines] = useState<GlLine[]>([]);
+  const [glSkipped, setGlSkipped] = useState(0);
   const [staff, setStaff] = useState<StaffAllocation[]>([]);
   const [busy, setBusy] = useState(false);
   const [draftTerms, setDraftTerms] = useState<Record<string, GrantTerms>>({});
@@ -128,40 +128,52 @@ export function YourDataTab({
     onError(null);
   }
 
-  function onLedgerFile(text: string) {
-    const records = parseCsv(text);
-    if (!records.length || !txns.length) return;
-    const headers = Object.keys(records[0]!);
-    const map = suggestLedgerMapping(headers);
-    const ledgerRows = records.map((r) => ({
-      date: parseFlexibleDate(r[map.date ?? headers[0]!] ?? ""),
-      description: (r[map.description ?? ""] ?? "").trim(),
-      amountCents: parseFlexibleAmount(r[map.amount ?? ""] ?? "0"),
-      account: r[map.account ?? ""] ?? "5000 Program Expense",
-      class: (r[map.class ?? ""] ?? "").trim() || null,
-      budgetLine: (r[map.budgetLine ?? ""] ?? "").trim() || null,
-      enteredBy: (r[map.enteredBy ?? ""] ?? "").trim() || "bookkeeper",
-    }));
-    const { gl, orphanFindings } = matchLedgerToBank(ledgerRows, txns);
-    setGlRows(gl);
-    setLedgerOrphans(orphanFindings);
+  function applyGlParse(text: string, mapping?: GlColumnMapping) {
+    const r = parseGlDetail(text, mapping);
+    setGlRaw(text);
+    setGlHeaders(r.headers);
+    setGlMapping(r.mapping);
+    setGlSkipped(r.skipped.length);
+    if (r.error) {
+      onError(r.error);
+      setGlLines([]);
+      return;
+    }
+    setGlLines(r.lines);
+    onError(null);
+  }
+
+  function applyGlMapping(role: GlColumnRole, header: string | null) {
+    if (!glMapping || !glRaw) return;
+    applyGlParse(glRaw, { ...glMapping, [role]: header === "" ? null : header });
   }
 
   async function onRunCustom() {
-    if (!canWrite || !txns.length || !readyGrantIds.length) {
-      onError("Upload bank transactions and confirm at least one grant.");
+    if (!canWrite || (!glLines.length && !txns.length) || !readyGrantIds.length) {
+      onError("Upload a GL detail (or a bank export) and confirm at least one grant.");
       return;
     }
     setBusy(true);
     onError(null);
     try {
-      await startWorkspace({
-        passcode: getDemoPasscode(),
-        transactions: txns,
-        glRows,
-        staffAllocations: staff,
-        grantDocIds: readyGrantIds,
-      });
+      if (glLines.length) {
+        // GL-first: the GL detail is the primary record; the bank file is optional.
+        await startGlWorkspace({
+          passcode: getDemoPasscode(),
+          lines: glLines,
+          staffAllocations: staff,
+          grantDocIds: readyGrantIds,
+        });
+      } else {
+        // Legacy bank-first path (no ledger).
+        await startWorkspace({
+          passcode: getDemoPasscode(),
+          transactions: txns,
+          glRows: [],
+          staffAllocations: staff,
+          grantDocIds: readyGrantIds,
+        });
+      }
       onRunStarted();
     } catch (e) {
       onError(messageFromConvexError(e));
@@ -221,7 +233,83 @@ export function YourDataTab({
       </section>
 
       <section>
-        <h2 className="text-[17px] font-semibold">2. Bank export (CSV)</h2>
+        <h2 className="text-[17px] font-semibold">2. General ledger detail (CSV)</h2>
+        <p className="mt-1 text-[13px] text-ink-2">
+          QuickBooks Transaction Detail by Account, Xero Account Transactions or Sage Intacct GL detail. Expense lines only.
+        </p>
+        <label className="mt-2 inline-block cursor-pointer text-ledger underline">
+          Choose GL CSV
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            disabled={!canWrite}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void f.text().then((t) => applyGlParse(t));
+            }}
+          />
+        </label>
+        {glMapping && glHeaders.length > 0 && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="text-[13px]">
+              <tbody>
+                {GL_ROLES.map((role) => (
+                  <tr key={role}>
+                    <td className="py-1 pr-4 text-ink-2">{role}</td>
+                    <td>
+                      <select
+                        className="rounded border border-rule px-2 py-1"
+                        value={glMapping[role] ?? ""}
+                        onChange={(e) => applyGlMapping(role, e.target.value || null)}
+                      >
+                        <option value="">—</option>
+                        {glHeaders.map((h) => (
+                          <option key={h} value={h}>
+                            {h}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {glLines.length > 0 && (
+          <table className="mt-4 w-full border-collapse text-[13px]">
+            <thead>
+              <tr className="border-b border-rule text-left text-ink-2">
+                <th className="py-1">Date</th>
+                <th>Vendor</th>
+                <th>Account</th>
+                <th>Grant:line</th>
+                <th className="text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {glLines.slice(0, 5).map((l) => (
+                <tr key={l.txnId} className="border-b border-rule">
+                  <td className="py-1">{l.date}</td>
+                  <td>{l.vendor}</td>
+                  <td className="text-ink-2">{l.account}</td>
+                  <td>{l.glClass ? `${l.glClass}:${l.glBudgetLine ?? "?"}` : "General"}</td>
+                  <td className="tabular text-right">{fmtTableAmount(l.amountCents)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {glLines.length > 0 && (
+          <p className="mt-2 text-[13px] text-ledger">
+            {glLines.length} GL lines parsed{glSkipped ? ` · ${glSkipped} rows skipped (totals, cash side, revenue)` : ""}
+          </p>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-[17px] font-semibold">3. Bank export (CSV, optional)</h2>
         <label className="mt-2 inline-block cursor-pointer text-ledger underline">
           Choose CSV
           <input
@@ -289,31 +377,13 @@ export function YourDataTab({
       </section>
 
       <section>
-        <h2 className="text-[17px] font-semibold">3. Optional ledger &amp; staff</h2>
-        <label className="mt-2 inline-block cursor-pointer text-ink-2 underline">
-          Bookkeeper ledger CSV
-          <input
-            type="file"
-            accept=".csv"
-            className="hidden"
-            disabled={!canWrite || !txns.length}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void f.text().then(onLedgerFile);
-            }}
-          />
-        </label>
-        {ledgerOrphans.length > 0 && (
-          <p className="mt-2 text-[13px] text-pencil">
-            {ledgerOrphans.length} ledger row(s) with no matching bank line (±3 days, same amount).
-          </p>
-        )}
+        <h2 className="text-[17px] font-semibold">4. Optional staff time records</h2>
         <StaffEditor staff={staff} setStaff={setStaff} canWrite={canWrite} grants={grantList ?? []} />
       </section>
 
       <button
         type="button"
-        disabled={!canWrite || busy || !txns.length || readyGrantIds.length < 1}
+        disabled={!canWrite || busy || (!glLines.length && !txns.length) || readyGrantIds.length < 1}
         className="rounded-[4px] bg-ledger px-5 py-2.5 font-medium text-white disabled:opacity-40"
         onClick={() => void onRunCustom()}
       >

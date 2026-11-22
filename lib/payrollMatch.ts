@@ -2,8 +2,11 @@ import type { StaffAllocation, Txn } from "./types";
 
 export const PAYROLL_RE = /payroll|gusto|adp|paychex|salary|wages/i;
 
+/** GL-first lines also carry the account ("6000 Salaries & Wages"). */
+const PAYROLL_ACCOUNT_RE = /salar|wages|payroll|fringe|employee benefits/i;
+
 export function isPayrollTxn(t: Txn): boolean {
-  return PAYROLL_RE.test(t.description) || PAYROLL_RE.test(t.memo);
+  return PAYROLL_RE.test(t.description) || PAYROLL_RE.test(t.memo) || (!!t.account && PAYROLL_ACCOUNT_RE.test(t.account));
 }
 
 function escapeRe(s: string) {

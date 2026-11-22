@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { assertDemoPasscode } from "./passcode";
@@ -9,6 +9,24 @@ const txn = v.object({
   description: v.string(),
   amountCents: v.number(),
   memo: v.string(),
+});
+
+/** A GL detail line (see lib/parseGlDetail.ts). Stored in `transactions` with source "gl". */
+const glLine = v.object({
+  txnId: v.string(),
+  date: v.string(),
+  description: v.string(),
+  amountCents: v.number(),
+  memo: v.string(),
+  source: v.literal("gl"),
+  vendor: v.string(),
+  account: v.string(),
+  department: v.string(),
+  docRef: v.string(),
+  txnType: v.string(),
+  glClass: v.union(v.string(), v.null()),
+  glBudgetLine: v.union(v.string(), v.null()),
+  enteredBy: v.string(),
 });
 
 const glRow = v.object({
@@ -56,7 +74,8 @@ async function allGrantsReadyForPipeline(ctx: MutationCtx) {
 export const tryAutoRunPipeline = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const txn = await ctx.db.query("transactions").first();
+    // GL-first workspaces store GL lines in `transactions`; legacy ones store bank rows there.
+    const txn = (await ctx.db.query("transactions").first()) ?? (await ctx.db.query("glRows").first());
     if (!txn) return;
     const extracting = await ctx.db
       .query("grants")
@@ -237,6 +256,80 @@ export const startCustomWorkspace = mutation({
       evidence: [`${args.transactions.length} bank txns`, `${args.grantDocIds.length} grants`],
     });
     await ctx.runMutation(internal.autonomy.enqueueAgentRun, {});
+  },
+});
+
+async function setDataSource(ctx: MutationCtx, dataSource: "demo" | "custom") {
+  const settings = await ctx.db
+    .query("workspaceSettings")
+    .withIndex("by_key", (q) => q.eq("key", "default"))
+    .first();
+  if (settings) await ctx.db.patch(settings._id, { dataSource });
+  else {
+    await ctx.db.insert("workspaceSettings", {
+      key: "default",
+      organizationName: "Valencia Youth Collective",
+      approverName: "A. Okafor",
+      approverTitle: "Executive Director",
+      dataSource,
+    });
+  }
+}
+
+async function clearRunState(ctx: MutationCtx) {
+  for (const table of ["decisions", "proposedEntries", "inboxResolutions", "runs"] as const) {
+    for (const row of await ctx.db.query(table).collect()) await ctx.db.delete(row._id);
+  }
+}
+
+/**
+ * GL-first workspace: the GL detail is the primary record (required); a bank statement and
+ * receipts are optional evidence. Replaces the workspace's transactions, GL rows and staff.
+ */
+export const startGlWorkspace = mutation({
+  args: {
+    passcode: v.optional(v.string()),
+    lines: v.array(glLine),
+    staffAllocations: v.array(staffAllocation),
+    grantDocIds: v.array(v.id("grants")),
+    dataSource: v.optional(v.union(v.literal("demo"), v.literal("custom"))),
+    precedents: v.optional(v.array(precedent)),
+  },
+  handler: async (ctx, args) => {
+    assertDemoPasscode(args.passcode);
+    if (!args.lines.length) throw new ConvexError("Upload a GL detail file with at least one expense line.");
+    const keep = new Set(args.grantDocIds.map(String));
+    for (const table of ["transactions", "glRows", "staffAllocations"] as const) {
+      for (const row of await ctx.db.query(table).collect()) await ctx.db.delete(row._id);
+    }
+    await clearRunState(ctx);
+    for (const g of await ctx.db.query("grants").collect()) {
+      if (!keep.has(String(g._id))) await ctx.db.delete(g._id);
+    }
+    if (args.precedents) {
+      for (const row of await ctx.db.query("precedents").collect()) await ctx.db.delete(row._id);
+      for (const row of args.precedents) await ctx.db.insert("precedents", row);
+    }
+    for (const line of args.lines) {
+      await ctx.db.insert("transactions", line);
+      // The bookkeeper's coding claim lives in glRows (bankRef = line id) so existing rules,
+      // approverGuard and UI keep working unchanged.
+      await ctx.db.insert("glRows", {
+        bankRef: line.txnId, date: line.date, description: line.description, amountCents: line.amountCents,
+        account: line.account, class: line.glClass, budgetLine: line.glBudgetLine, enteredBy: line.enteredBy,
+      });
+    }
+    for (const row of args.staffAllocations) await ctx.db.insert("staffAllocations", row);
+    await setDataSource(ctx, args.dataSource ?? "custom");
+    await ctx.db.insert("auditLog", {
+      at: new Date().toISOString(),
+      actor: "user",
+      action: "new_workspace",
+      targetId: "workspace",
+      why: "Started GL-first workspace",
+      evidence: [`${args.lines.length} GL lines`, `${args.grantDocIds.length} grants`],
+    });
+    await ctx.runMutation(internal.ingest.tryAutoRunPipeline, {});
   },
 });
 

@@ -26,6 +26,18 @@ export default defineSchema({
     description: v.string(),
     amountCents: v.number(),
     memo: v.string(),
+    // GL-first fields (optional so legacy bank-first rows stay valid).
+    source: v.optional(v.union(v.literal("gl"), v.literal("bank"))),
+    vendor: v.optional(v.string()),
+    account: v.optional(v.string()),
+    department: v.optional(v.string()),
+    docRef: v.optional(v.string()),
+    txnType: v.optional(v.string()),
+    glClass: v.optional(v.union(v.string(), v.null())),
+    glBudgetLine: v.optional(v.union(v.string(), v.null())),
+    enteredBy: v.optional(v.string()),
+    programApprovedBy: v.optional(v.union(v.string(), v.null())),
+    programApprovedAt: v.optional(v.string()),
   }).index("by_txnId", ["txnId"]),
 
   glRows: defineTable({
