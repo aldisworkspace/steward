@@ -4,8 +4,9 @@
  * Rules never change data. They return findings with evidence and an optional suggestion
  * that a human must approve.
  */
+import { NON_CASH_TYPE, reconcileGlToBank } from "./matchLedger";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
-import type { Candidate, Evidence, Finding, GlRow, GrantTerms, Precedent, StaffAllocation, Txn } from "./types";
+import type { BankLine, Candidate, Evidence, Finding, GlRow, GrantTerms, Precedent, StaffAllocation, Txn } from "./types";
 
 export interface RuleInput {
   txns: Txn[];
@@ -14,6 +15,8 @@ export interface RuleInput {
   grants: GrantTerms[];
   precedents: Precedent[];
   candidates: Map<string, Candidate>;
+  /** Optional bank statement (GL-first workspaces). Reconciliation rules run only when present. */
+  bankLines?: BankLine[];
 }
 
 /** Differences below this are not worth a human's attention for duplicate checks. */
@@ -169,5 +172,51 @@ export function runRules(input: RuleInput): Finding[] {
     }
   }
 
+  if (input.bankLines?.length) findings.push(...reconciliationFindings(input));
+
   return findings;
+}
+
+/**
+ * Reconciliation findings (GL-first, bank file present). Always needs_review; at-risk is 0 unless
+ * the line is charged to a grant (bank-only lines are not charged to anything yet).
+ */
+export function reconciliationFindings(input: RuleInput): Finding[] {
+  const bank = input.bankLines ?? [];
+  const glLines = input.txns.filter((t) => t.source !== "bank");
+  const rec = reconcileGlToBank(glLines, bank);
+  const out: Finding[] = [];
+  const chargedGrant = (t: Txn) => t.glClass ?? input.candidates.get(t.txnId)?.grantId ?? null;
+  const bankEv = (b: BankLine): Evidence => ({ source: "bank", ref: b.lineId, note: `${b.date} ${b.description} ${usd(b.amountCents)}` });
+  const bankById = new Map(bank.map((b) => [b.lineId, b]));
+
+  for (const b of rec.unrecorded) {
+    out.push({ ruleId: "R-BANK-UNRECORDED", txnId: b.lineId, status: "needs_review",
+      message: `The bank shows ${usd(b.amountCents)} to "${b.description}" on ${b.date}, but no GL line records it (same amount within 3 days). Record it in the books or explain it.`,
+      evidence: [bankEv(b)], exposureCents: 0 });
+  }
+
+  for (const t of glLines) {
+    const m = rec.matches.get(t.txnId);
+    const grant = chargedGrant(t);
+    if (!m) {
+      if (t.amountCents >= 0 || !rec.statementStart || !rec.statementEnd) continue;
+      if (t.date < rec.statementStart || t.date > rec.statementEnd) continue;
+      if (NON_CASH_TYPE.test(t.txnType ?? "") || isPayrollTxn(t)) continue;
+      out.push({ ruleId: "R-GL-NO-BANK", txnId: t.txnId, status: "needs_review",
+        message: `GL line ${t.txnId} (${t.vendor ?? t.description}, ${usd(t.amountCents)}, ${t.date}) has no matching bank line on the statement (${rec.statementStart} to ${rec.statementEnd}). Confirm it was paid before billing it.`,
+        evidence: [{ source: "gl", ref: t.txnId, note: `${t.date} ${t.account ?? ""} ${usd(t.amountCents)}`.trim() }],
+        exposureCents: grant ? Math.abs(t.amountCents) : 0 });
+      continue;
+    }
+    if (m.tier === "near" && m.bankAmountCents !== t.amountCents) {
+      const diff = Math.abs(Math.abs(m.bankAmountCents) - Math.abs(t.amountCents));
+      const b = bankById.get(m.bankLineId)!;
+      out.push({ ruleId: "R-AMOUNT-MISMATCH", txnId: t.txnId, status: "needs_review",
+        message: `The GL records ${usd(t.amountCents)} but the matching bank line shows ${usd(m.bankAmountCents)} (difference ${usd(diff)}). Correct the GL before billing; a one-cent difference returns the whole invoice.`,
+        evidence: [{ source: "gl", ref: t.txnId, note: `${t.date} ${t.vendor ?? t.description} ${usd(t.amountCents)}` }, bankEv(b)],
+        exposureCents: grant ? diff : 0 });
+    }
+  }
+  return out;
 }

@@ -40,6 +40,15 @@ export default defineSchema({
     programApprovedAt: v.optional(v.string()),
   }).index("by_txnId", ["txnId"]),
 
+  /** Optional bank statement lines (GL-first workspaces); used only for reconciliation. */
+  bankLines: defineTable({
+    lineId: v.string(),
+    date: v.string(),
+    description: v.string(),
+    amountCents: v.number(),
+    memo: v.string(),
+  }).index("by_lineId", ["lineId"]),
+
   glRows: defineTable({
     bankRef: v.string(),
     date: v.string(),

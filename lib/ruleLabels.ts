@@ -10,6 +10,13 @@ export function ruleLabel(ruleId: string): string {
     "R-GL-DISAGREE": "Bookkeeper disagrees",
     "R-GL-ORPHAN": "No matching bank line",
     "R-NEEDS-DOCS": "Needs documentation",
+    "R-BANK-UNRECORDED": "Bank payment not in the books",
+    "R-GL-NO-BANK": "No matching bank payment",
+    "R-AMOUNT-MISMATCH": "Books ≠ bank amount",
+    "R-RECEIPT-MISSING": "Missing receipt",
+    "R-RECEIPT-MISMATCH": "Receipt doesn't match",
+    "R-RECEIPT-AMBIGUOUS": "Receipt could match several lines",
+    "R-PURPOSE-UNCLEAR": "Purpose unclear",
     "R-UNALLOWABLE-STAFF_EVENT": "Staff event or meal",
   };
   if (exact[ruleId]) return exact[ruleId];
@@ -33,6 +40,8 @@ export function tickForSource(source: string): string {
       return "Ⓣ";
     case "precedent":
       return "Ⓟ";
+    case "receipt":
+      return "Ⓡ";
     default:
       return "Ⓑ";
   }

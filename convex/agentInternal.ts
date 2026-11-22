@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { Decision, GlRow, GrantTerms, Precedent, StaffAllocation, Txn, TypedPrecedent } from "../lib/types";
+import type { BankLine, Decision, GlRow, GrantTerms, Precedent, StaffAllocation, Txn, TypedPrecedent } from "../lib/types";
 
 export const getGrant = internalQuery({
   args: { grantDocId: v.id("grants") },
@@ -49,12 +49,13 @@ export const setGrantError = internalMutation({
 export const loadPipelineInput = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const [txns, gl, staff, precRows, grantRows] = await Promise.all([
+    const [txns, gl, staff, precRows, grantRows, bankRows] = await Promise.all([
       ctx.db.query("transactions").collect(),
       ctx.db.query("glRows").collect(),
       ctx.db.query("staffAllocations").collect(),
       ctx.db.query("precedents").collect(),
       ctx.db.query("grants").collect(),
+      ctx.db.query("bankLines").collect(),
     ]);
     const grants = grantRows
       .filter((g) => g.status === "ready" && g.terms)
@@ -93,6 +94,9 @@ export const loadPipelineInput = internalQuery({
       precedents,
       typedPrecedents,
       grants,
+      bankLines: bankRows.map((b) => ({
+        lineId: b.lineId, date: b.date, description: b.description, amountCents: b.amountCents, memo: b.memo,
+      })) as BankLine[],
     };
   },
 });

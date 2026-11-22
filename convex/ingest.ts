@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { assertDemoPasscode } from "./passcode";
+import { reconcileGlToBank } from "../lib/matchLedger";
 
 const txn = v.object({
   txnId: v.string(),
@@ -40,6 +41,14 @@ const glRow = v.object({
   enteredBy: v.string(),
 });
 
+const bankLine = v.object({
+  lineId: v.string(),
+  date: v.string(),
+  description: v.string(),
+  amountCents: v.number(),
+  memo: v.string(),
+});
+
 const staffAllocation = v.object({
   employee: v.string(),
   role: v.string(),
@@ -54,7 +63,7 @@ const precedent = v.object({
   scope: v.string(),
 });
 
-type DemoTable = "transactions" | "glRows" | "staffAllocations" | "precedents";
+type DemoTable = "transactions" | "glRows" | "staffAllocations" | "precedents" | "bankLines";
 
 async function clearTable(ctx: MutationCtx, table: DemoTable) {
   const rows = await ctx.db.query(table).collect();
@@ -109,6 +118,7 @@ export const loadDemo = mutation({
     await clearTable(ctx, "glRows");
     await clearTable(ctx, "staffAllocations");
     await clearTable(ctx, "precedents");
+    await clearTable(ctx, "bankLines");
 
     for (const row of args.transactions) {
       await ctx.db.insert("transactions", row);
@@ -220,6 +230,7 @@ export const startCustomWorkspace = mutation({
     for (const row of await ctx.db.query("transactions").collect()) await ctx.db.delete(row._id);
     for (const row of await ctx.db.query("glRows").collect()) await ctx.db.delete(row._id);
     for (const row of await ctx.db.query("staffAllocations").collect()) await ctx.db.delete(row._id);
+    for (const row of await ctx.db.query("bankLines").collect()) await ctx.db.delete(row._id);
     for (const row of await ctx.db.query("decisions").collect()) await ctx.db.delete(row._id);
     for (const row of await ctx.db.query("proposedEntries").collect()) await ctx.db.delete(row._id);
     for (const row of await ctx.db.query("inboxResolutions").collect()) await ctx.db.delete(row._id);
@@ -290,6 +301,8 @@ export const startGlWorkspace = mutation({
   args: {
     passcode: v.optional(v.string()),
     lines: v.array(glLine),
+    /** Optional bank statement (ids B0001…), for reconciliation only. */
+    bankLines: v.optional(v.array(bankLine)),
     staffAllocations: v.array(staffAllocation),
     grantDocIds: v.array(v.id("grants")),
     dataSource: v.optional(v.union(v.literal("demo"), v.literal("custom"))),
@@ -299,7 +312,7 @@ export const startGlWorkspace = mutation({
     assertDemoPasscode(args.passcode);
     if (!args.lines.length) throw new ConvexError("Upload a GL detail file with at least one expense line.");
     const keep = new Set(args.grantDocIds.map(String));
-    for (const table of ["transactions", "glRows", "staffAllocations"] as const) {
+    for (const table of ["transactions", "glRows", "staffAllocations", "bankLines"] as const) {
       for (const row of await ctx.db.query(table).collect()) await ctx.db.delete(row._id);
     }
     await clearRunState(ctx);
@@ -319,6 +332,17 @@ export const startGlWorkspace = mutation({
         account: line.account, class: line.glClass, budgetLine: line.glBudgetLine, enteredBy: line.enteredBy,
       });
     }
+    const bank = args.bankLines ?? [];
+    for (const row of bank) await ctx.db.insert("bankLines", row);
+    // A bank outflow the GL never recorded still needs a queue row: keep it as a placeholder
+    // record (source "bank", id = bank line id). The pipeline does not code it; a rule flags it.
+    const { unrecorded } = reconcileGlToBank(args.lines, bank);
+    for (const b of unrecorded) {
+      await ctx.db.insert("transactions", {
+        txnId: b.lineId, date: b.date, description: b.description, amountCents: b.amountCents, memo: b.memo,
+        source: "bank",
+      });
+    }
     for (const row of args.staffAllocations) await ctx.db.insert("staffAllocations", row);
     await setDataSource(ctx, args.dataSource ?? "custom");
     await ctx.db.insert("auditLog", {
@@ -327,7 +351,7 @@ export const startGlWorkspace = mutation({
       action: "new_workspace",
       targetId: "workspace",
       why: "Started GL-first workspace",
-      evidence: [`${args.lines.length} GL lines`, `${args.grantDocIds.length} grants`],
+      evidence: [`${args.lines.length} GL lines`, `${bank.length} bank lines`, `${args.grantDocIds.length} grants`],
     });
     await ctx.runMutation(internal.ingest.tryAutoRunPipeline, {});
   },

@@ -10,15 +10,24 @@ import { categorizeConcern, clauseRefEquals } from "./categorizeConcern";
 import { grantLineText } from "./fundLabels";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
 import { MATERIALITY_CENTS, runRules } from "./rules";
+import { isSoftRule } from "./softRules";
 import { ruleLabel, tickForSource } from "./ruleLabels";
 import { applyTypedPrecedentsForTxn } from "./typedPrecedents";
-import { type Candidate, type Decision, type DecisionCheck, type Evidence, type Finding, type GlRow, type GrantTerms, GrantTermsZ,
+import { type BankLine, type Candidate, type Decision, type DecisionCheck, type Evidence, type Finding, type GlRow, type GrantTerms, GrantTermsZ,
   type Precedent, type StaffAllocation, type Status, type Txn, type TypedPrecedent } from "./types";
 
 export interface PipelineInput {
   txns: Txn[]; gl: GlRow[]; staff: StaffAllocation[]; grants: GrantTerms[]; precedents: Precedent[];
   typedPrecedents?: TypedPrecedent[];
+  /** Optional bank statement for GL-first reconciliation. */
+  bankLines?: BankLine[];
 }
+
+/** GL-first workspace: the primary records are GL detail lines (source "gl"). */
+export const isGlFirst = (txns: Txn[]) => txns.some((t) => t.source === "gl");
+/** In a GL-first workspace a source "bank" record is a bank outflow missing from the GL. */
+const isBankPlaceholder = (t: Txn, glFirst: boolean) => glFirst && t.source === "bank";
+const hardOnly = (fs: Finding[]) => fs.filter((f) => !isSoftRule(f.ruleId));
 
 export interface ProposedEntryDraft {
   txnId: string; date: string; memo: string; reason: string;
@@ -80,7 +89,15 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
   const glByRef = new Map(input.gl.map((r) => [r.bankRef, r]));
 
   const forModel: Txn[] = [];
+  const glFirst = isGlFirst(input.txns);
   for (const t of input.txns) {
+    if (isBankPlaceholder(t, glFirst)) {
+      // Not in the books yet: nothing to code. Reconciliation rules ask a human to record it.
+      codings.set(t.txnId, { txnId: t.txnId, grantId: null, budgetLine: null, confidence: 1,
+        rationale: "Bank outflow with no GL line; it has to be recorded in the books before it can be coded.",
+        clauseRefs: [], concern: null });
+      continue;
+    }
     const p = isPayroll(t) ? codePayroll(t, input.staff) : null;
     if (p) codings.set(t.txnId, p); else forModel.push(t);
   }
@@ -216,7 +233,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     if (
       g &&
       glLineValid &&
-      !txnFindings.length &&
+      !hardOnly(txnFindings).length &&
       !splits &&
       grantId === null &&
       immaterial &&
@@ -229,7 +246,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     }
 
     // Sources disagree: bookkeeper charged a different grant and no rule explains why.
-    if (g && !txnFindings.length && (g.class ?? null) !== (splits ? null : grantId) && !splits) {
+    if (g && !hardOnly(txnFindings).length && (g.class ?? null) !== (splits ? null : grantId) && !splits) {
       findings.push({ ruleId: "R-GL-DISAGREE", txnId: t.txnId, status: "needs_review",
         message: `Bookkeeper charged ${g.class ?? "unrestricted"}${g.budgetLine ? ":" + g.budgetLine : ""}; Steward proposes ${grantId ?? "unrestricted"}${budgetLine ? ":" + budgetLine : ""}.`,
         evidence: [{ source: "gl", ref: t.txnId, note: `${g.account} / ${g.class ?? "-"} / ${g.budgetLine ?? "-"} by ${g.enteredBy}` }] });
@@ -250,7 +267,8 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     let concernForApply: { status: Status; reason: string } | null =
       cat && c.concern ? { status: cat.status, reason: c.concern.reason } : null;
 
-    if (cat && !txnFindings.length) {
+    // Soft findings (reconciliation, receipts) don't stand in for the model's own concern.
+    if (cat && !hardOnly(txnFindings).length) {
       const derived: Finding = {
         ruleId: cat.ruleId,
         txnId: t.txnId,
@@ -270,7 +288,8 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       typed: input.typedPrecedents ?? [],
       grants: input.grants,
     });
-    txnFindings = precedentApply.findings;
+    // Substantive findings first so the queue label (ruleHits[0]) names the real issue.
+    txnFindings = [...hardOnly(precedentApply.findings), ...precedentApply.findings.filter((f) => isSoftRule(f.ruleId))];
     concernForApply = precedentApply.concern;
     if (!splits) {
       grantId = precedentApply.grantId;

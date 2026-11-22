@@ -1,10 +1,13 @@
-import type { GlRow, Txn } from "./types";
+import type { BankLine, GlRow, Txn } from "./types";
+import { isPayrollTxn } from "./payrollMatch";
 
 function daysBetween(a: string, b: string) {
   return Math.abs((Date.parse(a) - Date.parse(b)) / 86_400_000);
 }
 
-function tokenOverlap(a: string, b: string) {
+export const MATCH_WINDOW_DAYS = 3;
+
+export function tokenOverlap(a: string, b: string) {
   const ta = new Set(a.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 2));
   const tb = new Set(b.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 2));
   let n = 0;
@@ -36,9 +39,8 @@ export function matchLedgerToBank(
       if (used.has(t.txnId)) continue;
       if (t.amountCents !== row.amountCents) continue;
       const dd = daysBetween(t.date, row.date);
-      if (dd > 3) continue;
-      let score = 10 - dd;
-      score += tokenOverlap(t.description, row.description) * 3;
+      if (dd > MATCH_WINDOW_DAYS) continue;
+      const score = matchScore(dd, t.description, row.description);
       if (score > bestScore) {
         bestScore = score;
         best = t;
@@ -73,6 +75,101 @@ export function matchLedgerToBank(
     }));
 
   return { gl, orphanFindings };
+}
+
+/** Same scoring for both directions: closer date and more shared vendor words win. */
+export function matchScore(days: number, a: string, b: string) {
+  return 10 - days + tokenOverlap(a, b) * 3;
+}
+
+export type ReconMatch = {
+  bankLineId: string;
+  /** exact: same amount; group: several GL lines of one payment sum to the bank amount; near: same vendor/date, amounts differ. */
+  tier: "exact" | "group" | "near";
+  bankAmountCents: number;
+  /** For group matches, the GL lines that together make up the bank amount. */
+  groupTxnIds?: string[];
+};
+
+export type Reconciliation = {
+  matches: Map<string, ReconMatch>;
+  /** Bank outflows with no GL line. */
+  unrecorded: BankLine[];
+  statementStart: string | null;
+  statementEnd: string | null;
+};
+
+/** GL lines that never hit the bank as a single payment: journal entries, bills (paid later), card charges. */
+export const NON_CASH_TYPE = /journal|bill(?!\s*payment)|credit card|accrual|allocation|depreciation|paycheck|payroll/i;
+
+const textOf = (t: { description: string; memo: string; vendor?: string; docRef?: string }) =>
+  `${t.vendor ?? ""} ${t.description} ${t.memo} ${t.docRef ?? ""}`;
+
+/**
+ * Optional bank reconciliation for GL-first workspaces (the GL is the primary record).
+ * Reuses the ledger matcher's rule: exact amount, within ±3 days, best vendor-word overlap.
+ * Then: several GL lines of one payment (same date + document/vendor) summing to one bank line,
+ * then a "near" match (same vendor words, ±3 days, amounts differ) so a typo shows as a mismatch.
+ */
+export function reconcileGlToBank(glLines: Txn[], bank: BankLine[]): Reconciliation {
+  const matches = new Map<string, ReconMatch>();
+  const usedBank = new Set<string>();
+  const dates = bank.map((b) => b.date).sort();
+  const statementStart = dates[0] ?? null;
+  const statementEnd = dates[dates.length - 1] ?? null;
+
+  const best = (amount: number | null, date: string, text: string, needOverlap: boolean) => {
+    let hit: BankLine | null = null, hitScore = -Infinity;
+    for (const b of bank) {
+      if (usedBank.has(b.lineId)) continue;
+      if (amount !== null && b.amountCents !== amount) continue;
+      const dd = daysBetween(b.date, date);
+      if (dd > MATCH_WINDOW_DAYS) continue;
+      const overlap = tokenOverlap(`${b.description} ${b.memo}`, text);
+      if (needOverlap && overlap < 1) continue;
+      const score = matchScore(dd, `${b.description} ${b.memo}`, text);
+      if (score > hitScore) { hitScore = score; hit = b; }
+    }
+    return hit;
+  };
+
+  // 1. exact amount
+  for (const t of glLines) {
+    const b = best(t.amountCents, t.date, textOf(t), false);
+    if (!b) continue;
+    usedBank.add(b.lineId);
+    matches.set(t.txnId, { bankLineId: b.lineId, tier: "exact", bankAmountCents: b.amountCents });
+  }
+
+  // 2. split payments: GL lines sharing date + document number (or vendor) that sum to one bank line
+  const groups = new Map<string, Txn[]>();
+  for (const t of glLines) {
+    if (matches.has(t.txnId)) continue;
+    const key = `${t.date}|${(t.docRef || t.vendor || t.description).trim().toUpperCase()}`;
+    groups.set(key, [...(groups.get(key) ?? []), t]);
+  }
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    const sum = members.reduce((a, t) => a + t.amountCents, 0);
+    const b = best(sum, members[0]!.date, textOf(members[0]!), false);
+    if (!b) continue;
+    usedBank.add(b.lineId);
+    for (const t of members) {
+      matches.set(t.txnId, { bankLineId: b.lineId, tier: "group", bankAmountCents: b.amountCents, groupTxnIds: members.map((m) => m.txnId) });
+    }
+  }
+
+  // 3. near match: same vendor words and date window, different amount (same direction)
+  for (const t of glLines) {
+    if (matches.has(t.txnId) || NON_CASH_TYPE.test(t.txnType ?? "") || isPayrollTxn(t)) continue;
+    const b = best(null, t.date, textOf(t), true);
+    if (!b || Math.sign(b.amountCents) !== Math.sign(t.amountCents)) continue;
+    usedBank.add(b.lineId);
+    matches.set(t.txnId, { bankLineId: b.lineId, tier: "near", bankAmountCents: b.amountCents });
+  }
+
+  const unrecorded = bank.filter((b) => b.amountCents < 0 && !usedBank.has(b.lineId));
+  return { matches, unrecorded, statementStart, statementEnd };
 }
 
 export function suggestLedgerMapping(headers: string[]) {

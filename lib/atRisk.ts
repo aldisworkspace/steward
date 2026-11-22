@@ -1,3 +1,4 @@
+import { isSoftRule } from "./softRules";
 import type { Decision, Finding, GlRow, GrantTerms, StaffAllocation, Txn } from "./types";
 
 /** Grant-charge amount at risk for one non-auto outflow (see demo brief). */
@@ -15,6 +16,12 @@ export function atRiskCentsForTxn(
   const chargedGrant = gl?.class ?? d.grantId;
   const onGrant = !!(chargedGrant || (d.grantId && !d.splits));
   if (!onGrant && !fs.some((f) => f.suggestion?.some((s) => s.grantId))) return 0;
+
+  // Only reconciliation / documentation gaps: the exposure each finding states (e.g. just the
+  // difference for an amount mismatch, the full grant charge for a missing receipt).
+  if (fs.length && fs.every((f) => isSoftRule(f.ruleId)) && d.status !== "blocked") {
+    return Math.min(abs, Math.max(0, ...fs.map((f) => f.exposureCents ?? abs)));
+  }
 
   // "Not allowed" exposure follows the verified decision status, not just the rule id.
   if (d.status === "blocked" && fs.some((f) => f.ruleId.startsWith("R-UNALLOWABLE") || f.ruleId === "R-PERIOD")) {

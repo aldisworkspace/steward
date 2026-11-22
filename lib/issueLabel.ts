@@ -34,6 +34,20 @@ export function issueLabel(ruleId: string | null | undefined, status: string): s
       return "No matching bank line";
     case "R-NEEDS-DOCS":
       return "Needs documentation";
+    case "R-BANK-UNRECORDED":
+      return "Bank payment not in the books";
+    case "R-GL-NO-BANK":
+      return "No matching bank payment";
+    case "R-AMOUNT-MISMATCH":
+      return "Books ≠ bank amount";
+    case "R-RECEIPT-MISSING":
+      return "Missing receipt";
+    case "R-RECEIPT-MISMATCH":
+      return "Receipt doesn't match";
+    case "R-RECEIPT-AMBIGUOUS":
+      return "Receipt could match several lines";
+    case "R-PURPOSE-UNCLEAR":
+      return "Which program was this for?";
     default:
       if (ruleId?.startsWith("R-UNALLOWABLE")) {
         return blocked ? "Not allowed by the grant" : "Check against grant terms";

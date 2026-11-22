@@ -161,6 +161,13 @@ export function YourDataTab({
         await startGlWorkspace({
           passcode: getDemoPasscode(),
           lines: glLines,
+          bankLines: txns.map((t, i) => ({
+            lineId: `B${String(i + 1).padStart(4, "0")}`,
+            date: t.date,
+            description: t.description,
+            amountCents: t.amountCents,
+            memo: t.memo,
+          })),
           staffAllocations: staff,
           grantDocIds: readyGrantIds,
         });

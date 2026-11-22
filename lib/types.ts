@@ -74,6 +74,8 @@ export interface Txn {
   /** Program-side sign-off (name-based until real auth). */
   programApprovedBy?: string | null;
 }
+/** Optional bank statement line, used only to reconcile a GL-first workspace. */
+export interface BankLine { lineId: string; date: string; description: string; amountCents: number; memo: string }
 export interface GlRow { bankRef: string; date: string; description: string; amountCents: number;
   account: string; class: string | null; budgetLine: string | null; enteredBy: string }
 export interface StaffAllocation { employee: string; role: string; biweeklyCents: number;
@@ -103,4 +105,6 @@ export interface Finding {
   evidence: Evidence[];
   /** Suggested correction (e.g. move to unrestricted, split by effort). Never applied automatically. */
   suggestion?: { grantId: string | null; budgetLine: string | null; amountCents: number }[];
+  /** Grant dollars exposed by this finding (soft rules only; see lib/softRules.ts). */
+  exposureCents?: number;
 }
