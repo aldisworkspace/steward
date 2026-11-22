@@ -66,6 +66,9 @@ export const update = mutation({
     approverName: v.optional(v.string()),
     approverTitle: v.optional(v.string()),
     receiptThresholdCents: v.optional(v.number()),
+    programApprovers: v.optional(v.array(v.string())),
+    preparers: v.optional(v.array(v.string())),
+    reviewers: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     assertDemoPasscode(args.passcode);
@@ -83,7 +86,17 @@ export const update = mutation({
     if (!Number.isInteger(patch.receiptThresholdCents) || patch.receiptThresholdCents < 0) {
       throw new Error("receiptThresholdCents must be a non-negative integer (cents).");
     }
-    if (existing) await ctx.db.patch(existing._id, patch);
-    else await ctx.db.insert("workspaceSettings", { key: "default", ...patch });
+    const roles: Partial<Record<"programApprovers" | "preparers" | "reviewers", string[]>> = {};
+    for (const key of ["programApprovers", "preparers", "reviewers"] as const) {
+      const list = args[key];
+      if (!list) continue;
+      const names = [...new Set(list.map((n) => n.trim()).filter(Boolean))];
+      if (!names.length) throw new Error(`${key} needs at least one person.`);
+      // Steward proposes; it can never hold a human role (approverGuard rejects it anyway).
+      if (names.some((n) => /steward/i.test(n))) throw new Error("Steward cannot hold a preparer, reviewer or program approver role.");
+      roles[key] = names;
+    }
+    if (existing) await ctx.db.patch(existing._id, { ...patch, ...roles });
+    else await ctx.db.insert("workspaceSettings", { key: "default", ...patch, ...roles });
   },
 });

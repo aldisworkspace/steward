@@ -24,6 +24,19 @@ export async function assertRole(ctx: MutationCtx, by: string, role: Role): Prom
   return who;
 }
 
+/**
+ * Program sign-off on a GL line: a program approver, and not the person who entered that GL line.
+ * Name-based until real auth.
+ */
+export async function assertProgramApprover(ctx: MutationCtx, by: string, txnId: string): Promise<string> {
+  const who = await assertRole(ctx, by, "program_approver");
+  const gl = await ctx.db.query("glRows").withIndex("by_bankRef", (q) => q.eq("bankRef", txnId)).first();
+  if (gl && gl.enteredBy.trim() === who) {
+    throw new ConvexError(`Segregation of duties: ${who} entered ${txnId} and cannot approve it for the program.`);
+  }
+  return who;
+}
+
 export async function assertHumanApprover(ctx: MutationCtx, by: string, txnId: string) {
   const who = by.trim();
   if (/steward/i.test(who)) {

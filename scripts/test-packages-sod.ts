@@ -6,6 +6,8 @@
  */
 import assert from "node:assert/strict";
 import { markReady, reopen, sign } from "../convex/packages";
+import { approveDepartment, approveLines } from "../convex/programApprovals";
+import { update as updateSettings } from "../convex/settings";
 import type { MutationCtx } from "../convex/_generated/server";
 import { FIXTURE_GRANTS_V2 } from "./fixturesV2";
 
@@ -18,6 +20,9 @@ function handler<Args, R = unknown>(registered: unknown) {
 }
 const markReadyH = handler<{ grantId: string; periodStart: string; periodEnd: string; by: string; passcode: string }, string>(markReady);
 const signH = handler<{ packageId: string; by: string; passcode: string }>(sign);
+const approveLinesH = handler<{ txnIds: string[]; by: string; passcode: string }, number>(approveLines);
+const approveDeptH = handler<{ department: string; grantId?: string; by: string; passcode: string }, number>(approveDepartment);
+const settingsH = handler<Record<string, unknown>>(updateSettings);
 const reopenH = handler<{ packageId: string; by: string; reason: string; passcode: string }>(reopen);
 
 const OKAFOR = "A. Okafor (Executive Director)";
@@ -72,6 +77,9 @@ function fixture() {
     ready: (by: string) => markReadyH(ctx, { ...period, by }),
     sign: (packageId: string, by: string) => signH(ctx, { packageId, by, passcode }),
     reopen: (packageId: string, by: string, reason: string) => reopenH(ctx, { packageId, by, reason, passcode }),
+    approve: (txnIds: string[], by: string) => approveLinesH(ctx, { txnIds, by, passcode }),
+    approveDept: (department: string, by: string, grantId?: string) => approveDeptH(ctx, { department, grantId, by, passcode }),
+    settings: (args: Record<string, unknown>) => settingsH(ctx, { ...args, passcode }),
   };
 }
 
@@ -119,6 +127,28 @@ async function main() {
     assert.equal(f2.tables.packages[0]!.status, "draft");
     assert.equal(f2.tables.packages[0]!.snapshot, null);
     assert.deepEqual(f2.tables.auditLog.map((a) => a.action), ["package_ready", "package_signed", "package_reopened"]);
+    // program approval: role-checked, never Steward, not by the person who entered the line, bulk by department
+    const f3 = fixture();
+    for (const t of f3.tables.transactions) { t.programApprovedBy = null; t.department = "Family Resource Center"; }
+    f3.tables.transactions.push({ ...structuredClone(f3.tables.transactions[0]!), _id: "t-L3", txnId: "L3", department: "Youth Mentoring" });
+    f3.tables.glRows.push({ _id: "gl1", bankRef: "L1", enteredBy: CHEN });
+    await assert.rejects(() => f3.approve(["L2"], "Steward"), /Segregation of duties/);
+    await assert.rejects(() => f3.approve(["L2"], OKAFOR), /Unknown program approver/);
+    await assert.rejects(() => f3.approve(["L1"], CHEN), /entered L1 and cannot approve/);
+    await assert.rejects(() => f3.approveDept("Family Resource Center", CHEN), /entered L1/, "bulk is all-or-nothing");
+    assert.ok(f3.tables.transactions.every((t) => !t.programApprovedBy));
+    f3.tables.glRows.length = 0;
+    assert.equal(await f3.approveDept("Family Resource Center", CHEN, "FS-27-0412"), 2);
+    assert.deepEqual(f3.tables.transactions.map((t) => t.programApprovedBy), [CHEN, CHEN, null]);
+    assert.equal(f3.tables.auditLog.at(-1)!.action, "program_approve");
+    await assert.rejects(() => f3.approveDept("Family Resource Center", CHEN), /No GL lines/, "already approved");
+
+    // role lists are configurable; Steward can never be put in one
+    await assert.rejects(() => f3.settings({ reviewers: ["Steward"] }), /Steward cannot hold/);
+    await assert.rejects(() => f3.settings({ preparers: [" "] }), /at least one/);
+    await f3.settings({ programApprovers: ["P. Diaz (Program Manager)"] });
+    await assert.rejects(() => f3.approve(["L3"], CHEN), /Unknown program approver/);
+    assert.equal(await f3.approve(["L3"], "P. Diaz (Program Manager)"), 1);
     console.log("test-packages-sod: all segregation-of-duties assertions passed");
   } finally {
     if (prev === undefined) delete process.env.DEMO_PASSCODE; else process.env.DEMO_PASSCODE = prev;
