@@ -9,7 +9,7 @@ import { atRiskCentsForTxn } from "./atRisk";
 import { categorizeConcern, clauseRefEquals } from "./categorizeConcern";
 import { grantLineText } from "./fundLabels";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
-import { MATERIALITY_CENTS, receiptNote, runRules } from "./rules";
+import { glPayrollShare, MATERIALITY_CENTS, receiptNote, runRules } from "./rules";
 import { isSoftRule } from "./softRules";
 import { ruleLabel, tickForSource } from "./ruleLabels";
 import { applyTypedPrecedentsForTxn } from "./typedPrecedents";
@@ -69,6 +69,32 @@ const RANK: Record<Status, number> = { auto: 0, needs_review: 1, blocked: 2 };
 const worst = (a: Status, b: Status): Status => (RANK[b] > RANK[a] ? b : a);
 const BATCH = 25;
 
+/**
+ * GL-first payroll: the bookkeeper already split each paycheck into one line per class, so the claim
+ * is checked against that line's share of the paycheck gross. Within a cent → keep the claim; more →
+ * split the excess to unrestricted (R-EFFORT explains it); a class not in the allocation → unrestricted.
+ */
+function codePayrollGl(t: Txn, staff: StaffAllocation[], txns: Txn[]): (Coding & { splits?: Decision["splits"] }) | null {
+  const key = t.glClass ? `${t.glClass}:${t.glBudgetLine}` : "UNRESTRICTED";
+  const share = glPayrollShare(t, txns, staff, key);
+  if (!share) return null;
+  const { person } = share;
+  const alloc = person.allocation.map((a) => `${a.key} ${Math.round(a.pct * 100)}%`).join(", ");
+  const base = { txnId: t.txnId, confidence: 1, clauseRefs: [], concern: null };
+  if (!t.glClass || share.allowedCents - t.amountCents <= 1) {
+    return { ...base, grantId: t.glClass ?? null, budgetLine: t.glClass ? (t.glBudgetLine ?? null) : null,
+      rationale: `${person.employee}'s paycheck line for ${key} is within the time-and-effort allocation (${alloc}).` };
+  }
+  if (!share.allowedCents) {
+    return { ...base, grantId: null, budgetLine: null,
+      rationale: `${person.employee}'s time records (${alloc}) allocate nothing to ${key}; charge general funds.` };
+  }
+  return { ...base, grantId: null, budgetLine: null,
+    splits: [{ grantId: t.glClass, budgetLine: t.glBudgetLine ?? null, amount: share.allowedCents },
+             { grantId: null, budgetLine: null, amount: t.amountCents - share.allowedCents }],
+    rationale: `Charged per ${person.employee}'s time-and-effort allocation (${alloc}); the excess over ${Math.round(share.pct * 100)}% of the paycheck goes to general funds.` };
+}
+
 /** Payroll is coded from time records (system of record for effort), not by the model. */
 function codePayroll(t: Txn, staff: StaffAllocation[]): (Coding & { splits?: Decision["splits"] }) | null {
   const person = matchStaffForTxn(t, staff);
@@ -107,7 +133,7 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
         clauseRefs: [], concern: null });
       continue;
     }
-    const p = isPayroll(t) ? codePayroll(t, input.staff) : null;
+    const p = !isPayroll(t) ? null : t.source === "gl" ? codePayrollGl(t, input.staff, input.txns) : codePayroll(t, input.staff);
     if (p) codings.set(t.txnId, p); else forModel.push(t);
   }
 
@@ -122,11 +148,11 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
 
   // How the organization previously coded each vendor (from the GL), excluding the row itself.
   const memoByTxn = new Map(input.txns.map((t) => [t.txnId, t.memo]));
-  const history = new Map<string, { class: string | null; budgetLine: string | null; memo: string; txnId: string }[]>();
+  const history = new Map<string, { class: string | null; budgetLine: string | null; memo: string; txnId: string; amountCents: number; date: string }[]>();
   for (const r of input.gl) {
     if (r.amountCents >= 0) continue;
     const k = vendorKey(r.description);
-    history.set(k, [...(history.get(k) ?? []), { class: r.class, budgetLine: r.budgetLine, memo: memoByTxn.get(r.bankRef) ?? "", txnId: r.bankRef }]);
+    history.set(k, [...(history.get(k) ?? []), { class: r.class, budgetLine: r.budgetLine, memo: memoByTxn.get(r.bankRef) ?? "", txnId: r.bankRef, amountCents: r.amountCents, date: r.date }]);
   }
 
   const validGrants = new Map(input.grants.map((g) => [g.grantId, new Set(g.budgetLines.map((l) => l.code))]));
@@ -140,10 +166,13 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
       const rows = batch.map((t) => {
         const g = glByRef.get(t.txnId);
         const vendorHistory = (history.get(vendorKey(t.description)) ?? []).filter((h) => h.txnId !== t.txnId).slice(-3)
-          .map(({ class: c, budgetLine, memo }) => ({ grantId: c, budgetLine, memo }));
+          .map(({ class: c, budgetLine, memo, amountCents, date }) => ({ grantId: c, budgetLine, memo, amountUsd: amountCents / 100, date }));
         const r = receipts.get(t.txnId)?.extracted;
         return { txnId: t.txnId, date: t.date, description: t.description, amountUsd: t.amountCents / 100, memo: t.memo,
-          gl: g ? { class: g.class, budgetLine: g.budgetLine, enteredBy: g.enteredBy } : null, vendorHistory,
+          gl: g ? { class: g.class, budgetLine: g.budgetLine, enteredBy: g.enteredBy,
+            // GL-first: this is the bookkeeper's claim being checked, with its GL dimensions.
+            ...(t.source === "gl" ? { account: t.account, department: t.department, docRef: t.docRef, txnType: t.txnType, vendor: t.vendor } : {}) } : null,
+          vendorHistory,
           // Receipt text is untrusted data (escaped below with the rest of the row).
           ...(r ? { receipt: { vendor: r.vendor, date: r.date, totalUsd: r.totalCents == null ? null : r.totalCents / 100,
             lineItems: r.lineItems.map((i) => ({ description: i.description, amountUsd: i.amountCents / 100 })), purposeText: r.purposeText } } : {}) };
@@ -172,7 +201,7 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
         const unknownGrant = c.grantId && !validGrants.has(c.grantId);
         const unknownLine =
           c.grantId &&
-          (!c.budgetLine || !validGrants.get(c.grantId)!.has(c.budgetLine));
+          (!c.budgetLine || !validGrants.get(c.grantId)?.has(c.budgetLine));
         if (unknownGrant || unknownLine) {
           codings.set(c.txnId, {
             ...c,
@@ -362,7 +391,9 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     const precById = new Map(input.precedents.map((p) => [p.id, p]));
     const receipt = receiptsByTxn.get(t.txnId);
     const evidence: Evidence[] = [
-      { source: "bank", ref: t.txnId, note: `${t.date} ${t.description} ${(t.amountCents / 100).toFixed(2)}${t.memo ? ` — "${t.memo}"` : ""}` },
+      t.source === "gl"
+        ? { source: "gl", ref: t.txnId, note: `${t.date} ${t.vendor ?? t.description} ${(t.amountCents / 100).toFixed(2)} · ${t.account ?? ""}${t.docRef ? ` · #${t.docRef}` : ""}${t.memo ? ` — "${t.memo}"` : ""}` }
+        : { source: "bank", ref: t.txnId, note: `${t.date} ${t.description} ${(t.amountCents / 100).toFixed(2)}${t.memo ? ` — "${t.memo}"` : ""}` },
       ...(g ? [{ source: "gl" as const, ref: t.txnId, note: `Bookkeeper coded it to ${grantLineText(g.class, g.budgetLine, input.grants)}` }] : []),
       ...(receipt ? [{ source: "receipt" as const, ref: receipt.receiptId, note: receiptNote(receipt) }] : []),
       ...c.clauseRefs

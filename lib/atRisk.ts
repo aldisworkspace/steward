@@ -29,6 +29,7 @@ export function atRiskCentsForTxn(
   }
 
   const effort = fs.find((f) => f.ruleId === "R-EFFORT");
+  if (effort?.exposureCents != null) return Math.min(abs, effort.exposureCents);
   if (effort) {
     const person = staff.find((s) => t.memo.includes(`(${s.employee})`));
     const grantKey = gl?.class && gl.budgetLine ? `${gl.class}:${gl.budgetLine}` : d.grantId && d.budgetLine ? `${d.grantId}:${d.budgetLine}` : null;

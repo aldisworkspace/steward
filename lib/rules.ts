@@ -42,7 +42,7 @@ function daysBetween(a: string, b: string) {
 /** Keyword heuristics for unallowable categories. The model handles anything these miss. */
 export const UNALLOWABLE_TERM_PATTERNS: { id: string; txn: RegExp; termRule: RegExp; label: string }[] = [
   { id: "fines", txn: /citation|violation|penalt|\bfine[sd]?\b|late fee/i, termRule: /fine|penalt|violation/i, label: "a fine or penalty" },
-  { id: "fundraising", txn: /gala|benefit|fundrais|donor (event|dinner)|auction/i, termRule: /fundrais/i, label: "a fundraising cost" },
+  { id: "fundraising", txn: /gala|benefit (gala|dinner|concert|event|auction|luncheon)|fundrais|donor (event|dinner)|auction/i, termRule: /fundrais/i, label: "a fundraising cost" },
   { id: "alcohol_staff", txn: /\bbar\b|brewery|winery|wine|liquor|happy hour/i,
     termRule: /alcohol|hospitality|staff (meals|appreciation)/i, label: "an alcohol purchase" },
   { id: "staff_event", txn: /staff (appreciation|party|outing|retreat|celebration)|appreciation (night|dinner|event|party)|holiday party|team[- ]building/i,
@@ -143,6 +143,11 @@ export function runRules(input: RuleInput): Finding[] {
   for (const t of txns.filter(isPayroll)) {
     const c = candidates.get(t.txnId);
     if (!c?.grantId) continue;
+    if (t.source === "gl") {
+      const f = glEffortFinding(t, c, txns, staff);
+      if (f) findings.push(f);
+      continue;
+    }
     const person = matchStaffForTxn(t, staff);
     if (!person) continue;
     const key = `${c.grantId}:${c.budgetLine}`;
@@ -153,10 +158,7 @@ export function runRules(input: RuleInput): Finding[] {
       message: `${person.employee}'s pay (${usd(t.amountCents)}) is charged 100% to ${key}, but time records allocate ${Math.round(allowedPct * 100)}%. Overcharge: ${usd(over)}. Split per the allocation.`,
       evidence: [{ source: "time_record", ref: `staff_allocation:${person.employee}`, note: person.allocation.map((a) => `${a.key}=${Math.round(a.pct * 100)}%`).join("; ") },
                  { source: c.origin === "gl" ? "gl" : "rule", ref: t.txnId, note: `charged to ${key}` }],
-      suggestion: person.allocation.map((a) => {
-        const [grantId, budgetLine] = a.key === "UNRESTRICTED" ? [null, null] : a.key.split(":");
-        return { grantId, budgetLine, amountCents: Math.round(t.amountCents * a.pct) };
-      }) });
+      suggestion: allocationSplit(t.amountCents, person.allocation) });
   }
 
   // R-LINE-OVERRUN: cumulative spend per grant line vs budget + allowed variance.
@@ -322,4 +324,47 @@ export function receiptFindings(input: RuleInput): Finding[] {
     }
   }
   return out;
+}
+
+/** Split an amount by allocation percentages; the last part takes the rounding remainder so the parts sum exactly. */
+export function allocationSplit(amountCents: number, allocation: { key: string; pct: number }[]) {
+  let used = 0;
+  return allocation.map((a, i) => {
+    const [grantId, budgetLine] = a.key === "UNRESTRICTED" ? [null, null] : (a.key.split(":") as [string, string]);
+    const amt = i === allocation.length - 1 ? amountCents - used : Math.round(amountCents * a.pct);
+    used += amt;
+    return { grantId, budgetLine, amountCents: amt };
+  });
+}
+
+/**
+ * GL-first payroll: the GL already has one line per employee per class per paycheck, so each line is
+ * checked against its share of that paycheck's gross (same employee + check number / pay date).
+ * Returns the allowed cents for this line (null when not a matched payroll line).
+ */
+export function glPayrollShare(t: Txn, txns: Txn[], staff: StaffAllocation[], key: string) {
+  const person = matchStaffForTxn(t, staff);
+  if (!person) return null;
+  const group = txns.filter((x) => x.source === "gl" && isPayrollTxn(x) && matchStaffForTxn(x, staff) === person &&
+    (t.docRef ? x.docRef === t.docRef : x.date === t.date));
+  const gross = group.reduce((a, x) => a + x.amountCents, 0);
+  const pct = person.allocation.find((a) => a.key === key)?.pct ?? 0;
+  return { person, grossCents: gross, pct, allowedCents: Math.round(gross * pct) };
+}
+
+function glEffortFinding(t: Txn, c: Candidate, txns: Txn[], staff: StaffAllocation[]): Finding | null {
+  const key = `${c.grantId}:${c.budgetLine}`;
+  const share = glPayrollShare(t, txns, staff, key);
+  if (!share) return null;
+  const over = share.allowedCents - t.amountCents; // amounts negative: positive = charged more than allowed
+  if (over <= 1) return null; // within a cent of the allocation (bookkeeper rounding)
+  const { person } = share;
+  return { ruleId: "R-EFFORT", txnId: t.txnId, status: "needs_review",
+    message: `${person.employee}'s ${key} share of this paycheck is ${usd(t.amountCents)}, but time records allocate ${Math.round(share.pct * 100)}% of ${usd(share.grossCents)} gross = ${usd(share.allowedCents)}. Overcharge: ${usd(over)}. Move it to unrestricted.`,
+    evidence: [{ source: "time_record", ref: `staff_allocation:${person.employee}`, note: person.allocation.map((a) => `${a.key}=${Math.round(a.pct * 100)}%`).join("; ") },
+               { source: "gl", ref: t.txnId, note: `charged to ${key}` }],
+    suggestion: share.allowedCents
+      ? [{ grantId: c.grantId, budgetLine: c.budgetLine, amountCents: share.allowedCents }, { grantId: null, budgetLine: null, amountCents: t.amountCents - share.allowedCents }]
+      : [{ grantId: null, budgetLine: null, amountCents: t.amountCents }],
+    exposureCents: over };
 }

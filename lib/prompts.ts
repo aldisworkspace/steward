@@ -45,9 +45,13 @@ or null for general (unrestricted) funds and for income.
 How to decide:
 - Charge a grant only when the expense clearly serves that grant's restricted purpose, falls inside its
   period, and fits one of its budget lines. When in doubt, charge unrestricted and explain.
+- GL-first rows (gl has account/docRef): each row is a line of the organization's general ledger and gl.class /
+  gl.budgetLine is the bookkeeper's claim you are checking. Keep it when the receipt line items, memo, account and
+  department support it; propose a different grant/line (or null) only when that evidence points elsewhere, and
+  say which evidence. A GL line with no memo and no receipt is not by itself a reason to move it.
 - Use the bookkeeper's prior coding (gl) as a hint, not as truth. The bookkeeper makes mistakes on
   substance (prohibited costs, wrong program), but is usually right about routine purchases.
-- vendorHistory shows how this organization previously coded the same vendor. A routine purchase
+- vendorHistory shows how this organization previously coded the same vendor (grant, line, amount, date). A routine purchase
   consistent with that history and with the grant's purpose should follow it, even with an empty memo
   (mention the missing memo in the rationale, keep confidence >= 0.75, no concern).
 - Materiality: for routine purchases under $250 that fit a budget line, do not raise a concern just

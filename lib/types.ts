@@ -20,6 +20,14 @@ export const GrantTermsZ = z.object({
   indirectCapPct: z.number().nullable(),
   reportDue: z.string().nullable(),
   restrictedPurpose: z.string(),
+  /** How the funder is billed. Optional/nullable so terms extracted before this field still parse. */
+  billing: z.object({
+    frequency: z.enum(["monthly", "quarterly", "none"]),
+    invoiceDueDays: z.number().int().nonnegative().nullable(),
+    costBasis: z.enum(["reimbursement", "advance"]).nullable(),
+  }).nullable().optional(),
+  /** What indirectCapPct is a rate on: C1-style salaries, all direct costs, or modified total direct costs. */
+  indirectBase: z.enum(["salaries", "direct", "mtdc"]).nullable().optional(),
 });
 export type GrantTerms = z.infer<typeof GrantTermsZ>;
 
