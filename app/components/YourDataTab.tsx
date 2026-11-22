@@ -37,6 +37,10 @@ export function YourDataTab({
   const confirmTerms = useMutation(api.grants.confirmGrantTerms);
   const startWorkspace = useMutation(api.ingest.startCustomWorkspace);
   const startGlWorkspace = useMutation(api.ingest.startGlWorkspace);
+  const receiptList = useQuery(api.receipts.list);
+  const receiptUploadUrl = useMutation(api.receipts.generateUploadUrl);
+  const registerReceipt = useMutation(api.receipts.register);
+  const extractReceipt = useAction(api.receiptsAgent.extractReceipt);
 
   const [orgName, setOrgName] = useState("");
   const [bankRaw, setBankRaw] = useState<string | null>(null);
@@ -92,6 +96,27 @@ export function YourDataTab({
           source: "upload",
         });
         await extractGrant({ grantDocId, passcode: getDemoPasscode() });
+      }
+    } catch (e) {
+      onError(messageFromConvexError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onReceiptFiles(files: FileList | null) {
+    if (!canWrite || !files?.length) return;
+    setBusy(true);
+    onError(null);
+    try {
+      for (const file of [...files]) {
+        const uploadUrl = await receiptUploadUrl({ passcode: getDemoPasscode() });
+        const res = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+        if (!res.ok) throw new Error(`Upload failed: ${file.name}`);
+        const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+        const receiptId = await registerReceipt({ storageId, fileName: file.name, contentType: file.type || undefined, passcode: getDemoPasscode() });
+        const out = await extractReceipt({ receiptId, passcode: getDemoPasscode() });
+        if (!out.ok) onError(`${file.name}: ${out.error ?? "could not be read"}`);
       }
     } catch (e) {
       onError(messageFromConvexError(e));
@@ -384,7 +409,50 @@ export function YourDataTab({
       </section>
 
       <section>
-        <h2 className="text-[17px] font-semibold">4. Optional staff time records</h2>
+        <h2 className="text-[17px] font-semibold">4. Receipts (optional)</h2>
+        <p className="mt-1 text-[13px] text-ink-2">PDF or image receipts and invoices. Steward reads them and matches each to a GL line by amount, date and vendor.</p>
+        <label className="mt-2 inline-block cursor-pointer text-ledger underline">
+          {busy ? "Working…" : "Choose receipts"}
+          <input
+            type="file"
+            accept="application/pdf,image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            className="hidden"
+            disabled={!canWrite || busy}
+            onChange={(e) => void onReceiptFiles(e.target.files)}
+          />
+        </label>
+        {(receiptList ?? []).length > 0 && (
+          <table className="mt-3 w-full border-collapse text-[13px]">
+            <thead>
+              <tr className="border-b border-rule text-left text-ink-2">
+                <th className="py-1">File</th>
+                <th>Vendor</th>
+                <th className="text-right">Total</th>
+                <th>Matched line</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(receiptList ?? []).map((r) => (
+                <tr key={r._id} className="border-b border-rule">
+                  <td className="py-1">{r.fileName}</td>
+                  <td>{r.status === "ready" ? (r.extracted?.vendor ?? "—") : r.status}</td>
+                  <td className="tabular text-right">
+                    {r.extracted?.totalCents != null ? fmtTableAmount(-r.extracted.totalCents) : "—"}
+                  </td>
+                  <td className="text-ink-2">
+                    {r.matchedTxnId ?? (r.matchCandidates.length ? `tie: ${r.matchCandidates.join(", ")}` : "unmatched")}
+                    {r.error && <span className="text-redpen"> {r.error}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-[17px] font-semibold">5. Optional staff time records</h2>
         <StaffEditor staff={staff} setStaff={setStaff} canWrite={canWrite} grants={grantList ?? []} />
       </section>
 

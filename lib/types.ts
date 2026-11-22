@@ -3,7 +3,7 @@ import { z } from "zod";
 export const StatusZ = z.enum(["auto", "needs_review", "blocked"]);
 export type Status = z.infer<typeof StatusZ>;
 
-export const SourceZ = z.enum(["bank", "gl", "contract", "time_record", "precedent", "human", "rule"]);
+export const SourceZ = z.enum(["bank", "gl", "contract", "time_record", "precedent", "human", "rule", "receipt"]);
 export type Source = z.infer<typeof SourceZ>;
 
 export const GrantTermsZ = z.object({
@@ -22,6 +22,31 @@ export const GrantTermsZ = z.object({
   restrictedPurpose: z.string(),
 });
 export type GrantTerms = z.infer<typeof GrantTermsZ>;
+
+/** What the model may read off a receipt or invoice. Amounts are integer cents exactly as printed. */
+export const ReceiptZ = z.object({
+  vendor: z.string().nullable().describe("Merchant or vendor name as printed, or null"),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().describe("Purchase/invoice date as YYYY-MM-DD, or null"),
+  totalCents: z.number().int().nonnegative().nullable().describe("Grand total actually printed, in integer cents ($12.34 → 1234), or null"),
+  lineItems: z.array(z.object({
+    description: z.string(),
+    amountCents: z.number().int().describe("Printed line amount in integer cents; negative for discounts/credits"),
+  })),
+  purposeText: z.string().nullable().describe("Any written note about purpose or program (e.g. a handwritten 'for Literacy Lab'), or null"),
+});
+export type ReceiptExtract = z.infer<typeof ReceiptZ>;
+
+/** A receipt as the pipeline sees it (matching is deterministic, see lib/matchReceipts.ts). */
+export interface ReceiptRecord {
+  receiptId: string;
+  fileName: string;
+  extracted: ReceiptExtract | null;
+  matchedTxnId: string | null;
+  matchScore: number | null;
+  matchedBy: "auto" | "human" | null;
+  /** Lines the matcher could not choose between (ties stay unmatched). */
+  candidates?: string[];
+}
 
 export const EvidenceZ = z.object({ source: SourceZ, ref: z.string(), note: z.string() });
 export type Evidence = z.infer<typeof EvidenceZ>;

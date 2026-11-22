@@ -23,6 +23,8 @@ import type * as ingest from "../ingest.js";
 import type * as passcode from "../passcode.js";
 import type * as pdfText from "../pdfText.js";
 import type * as precedentUtil from "../precedentUtil.js";
+import type * as receipts from "../receipts.js";
+import type * as receiptsAgent from "../receiptsAgent.js";
 import type * as report from "../report.js";
 import type * as runGuard from "../runGuard.js";
 import type * as settings from "../settings.js";
@@ -50,6 +52,8 @@ declare const fullApi: ApiFromModules<{
   passcode: typeof passcode;
   pdfText: typeof pdfText;
   precedentUtil: typeof precedentUtil;
+  receipts: typeof receipts;
+  receiptsAgent: typeof receiptsAgent;
   report: typeof report;
   runGuard: typeof runGuard;
   settings: typeof settings;

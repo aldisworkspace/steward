@@ -5,8 +5,10 @@
  * that a human must approve.
  */
 import { NON_CASH_TYPE, reconcileGlToBank } from "./matchLedger";
+import { daysApart, RECEIPT_DATE_WINDOW_DAYS } from "./matchReceipts";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
-import type { BankLine, Candidate, Evidence, Finding, GlRow, GrantTerms, Precedent, StaffAllocation, Txn } from "./types";
+import { vendorKey } from "./vendorKey";
+import type { BankLine, Candidate, Evidence, Finding, GlRow, GrantTerms, Precedent, ReceiptRecord, StaffAllocation, Txn } from "./types";
 
 export interface RuleInput {
   txns: Txn[];
@@ -17,7 +19,13 @@ export interface RuleInput {
   candidates: Map<string, Candidate>;
   /** Optional bank statement (GL-first workspaces). Reconciliation rules run only when present. */
   bankLines?: BankLine[];
+  /** Receipts uploaded for this workspace. Receipt rules run only when this is provided. */
+  receipts?: ReceiptRecord[];
+  /** Grant-charged lines at or above this need a receipt (workspaceSettings.receiptThresholdCents). */
+  receiptThresholdCents?: number;
 }
+
+export const DEFAULT_RECEIPT_THRESHOLD_CENTS = 75_00;
 
 /** Differences below this are not worth a human's attention for duplicate checks. */
 export const MATERIALITY_CENTS = 250_00;
@@ -173,6 +181,7 @@ export function runRules(input: RuleInput): Finding[] {
   }
 
   if (input.bankLines?.length) findings.push(...reconciliationFindings(input));
+  findings.push(...receiptFindings(input));
 
   return findings;
 }
@@ -216,6 +225,100 @@ export function reconciliationFindings(input: RuleInput): Finding[] {
         message: `The GL records ${usd(t.amountCents)} but the matching bank line shows ${usd(m.bankAmountCents)} (difference ${usd(diff)}). Correct the GL before billing; a one-cent difference returns the whole invoice.`,
         evidence: [{ source: "gl", ref: t.txnId, note: `${t.date} ${t.vendor ?? t.description} ${usd(t.amountCents)}` }, bankEv(b)],
         exposureCents: grant ? diff : 0 });
+    }
+  }
+  return out;
+}
+
+/** Lines that never carry a vendor receipt: payroll (time records are the evidence), journal entries. */
+function receiptExempt(t: Txn) {
+  return isPayrollTxn(t) || /journal|allocation|depreciation|accrual/i.test(t.txnType ?? "");
+}
+
+export const receiptNote = (r: ReceiptRecord) => {
+  const x = r.extracted;
+  if (!x) return `${r.fileName} (not read)`;
+  const items = x.lineItems.slice(0, 3).map((i) => i.description).join(", ");
+  return `${x.vendor ?? "Unknown vendor"} receipt, ${x.totalCents == null ? "total not printed" : usd(x.totalCents)} on ${x.date ?? "an unprinted date"}${items ? `: ${items}` : ""}`;
+};
+
+/**
+ * Receipt rules (all needs_review, never blocked):
+ * - R-RECEIPT-MISSING: grant-charged line ≥ threshold with no matched receipt (only when receipts were provided).
+ * - R-RECEIPT-AMBIGUOUS: a receipt ties between this line and others; a person must link it.
+ * - R-RECEIPT-MISMATCH: matched receipt total differs by ≥1 cent, or its date is >5 days from the line.
+ * - R-PURPOSE-UNCLEAR (GL-first): the same vendor is charged to ≥2 grants in one billing month and
+ *   this line has neither a memo nor a receipt purpose note — the two-Office-Depot problem.
+ */
+export function receiptFindings(input: RuleInput): Finding[] {
+  const out: Finding[] = [];
+  const glFirst = input.txns.some((t) => t.source === "gl");
+  const receipts = input.receipts;
+  const threshold = input.receiptThresholdCents ?? DEFAULT_RECEIPT_THRESHOLD_CENTS;
+  const chargedGrant = (t: Txn) => t.glClass ?? input.candidates.get(t.txnId)?.grantId ?? null;
+  const lines = input.txns.filter((t) => t.amountCents < 0 && !(glFirst && t.source === "bank"));
+  const byTxn = new Map<string, ReceiptRecord>();
+  for (const r of receipts ?? []) if (r.matchedTxnId) byTxn.set(r.matchedTxnId, r);
+  const ambiguous = new Map<string, ReceiptRecord[]>();
+  for (const r of receipts ?? []) {
+    if (r.matchedTxnId) continue;
+    for (const id of r.candidates ?? []) ambiguous.set(id, [...(ambiguous.get(id) ?? []), r]);
+  }
+
+  for (const t of lines) {
+    const grant = chargedGrant(t);
+    const abs = -t.amountCents;
+    const r = byTxn.get(t.txnId);
+    if (receipts && !r && grant && abs >= threshold && !receiptExempt(t)) {
+      const tie = ambiguous.get(t.txnId);
+      if (tie?.length) {
+        const others = [...new Set(tie.flatMap((x) => x.candidates ?? []))].filter((id) => id !== t.txnId);
+        out.push({ ruleId: "R-RECEIPT-AMBIGUOUS", txnId: t.txnId, status: "needs_review",
+          message: `${tie.map((x) => x.fileName).join(", ")} could belong to this line or ${others.join(", ")} (same amount and date window). Link the receipt to the right line.`,
+          evidence: tie.map<Evidence>((x) => ({ source: "receipt", ref: x.receiptId, note: receiptNote(x) })),
+          exposureCents: abs });
+      } else {
+        out.push({ ruleId: "R-RECEIPT-MISSING", txnId: t.txnId, status: "needs_review",
+          message: `${usd(t.amountCents)} charged to ${grant} has no receipt (required at or above ${usd(threshold)}). Attach the receipt or invoice before billing.`,
+          evidence: [{ source: "gl", ref: t.txnId, note: `${t.date} ${t.vendor ?? t.description} ${usd(t.amountCents)}` }],
+          exposureCents: abs });
+      }
+    }
+    if (r?.extracted) {
+      const x = r.extracted;
+      const diff = x.totalCents == null ? null : Math.abs(x.totalCents - abs);
+      const dateOff = x.date ? daysApart(x.date, t.date) : 0;
+      if ((diff != null && diff >= 1) || dateOff > RECEIPT_DATE_WINDOW_DAYS) {
+        const parts = [
+          diff != null && diff >= 1 ? `the receipt total is ${usd(x.totalCents!)} vs ${usd(t.amountCents)} in the GL (difference ${usd(diff)})` : null,
+          dateOff > RECEIPT_DATE_WINDOW_DAYS ? `the receipt is dated ${x.date}, ${Math.round(dateOff)} days from the GL date ${t.date}` : null,
+        ].filter(Boolean);
+        out.push({ ruleId: "R-RECEIPT-MISMATCH", txnId: t.txnId, status: "needs_review",
+          message: `Receipt doesn't match: ${parts.join("; ")}. Correct the GL or attach the right receipt.`,
+          evidence: [{ source: "receipt", ref: r.receiptId, note: receiptNote(r) }],
+          exposureCents: grant ? (diff ?? 0) : 0 });
+      }
+    }
+  }
+
+  if (glFirst) {
+    const groups = new Map<string, Txn[]>();
+    for (const t of lines) {
+      if (receiptExempt(t)) continue;
+      const k = `${vendorKey(t.vendor ?? t.description)}|${t.date.slice(0, 7)}`;
+      groups.set(k, [...(groups.get(k) ?? []), t]);
+    }
+    for (const members of groups.values()) {
+      const grants = new Set(members.map(chargedGrant).filter((g): g is string => !!g));
+      if (grants.size < 2) continue;
+      for (const t of members) {
+        const grant = chargedGrant(t);
+        if (!grant || t.memo.trim() || byTxn.get(t.txnId)?.extracted?.purposeText?.trim()) continue;
+        out.push({ ruleId: "R-PURPOSE-UNCLEAR", txnId: t.txnId, status: "needs_review",
+          message: `${t.vendor ?? t.description} is charged to ${[...grants].join(" and ")} in ${t.date.slice(0, 7)}, and this ${usd(t.amountCents)} line has no memo or receipt note saying which program it was for. Attach a receipt or note which program this was for.`,
+          evidence: members.filter((m) => m.txnId !== t.txnId).map<Evidence>((m) => ({ source: "gl", ref: m.txnId, note: `${m.date} ${usd(m.amountCents)} → ${chargedGrant(m) ?? "general funds"}` })),
+          exposureCents: -t.amountCents });
+      }
     }
   }
   return out;

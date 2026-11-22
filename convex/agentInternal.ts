@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { BankLine, Decision, GlRow, GrantTerms, Precedent, StaffAllocation, Txn, TypedPrecedent } from "../lib/types";
+import { getSettingsDoc } from "./settings";
+import type { BankLine, Decision, GlRow, ReceiptExtract, ReceiptRecord, GrantTerms, Precedent, StaffAllocation, Txn, TypedPrecedent } from "../lib/types";
 
 export const getGrant = internalQuery({
   args: { grantDocId: v.id("grants") },
@@ -49,14 +50,30 @@ export const setGrantError = internalMutation({
 export const loadPipelineInput = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const [txns, gl, staff, precRows, grantRows, bankRows] = await Promise.all([
+    const [txns, gl, staff, precRows, grantRows, bankRows, receiptRows, settings] = await Promise.all([
       ctx.db.query("transactions").collect(),
       ctx.db.query("glRows").collect(),
       ctx.db.query("staffAllocations").collect(),
       ctx.db.query("precedents").collect(),
       ctx.db.query("grants").collect(),
       ctx.db.query("bankLines").collect(),
+      ctx.db.query("receipts").collect(),
+      getSettingsDoc(ctx),
     ]);
+    // Receipt rules apply to GL-first workspaces that have receipts uploaded.
+    const glFirst = txns.some((t) => t.source === "gl");
+    const receipts: ReceiptRecord[] | undefined =
+      glFirst && receiptRows.length
+        ? receiptRows.map((r) => ({
+            receiptId: String(r._id),
+            fileName: r.fileName,
+            extracted: r.status === "ready" ? (r.extracted as ReceiptExtract | null) : null,
+            matchedTxnId: r.status === "ready" ? r.matchedTxnId : null,
+            matchScore: r.matchScore,
+            matchedBy: r.matchedBy,
+            candidates: r.matchCandidates ?? [],
+          }))
+        : undefined;
     const grants = grantRows
       .filter((g) => g.status === "ready" && g.terms)
       .map((g) => g.terms as GrantTerms);
@@ -97,6 +114,8 @@ export const loadPipelineInput = internalQuery({
       bankLines: bankRows.map((b) => ({
         lineId: b.lineId, date: b.date, description: b.description, amountCents: b.amountCents, memo: b.memo,
       })) as BankLine[],
+      receipts,
+      receiptThresholdCents: settings.receiptThresholdCents,
     };
   },
 });

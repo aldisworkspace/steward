@@ -7,6 +7,7 @@ export const DEFAULTS = {
   approverName: "A. Okafor",
   approverTitle: "Executive Director",
   dataSource: "demo" as const,
+  receiptThresholdCents: 75_00,
 };
 
 export async function getSettingsDoc(ctx: QueryCtx) {
@@ -20,6 +21,7 @@ export async function getSettingsDoc(ctx: QueryCtx) {
     approverName: row.approverName,
     approverTitle: row.approverTitle,
     dataSource: row.dataSource,
+    receiptThresholdCents: row.receiptThresholdCents ?? DEFAULTS.receiptThresholdCents,
   };
 }
 
@@ -33,6 +35,7 @@ export const get = query({
       approverTitle: s.approverTitle,
       approverLabel: `${s.approverName} (${s.approverTitle})`,
       dataSource: s.dataSource,
+      receiptThresholdCents: s.receiptThresholdCents,
     };
   },
 });
@@ -43,6 +46,7 @@ export const update = mutation({
     organizationName: v.optional(v.string()),
     approverName: v.optional(v.string()),
     approverTitle: v.optional(v.string()),
+    receiptThresholdCents: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     assertDemoPasscode(args.passcode);
@@ -55,7 +59,11 @@ export const update = mutation({
       approverName: args.approverName ?? existing?.approverName ?? DEFAULTS.approverName,
       approverTitle: args.approverTitle ?? existing?.approverTitle ?? DEFAULTS.approverTitle,
       dataSource: existing?.dataSource ?? DEFAULTS.dataSource,
+      receiptThresholdCents: args.receiptThresholdCents ?? existing?.receiptThresholdCents ?? DEFAULTS.receiptThresholdCents,
     };
+    if (!Number.isInteger(patch.receiptThresholdCents) || patch.receiptThresholdCents < 0) {
+      throw new Error("receiptThresholdCents must be a non-negative integer (cents).");
+    }
     if (existing) await ctx.db.patch(existing._id, patch);
     else await ctx.db.insert("workspaceSettings", { key: "default", ...patch });
   },

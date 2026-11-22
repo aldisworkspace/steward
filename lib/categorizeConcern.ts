@@ -49,7 +49,7 @@ export function clauseRefEquals(cited: string, termRef: string): boolean {
 
 /** Concerns that ask for paperwork or a purpose check rather than asserting a prohibition. */
 const DOCUMENTATION_QUESTION =
-  /document|receipt|invoice|purpose|confirm|clarif|verify|support|backup|justif|attendance|roster|sign-?in|memo|explain|unclear|what (was|is) (this|it) for/i;
+  /document|receipt|invoice|purpose|confirm|clarif|verify|support|backup|justif|attendance|roster|sign-?in|memo|explain|unclear|what (was|is) (this|it) for|which (program|grant)/i;
 
 export function categorizeConcern(
   concern: ConcernInput,

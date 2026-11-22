@@ -3,6 +3,7 @@ import { internalMutation, mutation, query, type MutationCtx } from "./_generate
 import { internal } from "./_generated/api";
 import { assertDemoPasscode } from "./passcode";
 import { reconcileGlToBank } from "../lib/matchLedger";
+import { rematchAll } from "./receipts";
 
 const txn = v.object({
   txnId: v.string(),
@@ -119,6 +120,8 @@ export const loadDemo = mutation({
     await clearTable(ctx, "staffAllocations");
     await clearTable(ctx, "precedents");
     await clearTable(ctx, "bankLines");
+    // The legacy demo is bank-first and carries no receipts.
+    for (const row of await ctx.db.query("receipts").collect()) await ctx.db.delete(row._id);
 
     for (const row of args.transactions) {
       await ctx.db.insert("transactions", row);
@@ -307,9 +310,14 @@ export const startGlWorkspace = mutation({
     grantDocIds: v.array(v.id("grants")),
     dataSource: v.optional(v.union(v.literal("demo"), v.literal("custom"))),
     precedents: v.optional(v.array(precedent)),
+    /** Drop previously uploaded receipts (demo reseed). Default keeps them. */
+    clearReceipts: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     assertDemoPasscode(args.passcode);
+    if (args.clearReceipts) {
+      for (const row of await ctx.db.query("receipts").collect()) await ctx.db.delete(row._id);
+    }
     if (!args.lines.length) throw new ConvexError("Upload a GL detail file with at least one expense line.");
     const keep = new Set(args.grantDocIds.map(String));
     for (const table of ["transactions", "glRows", "staffAllocations", "bankLines"] as const) {
@@ -344,6 +352,8 @@ export const startGlWorkspace = mutation({
       });
     }
     for (const row of args.staffAllocations) await ctx.db.insert("staffAllocations", row);
+    // Receipts uploaded before the run are kept; line ids changed, so match them again.
+    await rematchAll(ctx);
     await setDataSource(ctx, args.dataSource ?? "custom");
     await ctx.db.insert("auditLog", {
       at: new Date().toISOString(),

@@ -9,18 +9,27 @@ import { atRiskCentsForTxn } from "./atRisk";
 import { categorizeConcern, clauseRefEquals } from "./categorizeConcern";
 import { grantLineText } from "./fundLabels";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
-import { MATERIALITY_CENTS, runRules } from "./rules";
+import { MATERIALITY_CENTS, receiptNote, runRules } from "./rules";
 import { isSoftRule } from "./softRules";
 import { ruleLabel, tickForSource } from "./ruleLabels";
 import { applyTypedPrecedentsForTxn } from "./typedPrecedents";
 import { type BankLine, type Candidate, type Decision, type DecisionCheck, type Evidence, type Finding, type GlRow, type GrantTerms, GrantTermsZ,
-  type Precedent, type StaffAllocation, type Status, type Txn, type TypedPrecedent } from "./types";
+  type Precedent, type ReceiptRecord, type StaffAllocation, type Status, type Txn, type TypedPrecedent } from "./types";
 
 export interface PipelineInput {
   txns: Txn[]; gl: GlRow[]; staff: StaffAllocation[]; grants: GrantTerms[]; precedents: Precedent[];
   typedPrecedents?: TypedPrecedent[];
   /** Optional bank statement for GL-first reconciliation. */
   bankLines?: BankLine[];
+  /** Receipts uploaded for this workspace (matched deterministically before the run). */
+  receipts?: ReceiptRecord[];
+  receiptThresholdCents?: number;
+}
+
+function receiptByTxn(receipts: ReceiptRecord[] | undefined) {
+  const m = new Map<string, ReceiptRecord>();
+  for (const r of receipts ?? []) if (r.matchedTxnId && r.extracted) m.set(r.matchedTxnId, r);
+  return m;
 }
 
 /** GL-first workspace: the primary records are GL detail lines (source "gl"). */
@@ -121,6 +130,7 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
   }
 
   const validGrants = new Map(input.grants.map((g) => [g.grantId, new Set(g.budgetLines.map((l) => l.code))]));
+  const receipts = receiptByTxn(input.receipts);
   const batchStarts: number[] = [];
   for (let i = 0; i < forModel.length; i += BATCH) batchStarts.push(i);
 
@@ -131,8 +141,12 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
         const g = glByRef.get(t.txnId);
         const vendorHistory = (history.get(vendorKey(t.description)) ?? []).filter((h) => h.txnId !== t.txnId).slice(-3)
           .map(({ class: c, budgetLine, memo }) => ({ grantId: c, budgetLine, memo }));
+        const r = receipts.get(t.txnId)?.extracted;
         return { txnId: t.txnId, date: t.date, description: t.description, amountUsd: t.amountCents / 100, memo: t.memo,
-          gl: g ? { class: g.class, budgetLine: g.budgetLine, enteredBy: g.enteredBy } : null, vendorHistory };
+          gl: g ? { class: g.class, budgetLine: g.budgetLine, enteredBy: g.enteredBy } : null, vendorHistory,
+          // Receipt text is untrusted data (escaped below with the rest of the row).
+          ...(r ? { receipt: { vendor: r.vendor, date: r.date, totalUsd: r.totalCents == null ? null : r.totalCents / 100,
+            lineItems: r.lineItems.map((i) => ({ description: i.description, amountUsd: i.amountCents / 100 })), purposeText: r.purposeText } } : {}) };
       });
       try {
         const { data, usage: u } = await model.json({
@@ -198,6 +212,7 @@ const GL_PASS_RULES = /^R-(EFFORT|UNALLOWABLE|PERIOD|PRIOR-APPROVAL|DEPOSIT-MISM
 
 export function verify(input: PipelineInput, codings: Map<string, Coding & { splits?: Decision["splits"] }>): Omit<PipelineResult, "usage" | "errors"> {
   const glByRef = new Map(input.gl.map((r) => [r.bankRef, r]));
+  const receiptsByTxn = receiptByTxn(input.receipts);
 
   // Pass M: verify Steward's own proposals.
   const modelCands = new Map<string, Candidate>([...codings.values()].map((c) => [c.txnId,
@@ -345,9 +360,11 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     };
 
     const precById = new Map(input.precedents.map((p) => [p.id, p]));
+    const receipt = receiptsByTxn.get(t.txnId);
     const evidence: Evidence[] = [
       { source: "bank", ref: t.txnId, note: `${t.date} ${t.description} ${(t.amountCents / 100).toFixed(2)}${t.memo ? ` — "${t.memo}"` : ""}` },
       ...(g ? [{ source: "gl" as const, ref: t.txnId, note: `Bookkeeper coded it to ${grantLineText(g.class, g.budgetLine, input.grants)}` }] : []),
+      ...(receipt ? [{ source: "receipt" as const, ref: receipt.receiptId, note: receiptNote(receipt) }] : []),
       ...c.clauseRefs
         .filter((r) => r.startsWith("P") && precById.has(r))
         .map((r) => ({ source: "precedent" as const, ref: r, note: precById.get(r)!.ruling })),
