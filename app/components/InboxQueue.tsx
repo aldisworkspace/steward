@@ -12,8 +12,8 @@ import { getFundLabel } from "@/lib/fundLabels";
 import { QueueRuleIcon } from "@/lib/queueIcon";
 import type { GrantTerms } from "@/lib/types";
 import { displayVendor } from "@/lib/displayVendor";
-import { queueLine2 } from "@/lib/queueLine2";
-import { fmtRisk, fmtTableAmount } from "../format";
+import { issueLabel, queueStatusWord } from "@/lib/issueLabel";
+import { fmtRisk, fmtTableAmount, plural } from "../format";
 import { CountUp } from "./CountUp";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -90,7 +90,7 @@ export function InboxQueue({
     <aside className="flex h-full flex-col border-r border-rule bg-paper" role="listbox" aria-label="Inbox queue">
       <div className="border-b border-rule px-3 py-3">
         <p className="text-[14px] font-semibold text-ink">
-          {openCount} items · $
+          {plural(openCount, "item")} · $
           <CountUp value={Math.round(atRiskCents / 100)} durationMs={300} /> a funder could ask you to repay
         </p>
       </div>
@@ -251,7 +251,7 @@ function QueueRowButton({
   staggerIndex?: number;
 }) {
   const fund = r.grantId != null ? getFundLabel(r.grantId, grants) : null;
-  const statusWord = r.status === "blocked" ? "Not allowed" : "Needs you";
+  const statusWord = queueStatusWord(r.status);
   return (
     <button
       type="button"
@@ -272,7 +272,7 @@ function QueueRowButton({
           {displayVendor(r.description)}
         </span>
         <span className="line-clamp-1 text-[13px] text-ink-2">
-          {queueLine2(r.ruleId) || r.reason}
+          {issueLabel(r.ruleId, r.status) || r.reason}
           {fund && <span> · {fund.title}</span>}
         </span>
       </span>

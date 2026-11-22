@@ -6,7 +6,8 @@
 import { type ModelClient, MODELS, pdfBlock } from "./llm";
 import { CODING_SYSTEM, CodingZ, type Coding, DEFENSE_SYSTEM, DefenseZ, EXTRACT_SYSTEM } from "./prompts";
 import { atRiskCentsForTxn } from "./atRisk";
-import { categorizeConcern } from "./categorizeConcern";
+import { categorizeConcern, clauseRefEquals } from "./categorizeConcern";
+import { grantLineText } from "./fundLabels";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
 import { MATERIALITY_CENTS, runRules } from "./rules";
 import { ruleLabel, tickForSource } from "./ruleLabels";
@@ -235,19 +236,25 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       txnFindings = findings.filter((f) => f.txnId === t.txnId);
     }
 
+    // The model's concern is verified like any proposal: only an exact clause of the grant this line is
+    // charged to (bookkeeper) or that Steward proposes can make it a block. Anything else is a question.
+    const cat =
+      c.concern && !materialityAuto
+        ? categorizeConcern(
+            { status: c.concern.status, reason: c.concern.reason, clauseRef: c.concern.clauseRef },
+            input.grants,
+            t,
+            [g?.class, grantId, c.grantId, ...(splits ?? []).map((s) => s.grantId)],
+          )
+        : null;
     let concernForApply: { status: Status; reason: string } | null =
-      materialityAuto ? null : c.concern ? { status: c.concern.status, reason: c.concern.reason } : null;
+      cat && c.concern ? { status: cat.status, reason: c.concern.reason } : null;
 
-    if (c.concern && !txnFindings.length && !materialityAuto) {
-      const cat = categorizeConcern(
-        { status: c.concern.status, reason: c.concern.reason, clauseRef: c.concern.clauseRef },
-        input.grants,
-        t,
-      );
+    if (cat && !txnFindings.length) {
       const derived: Finding = {
         ruleId: cat.ruleId,
         txnId: t.txnId,
-        status: c.concern.status,
+        status: cat.status,
         message: cat.message,
         evidence: cat.evidence,
       };
@@ -282,7 +289,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       message: f.message,
       tick: tickForSource(f.evidence[0]?.source ?? "bank"),
     }));
-    if (concernForApply && !txnFindings.some((f) => f.ruleId === "R-MODEL-REVIEW" || f.ruleId.startsWith("R-UNALLOWABLE"))) {
+    if (concernForApply && !txnFindings.some((f) => f.ruleId === "R-MODEL-REVIEW" || f.ruleId === "R-NEEDS-DOCS" || f.ruleId.startsWith("R-UNALLOWABLE"))) {
       checks.push({
         ruleId: null,
         label: "Steward's judgment",
@@ -297,13 +304,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       for (const u of gr.unallowable) knownClauseRefs.push(u.clauseRef);
       for (const p of gr.priorApproval) knownClauseRefs.push(p.clauseRef);
     }
-    const clauseRefOk = (ref: string) => {
-      if (!ref.trim()) return false;
-      const p = ref.split(";")[0]!;
-      return knownClauseRefs.some(
-        (k) => k.startsWith(p) || p.startsWith(k.split(";")[0]!),
-      );
-    };
+    const clauseRefOk = (ref: string) => !!ref.trim() && knownClauseRefs.some((k) => clauseRefEquals(ref, k));
     const keptClauseRefs = c.clauseRefs.filter(clauseRefOk);
     if (keptClauseRefs.length < c.clauseRefs.length) {
       checks.push({
@@ -318,7 +319,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       if (!ref.trim()) return ref;
       for (const gr of input.grants) {
         for (const u of [...gr.unallowable, ...gr.priorApproval.map((p) => ({ rule: p.rule, clauseRef: p.clauseRef }))]) {
-          if (ref.startsWith(u.clauseRef.split(";")[0]!) || u.clauseRef.startsWith(ref.split(";")[0]!)) return u.rule;
+          if (clauseRefEquals(ref, u.clauseRef)) return u.rule;
         }
       }
       return ref;
@@ -327,12 +328,12 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     const precById = new Map(input.precedents.map((p) => [p.id, p]));
     const evidence: Evidence[] = [
       { source: "bank", ref: t.txnId, note: `${t.date} ${t.description} ${(t.amountCents / 100).toFixed(2)}${t.memo ? ` — "${t.memo}"` : ""}` },
-      ...(g ? [{ source: "gl" as const, ref: t.txnId, note: `bookkeeper: ${g.class ?? "unrestricted"}${g.budgetLine ? ":" + g.budgetLine : ""}` }] : []),
+      ...(g ? [{ source: "gl" as const, ref: t.txnId, note: `Bookkeeper coded it to ${grantLineText(g.class, g.budgetLine, input.grants)}` }] : []),
       ...c.clauseRefs
         .filter((r) => r.startsWith("P") && precById.has(r))
         .map((r) => ({ source: "precedent" as const, ref: r, note: precById.get(r)!.ruling })),
       ...keptClauseRefs.filter((r) => !r.startsWith("P")).map((r) => ({ source: "contract" as const, ref: r, note: clauseNote(r) })),
-      ...(c.concern?.clauseRef
+      ...(c.concern?.clauseRef && clauseRefOk(c.concern.clauseRef)
         ? [{ source: "contract" as const, ref: c.concern.clauseRef, note: clauseNote(c.concern.clauseRef) }]
         : []),
       ...txnFindings.flatMap((f) => f.evidence),

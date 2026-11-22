@@ -18,7 +18,7 @@ import { RubberStamp } from "./RubberStamp";
 import { StatusPill } from "./StatusPill";
 import { FundLabelDisplay, BudgetLineDisplay } from "./FundLabelDisplay";
 import { GlossaryTerm } from "./GlossaryTerm";
-import { getFundLabel } from "@/lib/fundLabels";
+import { getFundLabel, grantLineText } from "@/lib/fundLabels";
 import { shouldIgnoreAppShortcut } from "@/lib/keyboardGuard";
 
 type CaseData = {
@@ -35,7 +35,7 @@ type CaseData = {
     evidence?: unknown;
     ruleHits: string[];
   } | null;
-  gl: { class: string | null; budgetLine: string | null } | null;
+  gl: { class: string | null; budgetLine: string | null; enteredBy?: string } | null;
   entry: { id: string; lines: unknown } | null;
   grantTerms: { fileName: string; terms: unknown }[];
 };
@@ -383,8 +383,8 @@ function CaseFileInner({
   const whyText = decision.modelRationale ?? decision.rationale;
   const checks = decision.checks ?? [];
   const narrative = caseNarrative({
-    bankNote: bankEv?.note,
-    glNote: glEv?.note,
+    txn,
+    hasGl: !!(gl || glEv),
     bkLabel,
     stewardLabel,
     status: decision.status,
@@ -549,7 +549,9 @@ function CaseFileInner({
               label="Bookkeeper's entry"
               body={
                 <>
-                  {glEv.note}
+                  {gl
+                    ? `${grantLineText(gl.class, gl.budgetLine, terms)}${gl.enteredBy ? ` · entered by ${gl.enteredBy.replace(/^bookkeeper:/, "")}` : ""}`
+                    : glEv.note}
                   {stewardLabel !== bkLabel && bkLabel && (
                     <p className="mt-2 border-b-2 border-redpen text-ink-2">Disagrees with bookkeeper</p>
                   )}

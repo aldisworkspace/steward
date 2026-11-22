@@ -9,6 +9,8 @@ export function ruleLabel(ruleId: string): string {
     "R-DEPOSIT-MISMATCH": "Ledger ≠ bank",
     "R-GL-DISAGREE": "Bookkeeper disagrees",
     "R-GL-ORPHAN": "No matching bank line",
+    "R-NEEDS-DOCS": "Needs documentation",
+    "R-UNALLOWABLE-STAFF_EVENT": "Staff event or meal",
   };
   if (exact[ruleId]) return exact[ruleId];
   if (ruleId.startsWith("R-UNALLOWABLE-ALCOHOL")) return "Alcohol or staff event";

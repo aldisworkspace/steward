@@ -53,3 +53,15 @@ export function splitLabel(
     })
     .join(" / ");
 }
+
+/** "1 item", "3 items". */
+export function plural(n: number, word: string, pluralWord = `${word}s`): string {
+  return `${n} ${n === 1 ? word : pluralWord}`;
+}
+
+/** Grant-card report chip: "Report overdue by 23 days", "Report due today", "Report due in 5 days". */
+export function reportDueLabel(days: number): string {
+  if (days < 0) return `Report overdue by ${plural(-days, "day")}`;
+  if (days === 0) return "Report due today";
+  return `Report due in ${plural(days, "day")}`;
+}

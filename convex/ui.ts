@@ -3,6 +3,7 @@ import { query } from "./_generated/server";
 import { computeFundBreakdown } from "../lib/fundBreakdown";
 import { computeInboxOpenMetrics } from "../lib/inboxOpenMetrics";
 import { isInboxResolved } from "../lib/inboxResolved";
+import { issueLabel } from "../lib/issueLabel";
 import { ruleLabel } from "../lib/ruleLabels";
 
 const STATUS_RANK: Record<string, number> = { blocked: 0, needs_review: 1, auto: 2 };
@@ -54,7 +55,7 @@ export const dashboardStats = query({
       if (!t || t.amountCents >= 0) continue;
       const risk = d.atRiskCents ?? 0;
       if (risk <= 0) continue;
-      const label = d.ruleHits[0] ? ruleLabel(d.ruleHits[0]) : "Steward's judgment";
+      const label = issueLabel(d.ruleHits[0] ?? null, d.status);
       breakdownMap.set(label, (breakdownMap.get(label) ?? 0) + risk);
     }
     for (const [label, cents] of breakdownMap) breakdown.push({ label, cents });

@@ -16,7 +16,8 @@ export function atRiskCentsForTxn(
   const onGrant = !!(chargedGrant || (d.grantId && !d.splits));
   if (!onGrant && !fs.some((f) => f.suggestion?.some((s) => s.grantId))) return 0;
 
-  if (fs.some((f) => f.ruleId.startsWith("R-UNALLOWABLE") || f.ruleId === "R-PERIOD")) {
+  // "Not allowed" exposure follows the verified decision status, not just the rule id.
+  if (d.status === "blocked" && fs.some((f) => f.ruleId.startsWith("R-UNALLOWABLE") || f.ruleId === "R-PERIOD")) {
     if (chargedGrant || d.grantId) return abs;
   }
 

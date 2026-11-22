@@ -62,3 +62,14 @@ export function formatBudgetLineText(
   if (!c || name === c) return name;
   return `${name} · ${c}`;
 }
+
+/** "Youth Pathways to Employment · Supplies" — grant name · line name, for evidence text. */
+export function grantLineText(
+  grantId: string | null,
+  code: string | null,
+  grants: GrantTerms[] | { terms: unknown }[] | undefined,
+): string {
+  const fund = getFundLabel(grantId, grants);
+  if (!grantId || !code) return fund.title;
+  return `${fund.title} · ${budgetLineLabel(grantId, code, grants).name}`;
+}

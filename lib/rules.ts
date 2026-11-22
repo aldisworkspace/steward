@@ -30,12 +30,12 @@ function daysBetween(a: string, b: string) {
 
 /** Keyword heuristics for unallowable categories. The model handles anything these miss. */
 export const UNALLOWABLE_TERM_PATTERNS: { id: string; txn: RegExp; termRule: RegExp; label: string }[] = [
-  { id: "fines", txn: /citation|violation|penalt|\bfine[sd]?\b|late fee/i, termRule: /fine|penalt|violation/i, label: "fines and penalties" },
-  { id: "fundraising", txn: /gala|benefit|fundrais|donor (event|dinner)|auction/i, termRule: /fundrais/i, label: "fundraising" },
+  { id: "fines", txn: /citation|violation|penalt|\bfine[sd]?\b|late fee/i, termRule: /fine|penalt|violation/i, label: "a fine or penalty" },
+  { id: "fundraising", txn: /gala|benefit|fundrais|donor (event|dinner)|auction/i, termRule: /fundrais/i, label: "a fundraising cost" },
   { id: "alcohol_staff", txn: /\bbar\b|brewery|winery|wine|liquor|happy hour/i,
-    termRule: /alcohol|hospitality|staff (meals|appreciation)/i, label: "Alcohol or staff event" },
+    termRule: /alcohol|hospitality|staff (meals|appreciation)/i, label: "an alcohol purchase" },
   { id: "staff_event", txn: /staff (appreciation|party|outing|retreat|celebration)|appreciation (night|dinner|event|party)|holiday party|team[- ]building/i,
-    termRule: /staff (meals|appreciation)|entertainment|social activit|recreation|team-building/i, label: "Alcohol or staff event" },
+    termRule: /staff (meals|appreciation)|entertainment|social activit|recreation|team-building/i, label: "a staff event or meal" },
   { id: "lobbying", txn: /lobby|lobbying/i,
     termRule: /lobby|legislat|advocacy|appropriations|influence/i, label: "lobbying" },
 ];
@@ -88,7 +88,7 @@ export function runRules(input: RuleInput): Finding[] {
         if (!terms.length) continue;
         blockedOrDup.add(t.txnId);
         findings.push({ ruleId: `R-UNALLOWABLE-${p.id.toUpperCase()}`, txnId: t.txnId, status: "blocked",
-          message: `Looks like ${p.label}, which ${g.grantId} prohibits (${terms.map((u) => u.clauseRef).join("; ")}). Move to unrestricted funds.`,
+          message: `This looks like ${p.label}. The ${g.program?.trim() || g.grantId} grant doesn't allow that (${terms.map((u) => u.clauseRef).join("; ")}), so it should move to unrestricted funds.`,
           evidence: [...terms.map<Evidence>((u) => ({ source: "contract", ref: u.clauseRef, note: u.rule })),
                      { source: "bank", ref: t.txnId, note: text(t) }],
           suggestion: [{ grantId: null, budgetLine: null, amountCents: t.amountCents }] });

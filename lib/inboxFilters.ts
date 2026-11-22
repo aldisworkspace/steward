@@ -21,9 +21,9 @@ export function inboxCategory(
   ruleId: string | null | undefined,
   status: string,
 ): InboxCategory {
-  if (status === "blocked" || ruleId?.startsWith("R-UNALLOWABLE") || ruleId === "R-PERIOD") {
-    return "not_allowed";
-  }
+  // "Not allowed" follows the verified decision status: a rule id alone (e.g. a model concern that
+  // cited a clause but was downgraded to a question) never puts money in the not-allowed bucket.
+  if (status === "blocked") return "not_allowed";
   if (ruleId === "R-PRIOR-APPROVAL" || ruleId === "R-LINE-OVERRUN") return "approval";
   if (ruleId === "R-EFFORT") return "payroll";
   if (ruleId === "R-GL-DISAGREE" || ruleId === "R-DEPOSIT-MISMATCH" || ruleId === "R-GL-ORPHAN") {
