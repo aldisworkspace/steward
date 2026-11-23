@@ -1,252 +1,316 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
-import { RedPenStrike } from "../RedPenStrike";
-import { ApproveDemo, DefendDemo, SourcesDisagreeDemo } from "./LandingBentoDemos";
+import type { CSSProperties } from "react";
+import { landingSans, landingSerif } from "./fonts";
+import { HeroCard } from "./ProductPanels";
+import { ProductReveal } from "./ProductReveal";
+import { Strike } from "./Strike";
+import "./landing.css";
 
 const GITHUB = "https://github.com/aldisworkspace/steward";
-const BLACK_CAT_CASE = "black-cat";
+const DEMO_HREF = "/app";
+const PRIMARY = "Watch a package get ready";
 
-function demoPath(query: string): string {
-  const q = query.startsWith("?") ? query : `?${query}`;
-  const key = process.env.NEXT_PUBLIC_DEMO_KEY;
-  return `/app${q}${key ? `&key=${encodeURIComponent(key)}` : ""}`;
-}
-
-function HeroMiniCase() {
+function Eyebrow({ children }: { children: string }) {
   return (
-    <div className="hero-mini-case rounded-[8px] border border-rule bg-sheet p-6">
-      <p className="text-[14px] font-semibold text-ink">The Black Cat SF</p>
-      <p className="font-display tabular text-[32px] font-semibold text-ink">−$482.50</p>
-      <p className="mt-1 text-[13px] text-ink-2">Staff appreciation night</p>
-      <div className="mt-4 text-[14px]">
-        <RedPenStrike text="Youth Pathways · Program supplies" className="hero-strike-delay" animate />
-        <span className="hero-reclass ml-2 font-semibold text-money">→ General funds</span>
-      </div>
-      <blockquote className="hero-clause mt-4 border-l-2 border-redpen pl-4 font-serif text-[17px] leading-snug text-ink">
-        Staff meals and staff appreciation events are unallowable.
-        <footer className="mt-2 font-sans text-[13px] text-ink-2">Youth Pathways grant · §4.7</footer>
-      </blockquote>
-    </div>
+    <p className="ld-eyebrow">
+      <span aria-hidden className="ld-eyebrow__rule" />
+      {children}
+    </p>
   );
 }
 
-function BentoCell({ title, children, className = "" }: { title: string; children: ReactNode; className?: string }) {
+function Arrow() {
   return (
-    <div
-      className={`rounded-[8px] border border-rule bg-sheet p-6 transition-colors hover:border-ink-2 ${className}`}
-    >
-      <h3 className="text-[17px] font-semibold text-ink">{title}</h3>
-      <div className="mt-3 text-[14px] text-ink-2">{children}</div>
-    </div>
+    <svg className="ld-arrow" viewBox="0 0 16 16" aria-hidden>
+      <path d="M3 8h9.5M8.5 4l4 4-4 4" />
+    </svg>
   );
 }
+
+const STEPS = [
+  {
+    n: "01",
+    title: "Upload GL detail and receipts",
+    body: "The month’s GL detail as a QuickBooks, Xero or Sage export, plus the receipts folder.",
+    chips: ["GL_detail_Oct.csv", "receipts/ · 42 files"],
+  },
+  {
+    n: "02",
+    title: "Steward checks every line",
+    body: "Against the contract’s terms and against the receipts. Rules decide pass or fail, not the model.",
+    chips: ["42 lines checked", "2 exceptions"],
+  },
+  {
+    n: "03",
+    title: "Review, sign, export",
+    body: "Your senior accountant opens only the exceptions, clears them, signs and downloads the invoice package.",
+    chips: ["Invoice", "Expenditure report", "Receipts"],
+  },
+];
+
+const WONT = [
+  {
+    verb: "Approve its own work",
+    body: "Preparer and reviewer are two different people. Steward is neither of them.",
+  },
+  {
+    verb: "Post entries",
+    body: "It reads your GL export. Corrections go back to your team as notes, never into the books.",
+  },
+  {
+    verb: "Move money",
+    body: "No bank connection and no payment access. It builds the package; your team submits it.",
+  },
+  {
+    verb: "Guess when a receipt is missing",
+    body: "A missing receipt stays an exception until someone attaches one.",
+  },
+];
 
 export function LandingPage() {
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   return (
-    <div className="min-h-screen bg-paper text-ink">
-      <header
-        className={`sticky top-0 z-40 flex h-16 items-center justify-between px-6 transition-colors ${
-          scrolled ? "border-b border-rule bg-sheet" : "bg-transparent"
-        }`}
-      >
-        <Link href="/" className="font-display text-[18px] font-semibold">
-          Steward
-        </Link>
-        <Link
-          href={demoPath("?tab=overview")}
-          className="rounded-[6px] bg-money px-4 py-2 text-[14px] font-semibold text-white hover:brightness-95 md:hidden"
-        >
-          Open live demo
-        </Link>
-        <nav className="hidden items-center gap-6 text-[14px] md:flex">
-          <a href="#how" className="text-ink-2 hover:text-ink">
-            How it works
-          </a>
-          <a href="#proof" className="text-ink-2 hover:text-ink">
-            Proof
-          </a>
-          <a href={GITHUB} className="text-ink-2 hover:text-ink" target="_blank" rel="noreferrer">
-            GitHub
-          </a>
-          <Link
-            href={demoPath("?tab=overview")}
-            className="rounded-[6px] bg-money px-4 py-2 text-[14px] font-semibold text-white hover:brightness-95"
-          >
-            Open live demo
+    <div className={`ld ${landingSans.variable} ${landingSerif.variable}`}>
+      <a href="#main" className="ld-skip">
+        Skip to content
+      </a>
+
+      <header className="ld-nav">
+        <div className="ld-wrap ld-nav__row">
+          <Link href="/" className="ld-wordmark" aria-label="Steward home">
+            <span aria-hidden className="ld-wordmark__mark">
+              S
+            </span>
+            Steward
           </Link>
-        </nav>
+          <nav aria-label="Sections" className="ld-nav__links">
+            <a href="#how">How it works</a>
+            <a href="#safeguards">Safeguards</a>
+            <a href="#testing">Testing</a>
+            <a href={GITHUB} target="_blank" rel="noreferrer">
+              GitHub
+            </a>
+          </nav>
+          <Link href={DEMO_HREF} className="ld-btn ld-btn--primary ld-btn--sm ld-nav__cta">
+            {PRIMARY}
+          </Link>
+        </div>
       </header>
 
-      <main>
-        <section className="mx-auto grid max-w-[1200px] gap-12 px-6 pb-16 pt-12 lg:grid-cols-2 lg:items-center">
-          <div>
-            <h1 className="font-display text-[52px] font-semibold leading-[1.08] tracking-tight lg:text-[56px]">
-              The grants accountant that reads the contract.
-            </h1>
-            <p className="mt-4 max-w-[56ch] text-[17px] leading-relaxed text-ink-2">
-              Steward checks every bank transaction against your grant agreements, catches the costs a funder would claw
-              back, and proposes the fix. You approve.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href={demoPath(`?tab=inbox&case=${BLACK_CAT_CASE}`)}
-                className="rounded-[6px] bg-money px-4 py-2.5 text-[14px] font-semibold text-white hover:brightness-95"
-              >
-                Watch it catch a $482 bar tab
-              </Link>
-              <a
-                href="#proof"
-                className="rounded-[6px] border border-ink-2 bg-sheet px-4 py-2.5 text-[14px] font-medium text-ink"
-              >
-                See how we tested it
-              </a>
-            </div>
-            <p className="mt-4 text-[13px] text-ink-2">
-              Live demo on synthetic data · Real Claude calls · Built at Cal Hacks 13.0
-            </p>
-          </div>
-          <HeroMiniCase />
-        </section>
-
-        <section id="how" className="mx-auto max-w-[1200px] px-6 py-16">
-          <h2 className="font-display text-[28px] font-semibold">What Steward does</h2>
-          <div className="mt-8 grid grid-cols-12 gap-4">
-            <BentoCell title="Reads the contract" className="col-span-12 lg:col-span-7">
-              <p>Upload a grant PDF; Steward extracts budget lines, unallowables, and approval thresholds.</p>
-              <div className="mt-4 rounded-[6px] border border-rule bg-paper p-4 text-[13px] text-ink">
-                <p className="text-ink-2">Page 1 excerpt</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {["Budget lines: 6", "Unallowable: 6", "Prior approval: 1"].map((c) => (
-                    <span key={c} className="rounded-[6px] border border-rule px-2 py-1 text-[13px] text-ink">
-                      {c}
-                    </span>
-                  ))}
-                </div>
+      <main id="main">
+        {/* Hero: Z-pattern — wordmark, nav CTA, headline, product card. */}
+        <section className="ld-hero" aria-labelledby="hero-title">
+          <div className="ld-wrap ld-hero__grid">
+            <div className="ld-hero__text">
+              <div className="ld-enter" style={{ "--i": 0 } as CSSProperties}>
+                <Eyebrow>Pre-submission review for grant invoices</Eyebrow>
               </div>
-            </BentoCell>
-            <BentoCell title="When sources disagree" className="col-span-12 lg:col-span-5">
-              <p>Bank, books, and contract are shown side by side; disagreements get a red-pen underline.</p>
-              <SourcesDisagreeDemo />
-            </BentoCell>
-            <BentoCell title="Defends its calls" className="col-span-12 md:col-span-4">
-              <DefendDemo />
-            </BentoCell>
-            <BentoCell title="Can't approve its own work" className="col-span-12 md:col-span-4">
-              <ApproveDemo />
-            </BentoCell>
-            <BentoCell title="Works while you're away" className="col-span-12 md:col-span-4">
-              <ol className="space-y-2 text-[13px]">
-                <li>Bank feed arrived</li>
-                <li>→ 31 coded</li>
-                <li>→ 3 flagged</li>
-                <li>→ waiting on you</li>
-              </ol>
-            </BentoCell>
-            <BentoCell title="Remembers your rulings" className="col-span-12">
-              <span className="inline-block rounded-[6px] border border-rule px-2 py-1 text-[13px]">
-                Past ruling · Oct 24 · A. Okafor: Costco = workshop snacks
-              </span>
-              <span className="ml-2 text-[13px] text-ink">applied to a later Costco charge.</span>
-            </BentoCell>
+              <h1 id="hero-title" className="ld-h1 ld-enter-rise">
+                Grant invoices that don&rsquo;t <em className="ld-italic">come back.</em>
+              </h1>
+              <p className="ld-lead ld-enter" style={{ "--i": 1 } as CSSProperties}>
+                Steward checks every GL line against the contract, matches receipts, and ties the expenditure
+                report to the penny — your senior accountant reviews only the exceptions and signs.
+              </p>
+              <div className="ld-cta-row ld-enter" style={{ "--i": 2 } as CSSProperties}>
+                <Link href={DEMO_HREF} className="ld-btn ld-btn--primary">
+                  {PRIMARY}
+                  <Arrow />
+                </Link>
+                <a href="#how" className="ld-btn ld-btn--ghost">
+                  How it works
+                </a>
+              </div>
+              <p className="ld-micro ld-enter" style={{ "--i": 3 } as CSSProperties}>
+                Synthetic demo data · no sign-up · about 2 minutes
+              </p>
+            </div>
+            <div className="ld-hero__card">
+              <HeroCard />
+            </div>
           </div>
         </section>
 
-        <section id="proof" className="mx-auto max-w-[1200px] px-6 py-16">
-          <h2 className="font-display text-[28px] font-semibold">How we know it works</h2>
-          <table className="mt-6 w-full border-collapse text-[14px]">
-            <thead>
-              <tr className="border-b border-rule text-left text-ink-2">
-                <th className="py-2 pr-4 font-medium">Dataset</th>
-                <th className="py-2 pr-4 font-medium">Planted problems caught</th>
-                <th className="py-2 pr-4 font-medium">False alarms</th>
-                <th className="py-2 font-medium">Correct coding on clean rows</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-rule">
-                <td className="py-3 pr-4">Demo set (used during development)</td>
-                <td className="py-3 pr-4">12 of 12</td>
-                <td className="py-3 pr-4">0</td>
-                <td className="py-3">85 of 85</td>
-              </tr>
-              <tr className="border-b border-rule">
-                <td className="py-3 pr-4">
-                  Hold-out 1 (written before development finished; rules edited later — not fully independent)
-                </td>
-                <td className="py-3 pr-4">15 of 15</td>
-                <td className="py-3 pr-4">0</td>
-                <td className="py-3">53 of 53</td>
-              </tr>
-              <tr className="border-b border-rule">
-                <td className="py-3 pr-4">Hold-out 2 (sealed: never seen by the code until this run)</td>
-                <td className="py-3 pr-4">17 of 17</td>
-                <td className="py-3 pr-4">0</td>
-                <td className="py-3">42 of 42</td>
-              </tr>
-            </tbody>
-          </table>
-          <p className="mt-4 max-w-[70ch] text-[14px] text-ink-2">
-            All sets are synthetic. Sealed run at commit <code className="text-ink">fc4ba9b</code> · 2026-10-25 — real
-            Claude extraction + coding; misses and false positives: none.
-          </p>
+        {/* Loss framing: the cost of one cent. */}
+        <section className="ld-section" aria-labelledby="returned-title">
+          <div className="ld-wrap ld-split">
+            <div>
+              <Eyebrow>Why it matters</Eyebrow>
+              <h2 id="returned-title" className="ld-h2">
+                A <em className="ld-italic">one-cent</em> error sends the whole batch back.
+              </h2>
+              <p className="ld-body">
+                On a cost-reimbursement contract the city returns the invoice, not the line. So a junior
+                accountant compiles, a senior accountant re-checks every charge, and the month&rsquo;s
+                reimbursement waits on that second pass.
+              </p>
+              <p className="ld-body ld-body--ink">
+                Steward does the line-by-line pass first, so the senior review starts at the exceptions.
+              </p>
+            </div>
+            <div className="ld-returned" role="group" aria-label="Returned invoice notice, synthetic example">
+              <div className="ld-returned__head">
+                <span>Reimbursement request · October</span>
+                <span className="ld-tag ld-tag--dark">Synthetic example</span>
+              </div>
+              <p className="ld-returned__status">
+                <Strike label="struck:">Approved for payment</Strike>
+                <span className="ld-returned__flag">Returned</span>
+              </p>
+              <dl className="ld-returned__rows">
+                <div>
+                  <dt>Invoice total</dt>
+                  <dd>$17,872.21</dd>
+                </div>
+                <div>
+                  <dt>Expenditure report total</dt>
+                  <dd>$17,872.22</dd>
+                </div>
+                <div className="is-diff">
+                  <dt>Difference</dt>
+                  <dd>$0.01</dd>
+                </div>
+              </dl>
+              <p className="ld-returned__note">Correct and resubmit the full package.</p>
+            </div>
+          </div>
         </section>
 
-        <section className="border-y border-rule bg-sheet px-6 py-14">
-          <div className="mx-auto max-w-[1200px] text-center">
-            <h2 className="font-display text-[28px] font-semibold">Try it on your own grant.</h2>
-            <p className="mx-auto mt-3 max-w-[56ch] text-[17px] text-ink-2">
-              Upload a grant agreement PDF and a bank CSV. Steward reads both and shows what a funder would question.
+        {/* How it works: numbered steps. */}
+        <section id="how" className="ld-section" aria-labelledby="how-title">
+          <div className="ld-wrap">
+            <Eyebrow>How it works</Eyebrow>
+            <h2 id="how-title" className="ld-h2 ld-h2--narrow">
+              From GL export to a signed <em className="ld-italic">invoice package.</em>
+            </h2>
+            <ol className="ld-steps">
+              {STEPS.map((s) => (
+                <li key={s.n} className="ld-step">
+                  <p className="ld-step__n">
+                    <span aria-hidden className="ld-eyebrow__rule" />
+                    {s.n}
+                  </p>
+                  <h3 className="ld-h3">{s.title}</h3>
+                  <p className="ld-body">{s.body}</p>
+                  <ul className="ld-step__chips" aria-label="Example">
+                    {s.chips.map((c) => (
+                      <li key={c}>{c}</li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        {/* Sticky product reveal: Check · Match · Tie out · Sign. */}
+        <section className="ld-section ld-section--reveal" aria-labelledby="review-title">
+          <div className="ld-wrap">
+            <Eyebrow>Inside one review</Eyebrow>
+            <h2 id="review-title" className="ld-h2 ld-h2--narrow">
+              Every line, checked <em className="ld-italic">before</em> anyone signs.
+            </h2>
+            <ProductReveal />
+          </div>
+        </section>
+
+        {/* Safeguards: separation of duties. */}
+        <section id="safeguards" className="ld-section" aria-labelledby="wont-title">
+          <div className="ld-wrap">
+            <Eyebrow>Safeguards</Eyebrow>
+            <h2 id="wont-title" className="ld-h2">
+              What Steward <em className="ld-italic">won&rsquo;t</em> do.
+            </h2>
+            <p className="ld-body ld-body--wide">
+              A model proposes. Deterministic rules verify. A person approves. Steward stays on the proposing
+              side of that line.
             </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-3">
-              <Link
-                href={demoPath("?tab=yourdata")}
-                className="rounded-[6px] border border-ink-2 bg-sheet px-4 py-2.5 text-[14px] font-medium"
-              >
-                Upload your data
-              </Link>
-              <Link
-                href={demoPath("?tab=overview")}
-                className="rounded-[6px] bg-money px-4 py-2.5 text-[14px] font-semibold text-white hover:brightness-95"
-              >
-                Open live demo
-              </Link>
+            <ul className="ld-wont">
+              {WONT.map((w) => (
+                <li key={w.verb}>
+                  <p className="ld-wont__verb">
+                    <Strike label="won't:">{w.verb}</Strike>
+                  </p>
+                  <p className="ld-body">{w.body}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        {/* Honest testing: v2 results pending. */}
+        <section id="testing" className="ld-section" aria-labelledby="testing-title">
+          <div className="ld-wrap ld-split">
+            <div>
+              <Eyebrow>Testing</Eyebrow>
+              <h2 id="testing-title" className="ld-h2">
+                How we test <em className="ld-italic">Steward.</em>
+              </h2>
+              <p className="ld-body">
+                We build synthetic finance workspaces and plant errors in them on purpose, then check that
+                Steward flags each one and nothing else.
+              </p>
             </div>
+            <ul className="ld-tests">
+              <li>
+                <h3 className="ld-tests__title">Synthetic datasets with planted errors</h3>
+                <p className="ld-body">
+                  Missing and mismatched receipts, unallowable costs, charges outside the period, duplicate
+                  charges, a wrong indirect rate.
+                </p>
+              </li>
+              <li>
+                <h3 className="ld-tests__title">A sealed hold-out</h3>
+                <p className="ld-body">
+                  A second dataset stays sealed while the rules are tuned, so the score can&rsquo;t be fitted
+                  to it.
+                </p>
+              </li>
+              <li className="ld-tests__pending">
+                <h3 className="ld-tests__title">
+                  Results for this version <span className="ld-tag ld-tag--pending">Pending</span>
+                </h3>
+                <p className="ld-body">
+                  Placeholder: the v2 evaluation hasn&rsquo;t run yet. Earlier scores were for a different,
+                  bank-first product and aren&rsquo;t shown here.
+                </p>
+              </li>
+            </ul>
           </div>
         </section>
       </main>
 
-      <footer className="mx-auto max-w-[1200px] px-6 py-10">
-        <div className="flex flex-wrap items-start justify-between gap-6">
-          <div>
-            <p className="font-display text-[17px] font-semibold">Steward</p>
-            <p className="mt-1 text-[14px] text-ink-2">An autonomous grants accountant for small nonprofits.</p>
+      {/* Close and footer as one block. */}
+      <footer className="ld-close" aria-labelledby="close-title">
+        <div className="ld-wrap">
+          <div className="ld-close__band">
+            <h2 id="close-title" className="ld-h2">
+              See a package go from 7 of 9 to <em className="ld-italic ld-ready-word">ready.</em>
+            </h2>
+            <div>
+              <Link href={DEMO_HREF} className="ld-btn ld-btn--primary">
+                {PRIMARY}
+                <Arrow />
+              </Link>
+              <p className="ld-micro">Synthetic demo data · no sign-up · about 2 minutes</p>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-4 text-[14px]">
-            <a href={GITHUB} className="text-[#2563EB]" target="_blank" rel="noreferrer">
-              GitHub
-            </a>
-            <a href="#proof" className="text-[#2563EB]">
-              Proof
-            </a>
-            <Link href={demoPath("?tab=overview")} className="text-[#2563EB]">
-              Live demo
-            </Link>
+          <div className="ld-foot">
+            <p className="ld-foot__brand">Steward · pre-submission review for grant invoices</p>
+            <ul className="ld-foot__links">
+              <li>
+                <a href={GITHUB} target="_blank" rel="noreferrer">
+                  Source on GitHub
+                </a>
+              </li>
+              <li>
+                <span>Built at Cal Hacks 13.0</span>
+              </li>
+              <li>
+                <span>All demo data is synthetic</span>
+              </li>
+            </ul>
           </div>
         </div>
-        <p className="mt-8 text-[13px] text-ink-2">
-          Synthetic demo data. Not financial, legal or audit advice. Built with Claude (Anthropic) and Convex at Cal Hacks
-          13.0.
-        </p>
       </footer>
     </div>
   );
