@@ -67,7 +67,8 @@ import { vendorKey } from "./vendorKey";
 export { vendorKey };
 const RANK: Record<Status, number> = { auto: 0, needs_review: 1, blocked: 2 };
 const worst = (a: Status, b: Status): Status => (RANK[b] > RANK[a] ? b : a);
-const BATCH = 25;
+// GL-first rows carry GL dimensions, vendor history and receipt items; 25 codings overflowed 8k output tokens.
+const BATCH = 12;
 
 /**
  * GL-first payroll: the bookkeeper already split each paycheck into one line per class, so the claim
@@ -180,7 +181,7 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
       try {
         const { data, usage: u } = await model.json({
           model: MODELS.bulk, system: CODING_SYSTEM, schema: CodingZ, toolName: "record_codings",
-          toolDescription: "Record one coding per transaction.",
+          toolDescription: "Record one coding per transaction.", maxTokens: 16000,
           content: [{ type: "text", text: `<context>${context}</context>\n<transactions>${jsonForModel(rows)}</transactions>` }],
         });
         return { i, batch, data, u, err: null as string | null };
