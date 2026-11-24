@@ -92,15 +92,25 @@ export interface BuildPackageInput {
 type Portion = { grantId: string | null; budgetLine: string | null; amount: number };
 
 /**
- * How a line is coded after human review. A person overriding Steward (or rejecting its correcting
- * entry) keeps the bookkeeper's coding; otherwise Steward's verified decision stands (an acknowledged
- * or approved correction moves the money). No decision yet → the bookkeeper's coding.
+ * How a line is coded on the package. The bookkeeper's claim stands until a person approves Steward's
+ * correction (an approved entry, or a resolution agreeing with Steward); a person overriding Steward (or
+ * rejecting its entry) keeps the claim for good. A clean (auto) decision needs no approval. An open exception
+ * with a pending recode therefore leaves the money where the books put it and shows as open instead.
  */
 export function effectivePortions(t: Txn, d: TieOutDecision | undefined, r: TieOutResolution | undefined): Portion[] {
   const claim: Portion[] = [{ grantId: t.glClass ?? null, budgetLine: t.glBudgetLine ?? null, amount: t.amountCents }];
   if (r && (r.resolution === "overridden" || r.resolution === "rejected_entry")) return claim;
   if (!d) return claim;
-  return d.splits?.length ? d.splits : [{ grantId: d.grantId, budgetLine: d.budgetLine, amount: t.amountCents }];
+  const steward = d.splits?.length ? d.splits : [{ grantId: d.grantId, budgetLine: d.budgetLine, amount: t.amountCents }];
+  if (d.status === "auto" || r?.resolution === "approved_entry" || r?.resolution === "acknowledged") return steward;
+  return claim;
+}
+
+/** Steward proposes a different grant/line (or split) than the books, not yet approved by a person. */
+export function pendingRecode(t: Txn, d: TieOutDecision | undefined, r: TieOutResolution | undefined): boolean {
+  if (!d || d.status === "auto" || r) return false;
+  const steward = d.splits?.length ? d.splits : [{ grantId: d.grantId, budgetLine: d.budgetLine, amount: t.amountCents }];
+  return !(steward.length === 1 && (steward[0]!.grantId ?? null) === (t.glClass ?? null) && (steward[0]!.budgetLine ?? null) === (t.glBudgetLine ?? null));
 }
 
 const INDIRECT_LINE = /indirect|overhead|f&a|facilities (and|&) admin/i;
@@ -146,6 +156,7 @@ export function buildPackage(input: BuildPackageInput): BillingPackage {
   let glTotal = 0, excludedTotal = 0, movedOn = 0;
   const splitErrors: string[] = [];
   const open: string[] = [];
+  const pending: string[] = [];
   const selected: Txn[] = [];
   const held = new Set(input.heldTxnIds ?? []);
 
@@ -172,6 +183,7 @@ export function buildPackage(input: BuildPackageInput): BillingPackage {
 
     const cost = -t.amountCents;
     if (claimed) glTotal += cost;
+    if (pendingRecode(t, d, r)) pending.push(t.txnId);
     if (d && d.status !== "auto" && !r) open.push(t.txnId);
     if (!d) open.push(t.txnId);
 
@@ -279,9 +291,12 @@ export function buildPackage(input: BuildPackageInput): BillingPackage {
     numbers: { missing: needReceipt.length, thresholdCents: threshold } });
 
   const openIds = [...new Set(open)];
+  const pendingIds = [...new Set(pending)];
   checks.push({ id: "NO_OPEN_EXCEPTIONS", label: "No open exceptions", pass: !openIds.length,
-    detail: openIds.length ? `Still open (needs review / not allowed / not reviewed): ${openIds.join(", ")}.` : "Every flagged line has been resolved by a person.",
-    numbers: { open: openIds.length } });
+    detail: openIds.length
+      ? `Still open (needs review / not allowed / not reviewed): ${openIds.join(", ")}.${pendingIds.length ? ` Steward's correction awaits approval on ${pendingIds.join(", ")}; until a person approves it, the line stays as the books coded it.` : ""}`
+      : "Every flagged line has been resolved by a person.",
+    numbers: { open: openIds.length, pendingRecodes: pendingIds.length } });
 
   const unapproved = [...new Set(lines.filter((l) => !l.programApprovedBy && !l.resolvedBy).map((l) => l.txnId))];
   checks.push({ id: "PROGRAM_APPROVAL", label: "Program approval on every line", pass: !unapproved.length,

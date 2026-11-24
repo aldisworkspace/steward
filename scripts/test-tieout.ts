@@ -162,6 +162,30 @@ check("receipts: the contract's own threshold (§ documentation clause) override
   assert.equal(c.numbers.thresholdCents, 5000);
 });
 
+check("unresolved Steward recode doesn't move the invoice: books' coding stands, shown as an open exception", () => {
+  const i = base();
+  // Steward proposes moving L4 off the grant (blocked) and splitting L2; nobody has approved either yet.
+  i.decisions = i.decisions.map((d) => d.txnId === "L4" ? { ...d, status: "blocked" as const, grantId: null, budgetLine: null, ruleHits: ["R-UNALLOWABLE-STAFF_EVENT"] }
+    : d.txnId === "L2" ? { ...d, status: "needs_review" as const, grantId: null, budgetLine: null, ruleHits: ["R-EFFORT"],
+      splits: [{ grantId: "FS-27-0412", budgetLine: "C1", amount: -20000 }, { grantId: null, budgetLine: null, amount: -3450 }] } : d);
+  const clean = buildPackage(base());
+  const p = buildPackage(i);
+  assert.equal(p.invoiceTotalCents, clean.invoiceTotalCents, "pending corrections leave the totals alone");
+  assert.equal(p.excluded.length, 0);
+  assert.ok(p.lines.some((l) => l.txnId === "L4" && l.amountCents === 8000 && l.status === "blocked"));
+  const open = get(p, "NO_OPEN_EXCEPTIONS");
+  assert.equal(open.pass, false);
+  assert.match(open.detail, /awaits approval on L2, L4|awaits approval on L4, L2/);
+  assert.equal(open.numbers.pendingRecodes, 2);
+  // A person approves the correction (approved entry) → it moves the money; an override keeps the books for good.
+  i.resolutions = [{ txnId: "L4", resolution: "approved_entry", by: "A. Okafor (Executive Director)" }, { txnId: "L2", resolution: "overridden", by: "A. Okafor (Executive Director)" }];
+  const after = buildPackage(i);
+  assert.equal(after.invoiceTotalCents, clean.invoiceTotalCents - 8000);
+  assert.deepEqual(after.excluded.map((x) => x.txnId), ["L4"]);
+  assert.ok(after.lines.some((l) => l.txnId === "L2" && l.amountCents === 23450));
+  assert.equal(get(after, "SUM_TIES").pass, true, get(after, "SUM_TIES").detail);
+});
+
 check("CSV export ties to the snapshot; a tampered snapshot is refused", () => {
   const p = buildPackage(base());
   const meta = { organization: "SYNTHETIC Org", invoiceNo: "FS-27-0412-2026-07", funder: CITY.funder, program: CITY.program, preparedBy: "J. Rivera (Staff Accountant)", reviewedBy: "A. Okafor (Executive Director)", signedAt: "2026-08-05" };
