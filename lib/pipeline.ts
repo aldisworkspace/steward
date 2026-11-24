@@ -379,7 +379,10 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       grants: input.grants,
     });
     // Substantive findings first so the queue label (ruleHits[0]) names the real issue.
+    // Open questions (R-NEEDS-DOCS / R-MODEL-REVIEW) go last: a deterministic fact such as a $0.01 receipt
+    // mismatch is the clearer thing to show and fix first.
     txnFindings = [...hardOnly(precedentApply.findings), ...precedentApply.findings.filter((f) => isSoftRule(f.ruleId))];
+    txnFindings = [...txnFindings.filter((f) => !QUESTION_RULES.has(f.ruleId)), ...txnFindings.filter((f) => QUESTION_RULES.has(f.ruleId))];
     concernForApply = precedentApply.concern;
     if (!splits) {
       grantId = precedentApply.grantId;

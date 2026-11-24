@@ -41,6 +41,8 @@ async function seedV2(client: ConvexHttpClient, passcode: string | undefined) {
     passcode, lines: gl.lines, bankLines, staffAllocations: parseStaff(staffText), grantDocIds: keepIds,
     dataSource: "demo", precedents, clearReceipts: true,
   });
+  // The v2 demo is a different (fictional) organization from the legacy demo.
+  await client.mutation(api.settings.update, { passcode, organizationName: "Calle Nueva Family Center" });
 
   const grantResults = [];
   for (const fileName of V2_GRANTS) grantResults.push(await ensureGrantPdf(client, dir, fileName, passcode));
