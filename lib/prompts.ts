@@ -36,6 +36,8 @@ export const CodingZ = z.object({
     confidence: z.number().min(0).max(1),
     rationale: z.string().describe("1-2 sentences a controller can verify"),
     clauseRefs: z.array(z.string()).describe("Only clauseRefs that appear in the provided grant terms"),
+    evidenceFit: z.enum(["consistent", "thin", "contradicts"]).nullable().optional()
+      .describe("Does the receipt/memo evidence fit the charged grant's purpose and line? See the evidenceFit rule."),
     concern: z.object({
       status: z.enum(["needs_review", "blocked"]),
       reason: z.string(),
@@ -62,7 +64,13 @@ How to decide:
   consistent with that history and with the grant's purpose should follow it, even with an empty memo
   (mention the missing memo in the rationale, keep confidence >= 0.75, no concern).
 - Materiality: for routine purchases under $250 that fit a budget line, do not raise a concern just
-  because documentation is thin.
+  because documentation is thin (no memo, no receipt). This never covers contradicting evidence: when the receipt
+  items or the memo point to a different program or line, include items unrelated to the charged program, or leave
+  it unclear which program the charge was for, raise a needs_review concern that names those items, whatever the
+  amount.
+- evidenceFit: "consistent" when the receipt items or memo positively fit the charged grant's purpose and line;
+  "thin" when there is little to go on but nothing contradicts the coding; "contradicts" when the receipt items or
+  memo point elsewhere or leave the program unclear.
 - Documented lines: when receipt.totalMatchesGl is true and the receipt items, account, memo/department and the
   bookkeeper's line are consistent with the grant's purpose, the line is documented: keep the coding with
   confidence >= 0.8 and no concern. Differences between the item subtotal and the total (tax, tip, delivery,

@@ -305,6 +305,9 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     if (sugFinding) applySuggestion(sugFinding.suggestion!);
 
     let note = "";
+    // Materiality may skip thin documentation, never contradicting evidence: an immaterial line is waived only
+    // when its receipt/memo is positively consistent with the charged purpose and line (or there is none).
+    const evidenceConsistent = materialityConsistent(t, c, receiptsByTxn.get(t.txnId));
     const glLineValid = !!g?.class && !!input.grants.find((x) => x.grantId === g.class)?.budgetLines.some((l) => l.code === g.budgetLine);
     let materialityAuto = false;
     const immaterial = Math.abs(t.amountCents) < MATERIALITY_CENTS;
@@ -315,6 +318,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       !splits &&
       grantId === null &&
       immaterial &&
+      evidenceConsistent &&
       (!c.concern || c.concern.status === "needs_review")
     ) {
       grantId = g.class;
@@ -346,8 +350,17 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     // GL-first: a documentation question (or low confidence) is not an exception when Steward agrees with
     // the bookkeeper, no rule fired, and the line is documented or nothing is at stake. A question citing a
     // verified prohibition is never waived, and an undocumented, material, uncertain line stays a question.
-    const waiver = documentationWaiver(t, g, { grantId, budgetLine, splits }, txnFindings, receiptsByTxn.get(t.txnId), immaterial, c.confidence);
+    const waiver = documentationWaiver(t, g, { grantId, budgetLine, splits }, txnFindings, receiptsByTxn.get(t.txnId), immaterial, c.confidence, evidenceConsistent);
     const waived = !!waiver && (!cat || QUESTION_RULES.has(cat.ruleId)) && (!!c.concern || c.confidence < 0.7);
+    // An immaterial grant charge whose receipt or memo contradicts the coding (or leaves the program unclear) is a
+    // "which program was this for?" question, not a waived one.
+    if (!waived && immaterial && !evidenceConsistent && g?.class && t.amountCents < 0 && !hardOnly(txnFindings).length
+        && (!cat || QUESTION_RULES.has(cat.ruleId)) && (!!c.concern || c.confidence < 0.7)) {
+      const r = receiptsByTxn.get(t.txnId)?.receipt;
+      cat = { ruleId: "R-PURPOSE-UNCLEAR", status: "needs_review",
+        message: c.concern?.reason ?? `The ${r ? "receipt" : "memo"} doesn't show that this $${(Math.abs(t.amountCents) / 100).toFixed(2)} charge was for ${grantLineText(g.class, g.budgetLine, input.grants)}. Note which program it was for, or move it.`,
+        evidence: [] };
+    }
     const waivedCheck: DecisionCheck[] = [];
     if (waived) {
       note += ` No exception: ${waiver}, and the coding agrees with the bookkeeper.`;
@@ -410,7 +423,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       message: f.message,
       tick: tickForSource(f.evidence[0]?.source ?? "bank"),
     }));
-    if (concernForApply && !txnFindings.some((f) => f.ruleId === "R-MODEL-REVIEW" || f.ruleId === "R-NEEDS-DOCS" || f.ruleId.startsWith("R-UNALLOWABLE"))) {
+    if (concernForApply && !txnFindings.some((f) => f.ruleId === "R-MODEL-REVIEW" || f.ruleId === "R-NEEDS-DOCS" || f.ruleId.startsWith("R-UNALLOWABLE") || f.message === concernForApply!.reason)) {
       checks.push({
         ruleId: null,
         label: "Steward's judgment",
@@ -494,18 +507,36 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
 export function documentationWaiver(
   t: Txn, g: GlRow | undefined, coding: { grantId: string | null; budgetLine: string | null; splits?: Decision["splits"] },
   findings: Finding[], cov: ReceiptCoverage<ReceiptRecord> | undefined, immaterial: boolean, confidence: number,
+  /** The receipt/memo is consistent with the charged purpose and line (see materialityConsistent). */
+  evidenceConsistent = true,
 ): string | null {
   if (t.source !== "gl" || !g || coding.splits || findings.length) return null;
   if ((g.class ?? null) !== coding.grantId) return null;
   if (coding.grantId && (g.budgetLine ?? null) !== coding.budgetLine) return null;
   if (coding.grantId === null) return "it stays in general funds, so no grant is charged";
   if (t.amountCents > 0) return "it is a credit that reduces the grant charge";
+  // Contradicting evidence is never waived: not by materiality, not by a receipt total that ties.
+  if (!evidenceConsistent) return null;
   if (immaterial) return `it is under the $${MATERIALITY_CENTS / 100} materiality threshold`;
   // A material line is documented by a receipt whose total ties to the cent, unless Steward itself is unsure
   // of the coding (confidence < 0.7): an unresolved doubt on a material charge stays a question.
   const total = cov?.receipt.extracted?.totalCents;
   if (cov && total != null && total === cov.coveredCents && confidence >= 0.7) return "the matched receipt total equals the GL amount";
   return null;
+}
+
+/**
+ * Positive consistency for the materiality waiver. With no receipt and no memo there is nothing to contradict
+ * (thin documentation, which materiality may skip). With a receipt or memo, the model must not report that it
+ * contradicts the coding (evidenceFit "contradicts"); when it gives no evidenceFit, a concern raised with
+ * confidence under 0.7 on a documented line means Steward could not reconcile the evidence with the coding.
+ */
+export function materialityConsistent(t: Txn, c: Pick<Coding, "concern" | "confidence" | "evidenceFit">, cov: ReceiptCoverage<ReceiptRecord> | undefined): boolean {
+  if (c.evidenceFit === "contradicts") return false;
+  const documented = !!cov || !!t.memo.trim();
+  if (!documented) return true;
+  if (c.evidenceFit === "consistent" || c.evidenceFit === "thin") return true;
+  return !c.concern || c.confidence >= 0.7;
 }
 
 /** Correcting journal entries for the bookkeeper's GL. Proposed only; a human must approve. */

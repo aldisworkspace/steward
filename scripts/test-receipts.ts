@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import type { ModelClient } from "../lib/llm";
 import { matchReceipts, receiptCoverage, type ReceiptInput } from "../lib/matchReceipts";
-import { documentationWaiver, runPipeline } from "../lib/pipeline";
+import { documentationWaiver, materialityConsistent, runPipeline } from "../lib/pipeline";
 import { indirectRateFindings, runRules } from "../lib/rules";
 import type { GrantTerms } from "../lib/types";
 import { issueLabel } from "../lib/issueLabel";
@@ -268,6 +268,58 @@ async function main() {
     assert.ok(d("L0090").checks!.some((c) => c.label === "Question waived"));
     assert.match(d("L0090").rationale, /No exception: the matched receipt total equals the GL amount/);
     assert.equal(d("L0091").status, "blocked", "verified prohibition is never waived");
+  });
+
+  // ---- materiality never hides contradicting evidence
+  await check("materialityConsistent: thin documentation may be skipped; contradicting receipt/memo may not", () => {
+    const line = gl("L0130", "2026-08-12", "Amazon", -14607, "GA-2026-114", "A3");
+    const cov = { receipt: { receiptId: "RZ", fileName: "amz.pdf", extracted: rx("Amazon", "2026-08-12", 30314, ["Bluetooth speaker", "Desk organizer", "Soccer balls"]), matchedTxnId: "L0130", matchScore: 1, matchedBy: "auto" as const }, lineIds: ["L0130"], coveredCents: 14607 };
+    const q = { status: "needs_review" as const, reason: "Receipt shows a speaker and a desk organizer", clauseRef: null };
+    assert.equal(materialityConsistent(line, { concern: q, confidence: 0.75 }, undefined), true, "no receipt, no memo: thin");
+    assert.equal(materialityConsistent(line, { concern: q, confidence: 0.55 }, cov), false, "documented + unsure concern");
+    assert.equal(materialityConsistent(line, { concern: null, confidence: 0.9, evidenceFit: "contradicts" }, cov), false);
+    assert.equal(materialityConsistent(line, { concern: q, confidence: 0.55, evidenceFit: "consistent" }, cov), true);
+    assert.equal(materialityConsistent({ ...line, memo: "office" }, { concern: q, confidence: 0.6 }, undefined), false, "a memo is evidence too");
+  });
+  await check("pipeline: an immaterial line whose receipt contradicts the program stays a needs_review purpose question", async () => {
+    const lines = [gl("L0131", "2026-08-12", "Amazon", -14607, "GA-2026-114", "A3", { docRef: "", txnType: "Expense" }),
+      gl("L0132", "2026-08-12", "Amazon", -9804, "HLF-26-031", "B2"), gl("L0133", "2026-08-12", "Amazon", -6103, null, null),
+      gl("L0134", "2026-08-13", "Office Depot", -4210, "GA-2026-114", "A3"), // thin: no memo, no receipt
+      gl("L0135", "2026-08-14", "Lakeshore Learning", -8820, "HLF-26-031", "B2", { memo: "counting bears" })];
+    const recs: ReceiptRecord[] = [
+      { receiptId: "RZ", fileName: "amz.pdf", extracted: { vendor: "Amazon", date: "2026-08-12", totalCents: 30514, purposeText: null,
+        lineItems: [{ description: "Bluetooth speaker", amountCents: 4999 }, { description: "Desk organizer", amountCents: 2399 }, { description: "Soccer balls", amountCents: 23116 }] },
+        matchedTxnId: "L0131", matchScore: 1, matchedBy: "auto" },
+      { receiptId: "RL", fileName: "lake.pdf", extracted: rx("Lakeshore Learning", "2026-08-14", 8820, ["Counting bears"]), matchedTxnId: "L0135", matchScore: 1, matchedBy: "auto" }];
+    const fake: ModelClient = { async json() { return { data: { codings: [
+      { txnId: "L0131", grantId: "GA-2026-114", budgetLine: "A3", confidence: 0.55, rationale: "Split; the receipt includes a speaker and organizer.", clauseRefs: [],
+        concern: { status: "needs_review", reason: "Receipt includes a Bluetooth speaker and desk organizer that don't fit A3; no memo says which items are in this share.", clauseRef: null } },
+      { txnId: "L0132", grantId: "HLF-26-031", budgetLine: "B2", confidence: 0.9, rationale: "Soccer balls.", clauseRefs: [], concern: null, evidenceFit: "consistent" },
+      { txnId: "L0133", grantId: null, budgetLine: null, confidence: 0.9, rationale: "General.", clauseRefs: [], concern: null },
+      { txnId: "L0134", grantId: "GA-2026-114", budgetLine: "A3", confidence: 0.75, rationale: "Routine supplies.", clauseRefs: [],
+        concern: { status: "needs_review", reason: "No receipt or memo for this Office Depot purchase.", clauseRef: null }, evidenceFit: "thin" },
+      { txnId: "L0135", grantId: "HLF-26-031", budgetLine: "B2", confidence: 0.75, rationale: "Manipulatives.", clauseRefs: [],
+        concern: { status: "needs_review", reason: "Confirm the bears were for the program.", clauseRef: null }, evidenceFit: "consistent" },
+    ] } as never, usage: { input: 0, output: 0 } }; } };
+    const glr: GlRow[] = lines.map((l) => ({ bankRef: l.txnId, date: l.date, description: l.description, amountCents: l.amountCents, account: l.account!, class: l.glClass ?? null, budgetLine: l.glBudgetLine ?? null, enteredBy: "bk" }));
+    const res = await runPipeline(fake, { txns: lines, gl: glr, staff: [], grants: FIXTURE_GRANTS, precedents: [], receipts: recs, receiptThresholdCents: 7500 });
+    const d = (id: string) => res.decisions.find((x) => x.txnId === id)!;
+    assert.equal(d("L0131").status, "needs_review", d("L0131").rationale);
+    assert.equal(d("L0131").ruleHits[0], "R-PURPOSE-UNCLEAR");
+    assert.match(d("L0131").checks!.map((c) => c.message).join(" "), /Bluetooth speaker/);
+    assert.ok(!d("L0131").checks!.some((c) => c.label === "Question waived"));
+    assert.equal(d("L0134").status, "auto", "thin documentation under materiality is still waived");
+    assert.equal(d("L0135").status, "auto", "a consistent receipt is waived");
+  });
+  await check("pipeline: materiality never re-accepts the bookkeeper's coding over contradicting evidence", async () => {
+    const line = gl("L0136", "2026-08-12", "Amazon", -5110, "GA-2026-114", "A3", { memo: "desk organizer" });
+    const fake: ModelClient = { async json() { return { data: { codings: [{ txnId: "L0136", grantId: null, budgetLine: null, confidence: 0.8,
+      rationale: "Desk organizer is office use.", clauseRefs: [], concern: null, evidenceFit: "contradicts" }] } as never, usage: { input: 0, output: 0 } }; } };
+    const glr: GlRow[] = [{ bankRef: line.txnId, date: line.date, description: line.description, amountCents: line.amountCents, account: line.account!, class: "GA-2026-114", budgetLine: "A3", enteredBy: "bk" }];
+    const res = await runPipeline(fake, { txns: [line], gl: glr, staff: [], grants: FIXTURE_GRANTS, precedents: [], receipts: [], receiptThresholdCents: 7500 });
+    assert.equal(res.decisions[0]!.status, "needs_review");
+    assert.equal(res.decisions[0]!.grantId, null);
+    assert.equal(res.decisions[0]!.ruleHits[0], "R-GL-DISAGREE");
   });
 
   // ---- indirect rate (GL-first)
