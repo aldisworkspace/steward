@@ -50,6 +50,8 @@ export function issueLabel(ruleId: string | null | undefined, status: string): s
       return "Receipt could match several lines";
     case "R-PURPOSE-UNCLEAR":
       return "Which program was this for?";
+    case "R-REFUND-UNRECORDED":
+      return "Refund not recorded";
     default:
       if (ruleId?.startsWith("R-UNALLOWABLE")) {
         return blocked ? "Not allowed by the grant" : "Check against grant terms";

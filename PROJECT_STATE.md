@@ -159,6 +159,26 @@ Still open on v4:
 
 A new sealed hold-out v5 is needed for any public claim.
 
+## Fix round 5 — remaining hold-out v4 misses (2026-11-23)
+General rules only; tests 4–7 in `scripts/test-holdout-v4-fixes.ts`.
+- **Alcohol keywords are whole words**: "twine" is no longer wine (H4-04 was blocked by mistake).
+- **Fines itemised on a receipt** (R-UNALLOWABLE-FINES): only those items are blocked, with no tax share; the rest of the line stays.
+  "Fine" alone is not a fine ("fine-point markers").
+- **Split receipt that doesn't tie**: every grant-charged row of the split gets R-RECEIPT-MISMATCH; the difference is sized once.
+- **R-REFUND-UNRECORDED** (new, blocked): a bank credit/refund from a vendor with no matching GL credit blocks the refunded
+  amount on that vendor's earlier grant-charged expense (90-day window). A return recorded in the GL is not flagged.
+- **Low confidence after a settled question**: when a deterministic check settles the model's only question, the model's
+  low confidence no longer keeps the line open.
+
+Results on dev:
+- **Demo v2: 10/10 caught, status 10/10, 2–3/152 false alarms.**
+- **Hold-out v4 — sanity only, the set is spent:** 3 runs, all **13/13 caught, status 13/13, blocked cents 8/8**, and every
+  package ties once Steward's blocked portions are approved. False alarms 0/86 in 2 runs; 1/86 in the run before the
+  settled-question fix.
+- Not re-checked after this round: hold-out v3.
+
+A new sealed hold-out v5 is needed for any public claim.
+
 ## Known limits / risks
 - **Real data.** No auth, single workspace, shared dev deployment. **Do not load real nonprofit data** until real auth, an `orgId` on every table and data deletion exist.
 - **Old leaked passcode.** The demo passcode from commit `307470c` is still in public `main` history. Rotating `DEMO_PASSCODE` is the owner's call.

@@ -47,7 +47,8 @@ function daysBetween(a: string, b: string) {
 export const UNALLOWABLE_TERM_PATTERNS: { id: string; txn: RegExp; termRule: RegExp; label: string }[] = [
   { id: "fines", txn: /citation|violation|penalt|\bfine[sd]?\b|late fee/i, termRule: /fine|penalt|violation/i, label: "a fine or penalty" },
   { id: "fundraising", txn: /gala|benefit (gala|dinner|concert|event|auction|luncheon)|fundrais|donor (event|dinner)|auction/i, termRule: /fundrais/i, label: "a fundraising cost" },
-  { id: "alcohol_staff", txn: /\bbar\b|brewery|winery|wine|liquor|happy hour/i,
+  // Whole words only: "twine", "swine" and "bartender school" are not alcohol.
+  { id: "alcohol_staff", txn: /\bbar\b|\bbrewer(?:y|ies)\b|\bwiner(?:y|ies)\b|\bwines?\b|\bliquors?\b|happy hour/i,
     termRule: /alcohol|hospitality|staff (meals|appreciation)/i, label: "an alcohol purchase" },
   { id: "staff_event", txn: /staff (appreciation|party|outing|retreat|celebration)|appreciation (night|dinner|event|party)|holiday party|team[- ]building/i,
     termRule: /staff (meals|appreciation)|entertainment|social activit|recreation|team-building/i, label: "a staff event or meal" },
@@ -103,6 +104,27 @@ export function maxUnitCostCents(x: ReceiptExtract | null | undefined): number |
     const qty = i.quantity ?? (m ? Number(m[1] ?? m[2] ?? m[3]) : 1);
     return Math.round((i.amountCents / Math.max(1, qty)) * scale);
   }));
+}
+
+// "Fine" alone is left out: receipts print "fine-point markers", "fine sand".
+const FINE_ITEM = /\bcitations?\b|\bviolations?\b|\bpenalt(?:y|ies)\b|\b(?:parking|traffic|toll|late|library|code) fines?\b|\bfine (?:for|issued|notice)\b|\blate (?:payment )?fees?\b/i;
+const FINE_TERM = /\bfines?\b|penalt|violation|citation/i;
+
+/**
+ * Cents of a charge that pay for receipt items matching `item` (this line's share of a split receipt), with a
+ * pro-rata share of tax and tip only when `taxed`. Null when no item matches.
+ */
+export function receiptItemsCents(t: Txn, cov: { receipt: ReceiptRecord; coveredCents: number } | undefined, item: RegExp, taxed: boolean): { cents: number; items: string[] } | null {
+  const x = cov?.receipt.extracted;
+  if (!x || !cov || cov.coveredCents <= 0) return null;
+  const hits = x.lineItems.filter((i) => i.amountCents > 0 && item.test(i.description));
+  if (!hits.length) return null;
+  const own = -t.amountCents;
+  const flagged = hits.reduce((a, i) => a + i.amountCents, 0);
+  const subtotal = x.lineItems.reduce((a, i) => a + Math.max(0, i.amountCents), 0);
+  const total = x.totalCents ?? cov.coveredCents;
+  const onReceipt = taxed && subtotal > 0 ? Math.round((flagged * total) / subtotal) : flagged;
+  return { cents: Math.min(own, Math.round((onReceipt * own) / cov.coveredCents)), items: hits.map((i) => i.description) };
 }
 
 export function runRules(input: RuleInput): Finding[] {
@@ -190,6 +212,24 @@ export function runRules(input: RuleInput): Finding[] {
             ? [{ grantId: null, budgetLine: null, amountCents: t.amountCents }]
             : [{ grantId: c!.grantId, budgetLine: c!.budgetLine, amountCents: t.amountCents + alc.cents }, { grantId: null, budgetLine: null, amountCents: -alc.cents }],
           exposureCents: alc.cents });
+      }
+      // Fines and penalties itemised on the matched receipt (a parking citation passed through on a van rental):
+      // only those items can't be billed. Government fines carry no sales tax, so no tax share is added.
+      const fineTerms = g.unallowable.filter((u) => FINE_TERM.test(u.rule));
+      const fine = !blockedOrDup.has(t.txnId) && fineTerms.length ? receiptItemsCents(t, coverage.get(t.txnId), FINE_ITEM, false) : null;
+      if (fine && fine.cents > 0) {
+        blockedOrDup.add(t.txnId);
+        const own = -t.amountCents;
+        const whole = fine.cents >= own;
+        const r = coverage.get(t.txnId)!.receipt;
+        findings.push({ ruleId: "R-UNALLOWABLE-FINES", txnId: t.txnId, status: "blocked",
+          message: `The receipt includes a fine or penalty (${fine.items.join(", ")}). The ${g.program?.trim() || g.grantId} grant doesn't allow fines, penalties or their fees (${fineTerms.map((u) => u.clauseRef).join("; ")}), so ${whole ? "this charge" : `${usd(fine.cents)} of it`} can't be billed as booked. Move ${whole ? "it" : "that share"} to unrestricted funds.`,
+          evidence: [...fineTerms.map<Evidence>((u) => ({ source: "contract", ref: u.clauseRef, note: u.rule })),
+                     { source: "receipt", ref: r.receiptId, note: receiptNote(r) }],
+          suggestion: whole
+            ? [{ grantId: null, budgetLine: null, amountCents: t.amountCents }]
+            : [{ grantId: c!.grantId, budgetLine: c!.budgetLine, amountCents: t.amountCents + fine.cents }, { grantId: null, budgetLine: null, amountCents: -fine.cents }],
+          exposureCents: Math.min(own, fine.cents) });
       }
     }
 
@@ -339,6 +379,52 @@ export function reconciliationFindings(input: RuleInput): Finding[] {
         exposureCents: grant ? diff : 0 });
     }
   }
+  out.push(...unrecordedRefundFindings(input, glLines, chargedGrant));
+  return out;
+}
+
+const REFUND_TEXT = /\b(credit|refund|return|reversal|rebate|chargeback)\b/i;
+const BANK_WORDS = new Set(["DEBIT", "CARD", "CREDIT", "REFUND", "RETURN", "REVERSAL", "REBATE", "CHARGEBACK", "POS", "ACH", "ONLINE",
+  "TRANSFER", "PURCHASE", "PMT", "PAYMENT", "DEPOSIT", "FROM", "THE", "AND", "INC", "LLC", "CORP", "CO"]);
+const nameWords = (s: string) => new Set(s.toUpperCase().split(/[^A-Z0-9&]+/).filter((w) => w.length >= 3 && !BANK_WORDS.has(w)));
+/** A bank description names this vendor: a non-banking word in common (full words, not the truncated vendor key). */
+const namesVendor = (bankText: string, vendor: string) => { const a = nameWords(bankText); return [...nameWords(vendor)].some((w) => a.has(w)); };
+export const REFUND_WINDOW_DAYS = 90;
+
+/**
+ * R-REFUND-UNRECORDED (GL-first, bank file present): the bank shows a credit/refund from a vendor, the GL records no
+ * matching credit from that vendor, and an earlier grant-charged expense with that vendor is at least that large.
+ * A refunded cost was not incurred, so the refunded amount can't be billed: blocked for that amount, moved off the grant.
+ */
+function unrecordedRefundFindings(input: RuleInput, glLines: Txn[], chargedGrant: (t: Txn) => string | null): Finding[] {
+  const out: Finding[] = [];
+  const credits = (input.bankLines ?? []).filter((b) => b.amountCents > 0 && REFUND_TEXT.test(`${b.description} ${b.memo}`));
+  const claimed = new Set<string>();
+  for (const b of credits) {
+    const vendorText = `${b.description} ${b.memo}`;
+    const recorded = glLines.some((l) => l.amountCents === b.amountCents && namesVendor(vendorText, `${l.vendor ?? ""} ${l.description}`)
+      && daysApart(l.date, b.date) <= 10);
+    if (recorded) continue;
+    const expense = glLines
+      .filter((l) => l.amountCents < 0 && -l.amountCents >= b.amountCents && !!chargedGrant(l) && !claimed.has(l.txnId)
+        && l.date <= b.date && daysApart(l.date, b.date) <= REFUND_WINDOW_DAYS && namesVendor(vendorText, l.vendor ?? l.description))
+      // The expense the refund most plausibly reverses: same amount first, then the most recent.
+      .sort((x, y) => Number(-y.amountCents === b.amountCents) - Number(-x.amountCents === b.amountCents) || y.date.localeCompare(x.date))[0];
+    if (!expense) continue;
+    claimed.add(expense.txnId);
+    const own = -expense.amountCents;
+    const whole = b.amountCents >= own;
+    const c = input.candidates.get(expense.txnId);
+    out.push({ ruleId: "R-REFUND-UNRECORDED", txnId: expense.txnId, status: "blocked",
+      message: `The bank shows a ${usd(b.amountCents)} credit from ${expense.vendor ?? expense.description} on ${b.date} ("${b.description}"), but the GL records no matching credit. A refunded cost was not incurred, so ${whole ? "this charge" : `${usd(b.amountCents)} of it`} can't be billed. Record the refund against this cost.`,
+      evidence: [{ source: "bank", ref: b.lineId, note: `${b.date} ${b.description} ${usd(b.amountCents)}` },
+                 { source: "gl", ref: expense.txnId, note: `${expense.date} ${expense.vendor ?? expense.description} ${usd(expense.amountCents)}` }],
+      suggestion: whole
+        ? [{ grantId: null, budgetLine: null, amountCents: expense.amountCents }]
+        : [{ grantId: c?.grantId ?? expense.glClass ?? null, budgetLine: c?.budgetLine ?? expense.glBudgetLine ?? null, amountCents: expense.amountCents + b.amountCents },
+           { grantId: null, budgetLine: null, amountCents: -b.amountCents }],
+      exposureCents: Math.min(own, b.amountCents) });
+  }
   return out;
 }
 
@@ -400,9 +486,11 @@ export function receiptFindings(input: RuleInput): Finding[] {
           exposureCents: abs });
       }
     }
-    // Report a receipt difference once per receipt: on its first grant-charged covered line.
+    // A receipt difference is sized once per receipt (on its first grant-charged covered line). A split receipt that
+    // doesn't tie puts every grant-charged row of the split in question (each row's share is billed), so each is flagged.
     const reportsFor = cov && (cov.lineIds.find((id) => { const l = input.txns.find((x) => x.txnId === id); return l && chargedGrant(l); }) ?? cov.lineIds[0]);
-    if (r?.extracted && cov && reportsFor === t.txnId) {
+    const alsoSplitRow = !!cov && cov.lineIds.length > 1 && reportsFor !== t.txnId && !!chargedGrant(t);
+    if (r?.extracted && cov && (reportsFor === t.txnId || alsoSplitRow)) {
       const x = r.extracted;
       const split = cov.lineIds.length > 1;
       const diff = x.totalCents == null ? null : Math.abs(x.totalCents - cov.coveredCents);
@@ -415,7 +503,7 @@ export function receiptFindings(input: RuleInput): Finding[] {
         out.push({ ruleId: "R-RECEIPT-MISMATCH", txnId: t.txnId, status: "needs_review",
           message: `Receipt doesn't match: ${parts.join("; ")}. Correct the GL or attach the right receipt.`,
           evidence: [{ source: "receipt", ref: r.receiptId, note: receiptNote(r) }],
-          exposureCents: grant ? (diff ?? 0) : 0 });
+          exposureCents: grant && !alsoSplitRow ? (diff ?? 0) : 0 });
       }
     }
   }

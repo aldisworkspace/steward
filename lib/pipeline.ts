@@ -367,6 +367,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
         evidence: [] };
     }
     const waivedCheck: DecisionCheck[] = [];
+    let settled = false;
     // A per-unit prior-approval question the itemized receipt already answers (every unit below the threshold)
     // is settled by the deterministic check, not left open on the model's doubt.
     if (cat?.ruleId === "R-PRIOR-APPROVAL" && c.concern && !hardOnly(txnFindings).some((f) => f.ruleId === "R-PRIOR-APPROVAL")) {
@@ -377,6 +378,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
         waivedCheck.push({ ruleId: null, label: "Question settled", tick: "Ⓡ",
           message: `${c.concern.reason} (settled: the itemized receipt shows a highest per-unit cost of $${(unit / 100).toFixed(2)}, below the $${pa.thresholdUsd!.toFixed(2)} per-unit threshold in ${pa.clauseRef})` });
         cat = null;
+        settled = true;
       }
     }
     if (waived) {
@@ -432,7 +434,8 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       else { grantId = c.grantId; budgetLine = c.budgetLine; splits = c.splits; }
     }
 
-    let status: Status = c.confidence < 0.7 && !waived ? "needs_review" : "auto";
+    // The model's doubt was the question a deterministic check just settled: its low confidence doesn't hold the line.
+    let status: Status = c.confidence < 0.7 && !waived && !settled ? "needs_review" : "auto";
     if (concernForApply) status = worst(status, concernForApply.status);
     for (const f of txnFindings) status = worst(status, f.status);
     if (precedentApply.forcedStatus) status = precedentApply.forcedStatus;

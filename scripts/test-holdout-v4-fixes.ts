@@ -85,13 +85,66 @@ check("3. R-PRIOR-APPROVAL per unit: five $1,233 units pass, one $6,000 unit is 
   assert.equal(pa([order], [rec("L5", x([{ description: "Brushcutter", amountCents: 616498, quantity: 5 }], 616498))], total)[0]?.status, "blocked", "an order-total threshold still blocks");
 });
 
+const FINE_GRANT: GrantTerms = { ...GRANT, budgetLines: [...GRANT.budgetLines, { code: "C5", name: "Vehicles and field travel", amount: 20000 }],
+  unallowable: [{ rule: "Fines, penalties, citations, late-payment charges and any fees for processing them are not allowable.", clauseRef: "WF-1 §5.01" },
+    { rule: "Alcoholic beverages are not allowable.", clauseRef: "WF-1 §5.03" }] };
+
+check("4. alcohol keywords are whole words: 'twine' is not wine", () => {
+  const twine = gl("L8", "Farm & Ranch Supply", -48296, "C4", { memo: "Wattles, twine, T-posts" });
+  const wine = gl("L9", "Corner Wine Shop", -4800, "C4", { memo: "wine for donor event" });
+  const fs = rules([twine, wine], [], FINE_GRANT).filter((f) => f.ruleId.startsWith("R-UNALLOWABLE-ALCOHOL"));
+  assert.deepEqual(fs.map((f) => f.txnId), ["L9"]);
+});
+
+check("5. a citation itemised on a van rental receipt blocks only the citation and its fee (no tax share)", () => {
+  const van = gl("L10", "Truck & Van Rental", -45509, "C5", { memo: "Van rental - deployment" });
+  const x: ReceiptExtract = { vendor: "Truck & Van Rental", date: "2026-05-06", totalCents: 45509, purposeText: null, lineItems: [
+    { description: "12-passenger van, per day", amountCents: 29800 }, { description: "Mileage, per mile", amountCents: 7176 },
+    { description: "Parking citation pass-through #HF-40917", amountCents: 4500 }, { description: "Citation administrative fee", amountCents: 1500 }] };
+  const f = rules([van], [rec("L10", x)], FINE_GRANT).filter((y) => y.ruleId === "R-UNALLOWABLE-FINES");
+  assert.equal(f.length, 1);
+  assert.equal(f[0]!.exposureCents, 6000);
+  assert.deepEqual(f[0]!.suggestion!.map((s) => s.amountCents), [-39509, -6000]);
+  const markers: ReceiptExtract = { ...x, lineItems: [{ description: "Fine-point markers, 12 pk", amountCents: 45509 }] };
+  assert.equal(rules([van], [rec("L10", markers)], FINE_GRANT).filter((y) => y.ruleId === "R-UNALLOWABLE-FINES").length, 0, "'fine-point' is not a fine");
+});
+
+check("6. a split receipt that doesn't tie flags every grant-charged row of the split", () => {
+  const split = (id: string, cents: number, cls: string, line: string) => ({ ...gl(id, "Print Works", cents, line, { memo: "Invoice CPW-7781 split" }), glClass: cls, txnId: id });
+  const a = split("L11", -77316, "WF-1", "C4"), b = split("L12", -35816, "WF-2", "F3");
+  const g2: GrantTerms = { ...GRANT, grantId: "WF-2", budgetLines: [{ code: "F3", name: "Curriculum", amount: 10000 }], receiptExemptions: [] };
+  const ls = [a, b];
+  const glr = ls.map((l) => ({ bankRef: l.txnId, date: l.date, description: l.description, amountCents: l.amountCents, account: "", class: l.glClass ?? null, budgetLine: l.glBudgetLine ?? null, enteredBy: "bk" }));
+  const cs = new Map<string, Candidate>(ls.map((l) => [l.txnId, { txnId: l.txnId, grantId: l.glClass ?? null, budgetLine: l.glBudgetLine ?? null, origin: "gl" }]));
+  const x: ReceiptExtract = { vendor: "Print Works", date: "2026-05-06", totalCents: 106316, purposeText: null, lineItems: [] };
+  const fs = runRules({ txns: ls, gl: glr, staff: [], grants: [GRANT, g2], precedents: [], candidates: cs, receipts: [rec("L11", x)] }).filter((f) => f.ruleId === "R-RECEIPT-MISMATCH");
+  assert.deepEqual(fs.map((f) => f.txnId).sort(), ["L11", "L12"]);
+  assert.equal(fs.reduce((s, f) => s + (f.exposureCents ?? 0), 0), 6816, "the difference is sized once");
+});
+
+check("7. a vendor refund in the bank but not in the GL blocks the refunded cost; a recorded return does not", () => {
+  const waders = gl("L13", "Northfork Outfitters", -70489, "C4", { date: "2026-07-07", memo: "Chest waders (6)" });
+  const cutters = gl("L14", "Cascadia Power Equipment", -616498, "C4", { date: "2026-05-06" });
+  const ret = { ...gl("L15", "Cascadia Power Equipment", 123300, "C4", { date: "2026-06-25", txnType: "Deposit", memo: "Return 1 brushcutter" }) };
+  const ls = [waders, cutters, ret];
+  const bank = [
+    { lineId: "B1", date: "2026-07-13", description: "DEBIT CARD CREDIT NORTHFORK OUTFITTERS", amountCents: 70489, memo: "" },
+    { lineId: "B2", date: "2026-06-26", description: "DEBIT CARD CREDIT CASCADIA POWER EQUIPMENT", amountCents: 123300, memo: "" },
+    { lineId: "B3", date: "2026-07-01", description: "DEPOSIT NORTHFORK OUTFITTERS FOUNDATION GIFT", amountCents: 50000, memo: "" },
+  ];
+  const fs = runRules({ txns: ls, gl: rows(ls), staff: [], grants: [GRANT], precedents: [], candidates: cands(ls), bankLines: bank }).filter((f) => f.ruleId === "R-REFUND-UNRECORDED");
+  assert.deepEqual(fs.map((f) => f.txnId), ["L13"]);
+  assert.equal(fs[0]!.status, "blocked");
+  assert.equal(fs[0]!.exposureCents, 70489);
+});
+
 async function pipelineChecks() {
   const order = gl("L7", "Power Equipment", -616498, "C4", { memo: "Brushcutters x5" });
   const fake = (concern: object | null): ModelClient => ({
     async json({ content }) {
       const text = (content.find((c) => c.type === "text") as { text: string }).text;
       const rs = JSON.parse(text.match(/<transactions>([\s\S]*)<\/transactions>/)![1]!) as { txnId: string }[];
-      return { data: { codings: rs.map((r) => ({ txnId: r.txnId, grantId: "WF-1", budgetLine: "C4", confidence: 0.8, rationale: "Field supplies.",
+      return { data: { codings: rs.map((r) => ({ txnId: r.txnId, grantId: "WF-1", budgetLine: "C4", confidence: 0.6, rationale: "Field supplies.",
         clauseRefs: [], evidenceFit: "consistent", concern })) } as never, usage: { input: 0, output: 0 } };
     },
   });

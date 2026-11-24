@@ -18,6 +18,7 @@ export function ruleLabel(ruleId: string): string {
     "R-RECEIPT-MISMATCH": "Receipt doesn't match",
     "R-RECEIPT-AMBIGUOUS": "Receipt could match several lines",
     "R-PURPOSE-UNCLEAR": "Purpose unclear",
+    "R-REFUND-UNRECORDED": "Refund not netted",
     "R-UNALLOWABLE-STAFF_EVENT": "Staff event or meal",
   };
   if (exact[ruleId]) return exact[ruleId];
