@@ -164,7 +164,8 @@ check("billing periods: monthly for the city contract, quarterly for the foundat
   assert.deepEqual(m.map((x) => `${x.periodStart}..${x.periodEnd}`), ["2026-07-01..2026-07-31", "2026-08-01..2026-08-31", "2026-09-01..2026-09-30", "2026-10-01..2026-10-31"]);
   const q = billingPeriods(FIXTURE_GRANTS_V2[1]!, "2026-10-15");
   assert.deepEqual(q.map((x) => `${x.periodStart}..${x.periodEnd}`), ["2026-06-01..2026-08-31", "2026-09-01..2026-11-30"]);
-  assert.deepEqual(billingPeriods({ ...CITY, billing: null }, "2026-10-15"), [{ periodStart: CITY.periodStart, periodEnd: CITY.periodEnd }]);
+  // No schedule in the terms: packages are cut quarterly (an assumption the UI states).
+  assert.deepEqual(billingPeriods({ ...CITY, billing: null }, "2026-10-15").map((x) => x.periodStart), ["2026-07-01", "2026-10-01"]);
 });
 
 check("v2 GL July package builds and ties (bookkeeper coding, no review yet)", () => {

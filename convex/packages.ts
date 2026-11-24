@@ -10,7 +10,7 @@ import { assertDemoPasscode } from "./passcode";
 import { assertRole } from "./approverGuard";
 import { getSettingsDoc } from "./settings";
 import {
-  billingPeriods, buildPackage, withGlClaims, defaultInvoiceNo, type BillingPackage, type PriorPackage, type Resolution,
+  billingPeriods, periodBasis, buildPackage, withGlClaims, defaultInvoiceNo, type BillingPackage, type PriorPackage, type Resolution,
   type TieOutDecision,
 } from "../lib/tieOut";
 import type { GrantTerms, Txn } from "../lib/types";
@@ -58,7 +58,10 @@ function summary(grant: GrantTerms, periodStart: string, periodEnd: string, row:
     invoiceTotalCents: pkg.invoiceTotalCents, lineCount: pkg.lines.length, excludedCount: pkg.excluded.length,
     checksPassed: pkg.checks.filter((c) => c.pass).length, checksTotal: pkg.checks.length,
     failing: pkg.checks.filter((c) => !c.pass).map((c) => c.id),
-    frequency: grant.billing?.frequency ?? "none",
+    frequency: periodBasis(grant).frequency,
+    scheduleAssumed: periodBasis(grant).assumed,
+    /** Cost-reimbursement contracts are invoiced; other grants get a report. */
+    documentKind: grant.billing?.costBasis === "reimbursement" ? ("invoice" as const) : ("report" as const),
     dueDate: packageDueDate(grant, periodEnd),
   };
 }
@@ -66,11 +69,12 @@ function summary(grant: GrantTerms, periodStart: string, periodEnd: string, row:
 /** When the funder expects this package: period end + invoice terms, else the report due date. Display only. */
 function packageDueDate(grant: GrantTerms, periodEnd: string): string | null {
   const days = grant.billing?.invoiceDueDays;
-  if (days != null && (grant.billing?.frequency ?? "none") !== "none") {
+  if (days != null && !periodBasis(grant).assumed) {
     const [y, m, d] = periodEnd.split("-").map(Number);
     return new Date(Date.UTC(y!, m! - 1, d! + days)).toISOString().slice(0, 10);
   }
-  return grant.reportDue ?? null;
+  // No schedule in the terms: only the final period carries the report due date.
+  return periodEnd >= grant.periodEnd ? (grant.reportDue ?? null) : null;
 }
 
 /** Every grant × billing period, derived from the terms and the data (live numbers unless signed). */
@@ -212,5 +216,77 @@ export const markExported = mutation({
     if (row.status !== "signed" && row.status !== "exported") throw new ConvexError("Only a signed package can be exported.");
     await ctx.db.patch(row._id, { status: "exported" });
     await audit(ctx, by, "package_exported", String(row._id), `${row.invoiceNo} exported`);
+  },
+});
+
+/** Demo seed only: drop every package row so the sample starts from drafts. */
+export const clearForDemoSeed = mutation({
+  args: { passcode: v.optional(v.string()) },
+  handler: async (ctx, { passcode }) => {
+    assertDemoPasscode(passcode);
+    for (const row of await ctx.db.query("packages").collect()) await ctx.db.delete(row._id);
+  },
+});
+
+/**
+ * Demo seed only: periods that ended on or before `through` become filed history (signed and exported
+ * by the configured preparer and reviewer), so the live story is the current period. Their open
+ * exceptions are marked decided and their lines program-approved, each logged as seeded history.
+ * Refuses on uploaded data.
+ */
+export const seedDemoHistory = mutation({
+  args: { through: v.string(), passcode: v.optional(v.string()) },
+  handler: async (ctx, { through, passcode }) => {
+    assertDemoPasscode(passcode);
+    const settings = await getSettingsDoc(ctx);
+    if (settings.dataSource !== "demo") throw new ConvexError("Seeded history is only for the demo sample.");
+    const preparer = settings.preparers[0];
+    const reviewer = settings.reviewers.find((r) => r !== preparer);
+    const approver = settings.programApprovers[0];
+    if (!preparer || !reviewer || !approver) throw new ConvexError("Configure a preparer, a different reviewer and a program approver first.");
+    const why = "Seeded history: filed before Steward was set up";
+    const first = await loadInputs(ctx);
+    const glDates = first.txns.filter((t) => t.source !== "bank").map((t) => t.date).sort();
+    const last = glDates[glDates.length - 1] ?? null;
+    const filed: string[] = [];
+    for (const grant of first.grants) {
+      for (const { periodStart, periodEnd } of billingPeriods(grant, last)) {
+        if (periodEnd > through) continue;
+        // Decide what was still open on this grant's lines in the period (in order, so priors chain).
+        let inp = await loadInputs(ctx);
+        const pkgBefore = build(inp, grant, periodStart, periodEnd);
+        const ids = new Set(pkgBefore.lines.map((l) => l.txnId));
+        for (const t of inp.txns) {
+          if (t.date >= periodStart && t.date <= periodEnd && (t.glClass ?? null) === grant.grantId) ids.add(t.txnId);
+        }
+        const resolved = new Set(inp.resolutions.map((r) => r.txnId));
+        const at = new Date().toISOString();
+        for (const d of inp.decisions) {
+          if (!ids.has(d.txnId) || d.status === "auto" || resolved.has(d.txnId)) continue;
+          await ctx.db.insert("inboxResolutions", { txnId: d.txnId, resolution: "acknowledged", by: reviewer, at, note: why });
+        }
+        for (const id of ids) {
+          const t = await ctx.db.query("transactions").withIndex("by_txnId", (q) => q.eq("txnId", id)).first();
+          if (t && t.source === "gl" && !t.programApprovedBy) await ctx.db.patch(t._id, { programApprovedBy: approver, programApprovedAt: at });
+        }
+        inp = await loadInputs(ctx);
+        const pkg = build(inp, grant, periodStart, periodEnd);
+        const [y, m, dd] = periodEnd.split("-").map(Number);
+        const signedAt = new Date(Date.UTC(y!, m! - 1, dd! + 18, 17)).toISOString();
+        const invoiceNo = defaultInvoiceNo(grant.grantId, periodStart);
+        const row = inp.packages.find((p) => p.grantId === grant.grantId && p.periodStart === periodStart);
+        const fields = { status: "exported" as const, preparedBy: preparer, reviewedBy: reviewer, snapshot: pkg, signedAt, invoiceNo };
+        let id: Id<"packages">;
+        if (row) {
+          id = row._id;
+          await ctx.db.patch(row._id, fields);
+        } else {
+          id = await ctx.db.insert("packages", { grantId: grant.grantId, periodStart, periodEnd, createdAt: at, ...fields });
+        }
+        await audit(ctx, reviewer, "package_signed", String(id), `${invoiceNo} signed at ${pkg.invoiceTotalCents} cents (${why})`, [`prepared by ${preparer}`]);
+        filed.push(invoiceNo);
+      }
+    }
+    return filed;
   },
 });

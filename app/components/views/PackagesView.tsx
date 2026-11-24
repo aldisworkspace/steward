@@ -6,6 +6,7 @@ import { api } from "@/convex/_generated/api";
 import { useNowMs } from "../../hooks/useNowMs";
 import { packageKey } from "../../hooks/useAppUrlState";
 import {
+  docWord,
   dueLabel,
   monthName,
   periodLabel,
@@ -63,10 +64,10 @@ export function PackagesView({ onGoData }: { onGoData: () => void }) {
     .map((p) => p.dueDate!)
     .sort()[0];
   const dueByNext = nextDue ? open.filter((p) => p.dueDate && p.dueDate <= nextDue) : overdue;
-  const later = open.length - dueByNext.length;
+  const nextOpen = nextDue ? open.find((p) => p.dueDate === nextDue) : undefined;
   const thisYear = nowMs ? new Date(nowMs).getFullYear() : 0;
-  const soon = !!nextDue && (dueLabel(nextDue, nowMs).days ?? 999) <= 45;
-  const headCount = soon ? dueByNext.length : open.length;
+  const overdueWord = (ps: PackageSummary[]) =>
+    ps.every((p) => p.documentKind !== "report") ? (ps.length === 1 ? "invoice" : "invoices") : ps.length === 1 ? "package" : "packages";
   const dateText = (iso: string) => shortDate(iso, Number(iso.slice(0, 4)) !== thisYear);
   const worst = open.find((p) => p.failing.length > 0);
 
@@ -77,51 +78,35 @@ export function PackagesView({ onGoData }: { onGoData: () => void }) {
           <h1 className="font-serif text-xl text-ink text-balance sm:text-2xl">
             Every package is signed. <em className="italic text-ink-2">Nothing needs you.</em>
           </h1>
-        ) : soon || overdue.length === 0 ? (
+        ) : overdue.length > 0 ? (
           <>
             <h1 className="font-serif text-xl text-ink text-balance sm:text-2xl">
-              {headCount} {headCount === 1 ? "package needs" : "packages need"} you
-              {nextDue ? (
-                <>
-                  {" "}
-                  <em className="italic text-ink-2">{soon ? "before" : "— next due"} {dateText(nextDue)}</em>
-                </>
-              ) : null}
-              .
+              {overdue.length} {overdueWord(overdue)} {overdue.length === 1 ? "is" : "are"} overdue
+              <em className="italic text-ink-2"> — oldest first.</em>
             </h1>
-            {(overdue.length > 0 || later > 0) && (
-              <p className="mt-2 text-base">
-                {overdue.length > 0 && (
-                  <span className="font-medium text-redpen-ink">
-                    {overdue.length} {overdue.length === 1 ? "is" : "are"} already overdue.{" "}
-                  </span>
-                )}
-                {later > 0 && (
-                  <span className="text-ink-2">
-                    {later} more {later === 1 ? "is" : "are"} due later.
-                  </span>
-                )}
+            {nextOpen && nextDue && (
+              <p className="mt-2 text-base text-ink-2">
+                Next due: {periodLabel(nextOpen.periodStart, nextOpen.periodEnd)} {docWord(nextOpen, true)}, {dateText(nextDue)}.
               </p>
             )}
           </>
         ) : (
-          <>
-            <h1 className="font-serif text-xl text-ink text-balance sm:text-2xl">
-              {overdue.length} {overdue.length === 1 ? "package is" : "packages are"} overdue
-              <em className="italic text-ink-2"> — oldest first.</em>
-            </h1>
-            {nextDue && (
-              <p className="mt-2 text-base text-ink-2">
-                {open.length - overdue.length} more {open.length - overdue.length === 1 ? "is" : "are"} due by {dateText(nextDue)}.
-              </p>
-            )}
-          </>
+          <h1 className="font-serif text-xl text-ink text-balance sm:text-2xl">
+            {dueByNext.length || open.length} {(dueByNext.length || open.length) === 1 ? "package needs" : "packages need"} you
+            {nextDue ? (
+              <>
+                {" "}
+                <em className="italic text-ink-2">before {dateText(nextDue)}</em>
+              </>
+            ) : null}
+            .
+          </h1>
         )}
         {worst && (
           <p className="mt-3 max-w-[64ch] text-base text-ink-2">
             {worst.failing.length === 1 ? "One failing check" : `${worst.failing.length} failing checks`} would send the{" "}
             {worst.frequency === "monthly" ? `${monthName(worst.periodStart)} ` : ""}
-            {worst.program} invoice back. Steward signs nothing; a reviewer signs once every check passes.
+            {worst.program} {docWord(worst, true)} back. Steward signs nothing; a reviewer signs once every check passes.
           </p>
         )}
       </div>
@@ -169,11 +154,12 @@ function PackageCard({ p, nowMs }: { p: PackageSummary; nowMs: number }) {
             </Link>
           </h3>
           <p className="mt-1 truncate text-sm text-ink-2">
-            {p.funder.replace(/\s*\(fictional[^)]*\)/i, "")} · Invoice {p.invoiceNo}
+            {p.funder.replace(/\s*\(fictional[^)]*\)/i, "")} · {docWord(p)} {p.invoiceNo}
+            {p.scheduleAssumed ? " · quarterly (no schedule in the terms)" : ""}
           </p>
         </div>
         <div className="sm:row-span-2 sm:text-right">
-          <p className="text-xs text-ink-2">{done ? "Billed" : "Claimable"}</p>
+          <p className="text-xs text-ink-2">{p.documentKind === "report" ? (done ? "Reported" : "Spent this period") : done ? "Billed" : "Claimable"}</p>
           <Money cents={p.invoiceTotalCents} focal className="text-xl font-medium tracking-[-0.02em] text-ink sm:text-2xl" />
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">

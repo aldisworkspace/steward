@@ -24,8 +24,16 @@ export type PackageSummary = {
   checksTotal: number;
   failing: string[];
   frequency?: string;
+  scheduleAssumed?: boolean;
+  documentKind?: "invoice" | "report";
   dueDate?: string | null;
 };
+
+/** "Invoice" for cost-reimbursement contracts, "Report" for grants reported on. */
+export function docWord(p: Pick<PackageSummary, "documentKind">, lower = false) {
+  const w = p.documentKind === "report" ? "Report" : "Invoice";
+  return lower ? w.toLowerCase() : w;
+}
 
 function parts(iso: string) {
   const [y, m, d] = iso.slice(0, 10).split("-").map(Number);

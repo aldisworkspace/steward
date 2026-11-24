@@ -13,6 +13,7 @@ import { packageKey, parsePackageKey, type AppUrl } from "../../hooks/useAppUrlS
 import {
   CHECK_ORDER,
   checkTitle,
+  docWord,
   dueLabel,
   idsInDetail,
   monthName,
@@ -92,19 +93,20 @@ function PackageSheet({ d, url, grantTerms }: { d: Detail; url: AppUrl; grantTer
               {periodLabel(d.periodStart, d.periodEnd)} <em className="italic text-ink-2">{d.program}</em>
             </h1>
             <p className="mt-2 text-sm text-ink-2">
-              Invoice <span className="tabular text-ink">{d.invoiceNo}</span> · {pkg.lines.length} lines
+              {docWord(d)} <span className="tabular text-ink">{d.invoiceNo}</span> · {pkg.lines.length} lines
               {pkg.excluded.length ? ` · ${pkg.excluded.length} moved off this grant` : ""}
+              {d.scheduleAssumed ? " · quarterly periods (the terms state no schedule)" : ""}
             </p>
           </div>
           <div className="relative sm:text-right">
-            <p className="text-xs text-ink-2">{done ? "Billed" : "Claimable this period"}</p>
+            <p className="text-xs text-ink-2">{d.documentKind === "report" ? (done ? "Reported" : "Spent this period") : done ? "Billed" : "Claimable this period"}</p>
             <Money cents={pkg.invoiceTotalCents} focal className="block text-2xl font-medium tracking-[-0.025em] sm:text-3xl" />
             {done && d.reviewedBy && d.signedAt && (
               <RubberStamp
                 by={shortName(d.reviewedBy)}
                 dateLabel={shortDate(d.signedAt, true)}
                 animate={justSigned.has(key)}
-                className="absolute -bottom-12 right-0 sm:-bottom-14"
+                className="mt-4 inline-block sm:mt-3"
               />
             )}
           </div>
@@ -145,7 +147,8 @@ function PackageSheet({ d, url, grantTerms }: { d: Detail; url: AppUrl; grantTer
           ) : (
             <p className="mt-3 max-w-[70ch] text-base text-ink">
               {failing.length === 1 ? "One failing check" : `${failing.length} failing checks`} would send the{" "}
-              {month ? `${month} ` : ""}invoice back. Each one below names the lines to fix.
+              {month ? `${month} ` : ""}
+              {docWord(d, true)} back. Each one below names the lines to fix.
             </p>
           )}
           <ul className="mt-5 divide-y divide-rule border-y border-rule">
@@ -472,7 +475,7 @@ function Actions({ d, pkgKey }: { d: Detail; pkgKey: string }) {
       {confirming === "sign" ? (
         <div className="flex flex-wrap items-center gap-3">
           <p className="min-w-0 flex-1 text-base">
-            Sign invoice <span className="tabular">{d.invoiceNo}</span> for{" "}
+            Sign {docWord(d, true)} <span className="tabular">{d.invoiceNo}</span> for{" "}
             <Money cents={d.package.invoiceTotalCents} className="font-medium" />? The numbers freeze; reopening needs a reason.
           </p>
           <Button variant="ghost" onClick={() => setConfirming(null)}>

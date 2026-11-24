@@ -289,12 +289,20 @@ const addMonths = (iso: string, n: number) => {
   return d.toISOString().slice(0, 10);
 };
 
+/**
+ * How often a package is due. The terms' billing frequency when stated; when the terms state none
+ * (or no billing block), packages are cut quarterly and flagged as an assumption for the UI to say so.
+ */
+export function periodBasis(grant: GrantTerms): { frequency: "monthly" | "quarterly"; assumed: boolean } {
+  const freq = grant.billing?.frequency ?? "none";
+  if (freq === "monthly" || freq === "quarterly") return { frequency: freq, assumed: false };
+  return { frequency: "quarterly", assumed: true };
+}
+
 /** Billing periods from the terms, clipped to the grant period and to the last date with data. */
 export function billingPeriods(grant: GrantTerms, lastDataDate: string | null): { periodStart: string; periodEnd: string }[] {
   if (!lastDataDate || lastDataDate < grant.periodStart) return [];
-  const freq = grant.billing?.frequency ?? "none";
-  if (freq === "none") return [{ periodStart: grant.periodStart, periodEnd: grant.periodEnd }];
-  const months = freq === "monthly" ? 1 : 3;
+  const months = periodBasis(grant).frequency === "monthly" ? 1 : 3;
   const out: { periodStart: string; periodEnd: string }[] = [];
   let start = grant.periodStart;
   for (let i = 0; i < 120 && start <= grant.periodEnd && start <= lastDataDate; i++) {
