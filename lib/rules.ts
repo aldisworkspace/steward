@@ -7,9 +7,9 @@
 import { NON_CASH_TYPE, reconcileGlToBank } from "./matchLedger";
 import { contractReceiptExemption, daysApart, RECEIPT_DATE_WINDOW_DAYS, receiptCoverage, receiptExempt } from "./matchReceipts";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
-import { applyRate, baseLineCodes, indirectLineCode, receiptThresholdFor } from "./tieOut";
+import { applyRate, baseLineCodes, indirectLineCode, receiptRequired, receiptThresholdFor, receiptThresholdText } from "./tieOut";
 import { vendorKey } from "./vendorKey";
-import type { BankLine, Candidate, Evidence, Finding, GlRow, GrantTerms, Precedent, ReceiptRecord, StaffAllocation, Txn } from "./types";
+import type { BankLine, Candidate, Evidence, Finding, GlRow, GrantTerms, Precedent, ReceiptExtract, ReceiptRecord, StaffAllocation, Txn } from "./types";
 
 export interface RuleInput {
   txns: Txn[];
@@ -81,6 +81,28 @@ export function receiptAlcoholCents(t: Txn, cov: { receipt: ReceiptRecord; cover
   const onReceipt = Math.round((alcohol * total) / subtotal);
   const cents = Math.min(own, Math.round((onReceipt * own) / cov.coveredCents));
   return { cents, items: hits.map((i) => i.description) };
+}
+
+const QTY_IN_TEXT = /(?:\bqty\.?|\bquantity)\s*:?\s*(\d{1,4})\b|\b(\d{1,4})\s*(?:@|x\b|×|units?\b|pcs\b|ea\b)|(?:^|\s)[x×]\s*(\d{1,4})\b/i;
+
+const ADD_ON_CHARGE = /\b(sales )?tax(es)?\b|\bvat\b|\bgst\b|deliver|shipping|freight|install|set[- ]?up\b|handling|\bsurcharge|\bfees?\b|\btip\b|gratuity|service charge|subtotal|\btotal\b/i;
+
+/**
+ * Highest per-unit cost on an itemized receipt, with its pro-rata share of tax and freight (item / quantity x
+ * total / item subtotal). Quantity is the printed one, else one read from the item text ("5 @", "x5", "Qty 5"),
+ * else 1. Null when the receipt has no itemized amounts.
+ */
+export function maxUnitCostCents(x: ReceiptExtract | null | undefined): number | null {
+  // Tax, delivery, installation and similar charges are part of each unit's acquisition cost, not units themselves.
+  const items = (x?.lineItems ?? []).filter((i) => i.amountCents > 0 && !ADD_ON_CHARGE.test(i.description));
+  if (!items.length) return null;
+  const subtotal = items.reduce((a, i) => a + i.amountCents, 0);
+  const scale = x?.totalCents && subtotal > 0 ? Math.max(1, x.totalCents / subtotal) : 1;
+  return Math.max(...items.map((i) => {
+    const m = i.description.match(QTY_IN_TEXT);
+    const qty = i.quantity ?? (m ? Number(m[1] ?? m[2] ?? m[3]) : 1);
+    return Math.round((i.amountCents / Math.max(1, qty)) * scale);
+  }));
 }
 
 export function runRules(input: RuleInput): Finding[] {
@@ -176,6 +198,18 @@ export function runRules(input: RuleInput): Finding[] {
       for (const pa of g.priorApproval) {
         if (pa.thresholdUsd == null || -t.amountCents < pa.thresholdUsd * 100) continue;
         if (/stipend|payout/i.test(text(t))) continue;
+        const thresholdCents = pa.thresholdUsd * 100;
+        if (pa.perUnit) {
+          // A per-unit test: several items below the threshold bought together are not one item at the threshold.
+          const unit = maxUnitCostCents(coverage.get(t.txnId)?.receipt.extracted);
+          if (unit != null && unit < thresholdCents) continue;
+          if (unit == null) {
+            findings.push({ ruleId: "R-PRIOR-APPROVAL", txnId: t.txnId, status: "needs_review",
+              message: `${usd(t.amountCents)} purchase meets the ${usd(thresholdCents)} per-unit prior-approval threshold in total (${pa.clauseRef}), but no itemized invoice shows the per-unit cost. Attach the invoice: if any one item costs ${usd(thresholdCents)} or more, the funder's written approval is needed.`,
+              evidence: [{ source: "contract", ref: pa.clauseRef, note: pa.rule }], exposureCents: -t.amountCents });
+            continue;
+          }
+        }
         const prior = precedents.filter((p) => p.scope === g.grantId && /prior approval/i.test(p.ruling));
         // Can't be billed as booked until the funder approves: blocked, held off the grant meanwhile. The way out
         // is to record the funder's written approval (a human resolution), which keeps the bookkeeper's coding.
@@ -347,7 +381,9 @@ export function receiptFindings(input: RuleInput): Finding[] {
     const r = cov?.receipt;
     const threshold = grant ? thresholdOf(grant) : 0;
     // The charged grant's own documentation clause can exempt a charge (rent under the lease on file).
-    if (receipts && !r && grant && abs >= threshold && !receiptExempt(t) && !contractReceiptExemption(t, grantById.get(grant))) {
+    const gt = grant ? grantById.get(grant) : undefined;
+    const wsCents = input.receiptThresholdCents ?? DEFAULT_RECEIPT_THRESHOLD_CENTS;
+    if (receipts && !r && grant && receiptRequired(abs, gt, wsCents) && !receiptExempt(t) && !contractReceiptExemption(t, grantById.get(grant))) {
       const tie = ambiguous.get(t.txnId);
       if (tie?.length) {
         const others = [...new Set(tie.flatMap((x) => x.candidates ?? []))].filter((id) => id !== t.txnId);
@@ -357,10 +393,10 @@ export function receiptFindings(input: RuleInput): Finding[] {
           exposureCents: abs });
       } else {
         out.push({ ruleId: "R-RECEIPT-MISSING", txnId: t.txnId, status: "needs_review",
-          message: `${usd(t.amountCents)} charged to ${grant} has no receipt (required at or above ${usd(threshold)}${grantById.get(grant)?.receiptThresholdUsd != null ? " by the contract" : ""}). Attach the receipt or invoice before billing.`,
+          message: `${usd(t.amountCents)} charged to ${grant} has no receipt (required ${receiptThresholdText(gt, wsCents)}${grantById.get(grant)?.receiptThresholdUsd != null ? " by the contract" : ""}). Attach the receipt or invoice before billing.`,
           evidence: [{ source: "gl", ref: t.txnId, note: `${t.date} ${t.vendor ?? t.description} ${usd(t.amountCents)}` },
                      ...(grantById.get(grant)?.receiptThresholdUsd != null
-                       ? [{ source: "contract" as const, ref: `${grant} receipt threshold`, note: `receipts required at or above ${usd(threshold)}` }] : [])],
+                       ? [{ source: "contract" as const, ref: `${grant} receipt threshold`, note: `receipts required ${receiptThresholdText(gt, wsCents)}` }] : [])],
           exposureCents: abs });
       }
     }

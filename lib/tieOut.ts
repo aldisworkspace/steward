@@ -22,6 +22,20 @@ export function receiptThresholdFor(grant: Pick<GrantTerms, "receiptThresholdUsd
   return workspaceCents ?? DEFAULT_RECEIPT_THRESHOLD;
 }
 
+/** Does a charge of `absCents` need a receipt? At or above the threshold, or only above it when the clause says "exceeding". */
+export function receiptRequired(absCents: number, grant: Pick<GrantTerms, "receiptThresholdUsd" | "receiptThresholdExclusive"> | undefined, workspaceCents?: number): boolean {
+  const threshold = receiptThresholdFor(grant, workspaceCents);
+  const exclusive = grant?.receiptThresholdUsd != null && grant.receiptThresholdExclusive === true;
+  return exclusive ? absCents > threshold : absCents >= threshold;
+}
+
+/** "at or above $75.00" / "above $75.00", as the contract states it. */
+export function receiptThresholdText(grant: Pick<GrantTerms, "receiptThresholdUsd" | "receiptThresholdExclusive"> | undefined, workspaceCents?: number): string {
+  const t = receiptThresholdFor(grant, workspaceCents);
+  const exclusive = grant?.receiptThresholdUsd != null && grant.receiptThresholdExclusive === true;
+  return `${exclusive ? "above" : "at or above"} $${(t / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export type Resolution = "acknowledged" | "overridden" | "approved_entry" | "rejected_entry";
 
 export interface TieOutDecision {
@@ -293,10 +307,11 @@ export function buildPackage(input: BuildPackageInput): BillingPackage {
   const txnById = new Map(selected.map((t) => [t.txnId, t]));
   const needReceipt = [...new Set(lines.map((l) => l.txnId))].filter((id) => {
     const t = txnById.get(id)!;
-    return -t.amountCents >= threshold && !receiptExempt(t) && !contractReceiptExemption(t, grant) && !receiptByTxn.has(id);
+    return receiptRequired(-t.amountCents, grant, input.receiptThresholdCents) && !receiptExempt(t) && !contractReceiptExemption(t, grant) && !receiptByTxn.has(id);
   });
-  checks.push({ id: "RECEIPTS", label: `Receipts for every non-payroll charge ≥ ${usd(threshold)}`, pass: !needReceipt.length,
-    detail: needReceipt.length ? `No matched receipt: ${needReceipt.join(", ")}.` : "Every charge at or above the threshold has a matched receipt.",
+  const exclusive = grant.receiptThresholdUsd != null && grant.receiptThresholdExclusive === true;
+  checks.push({ id: "RECEIPTS", label: `Receipts for every non-payroll charge ${exclusive ? ">" : "≥"} ${usd(threshold)}`, pass: !needReceipt.length,
+    detail: needReceipt.length ? `No matched receipt: ${needReceipt.join(", ")}.` : `Every charge ${exclusive ? "above" : "at or above"} the threshold has a matched receipt.`,
     numbers: { missing: needReceipt.length, thresholdCents: threshold } });
 
   const openIds = [...new Set(open)];

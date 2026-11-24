@@ -9,7 +9,7 @@ import { atRiskCentsForTxn } from "./atRisk";
 import { categorizeConcern, clauseRefEquals } from "./categorizeConcern";
 import { grantLineText } from "./fundLabels";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
-import { glPayrollShare, MATERIALITY_CENTS, receiptNote, runRules } from "./rules";
+import { glPayrollShare, MATERIALITY_CENTS, maxUnitCostCents, receiptNote, runRules } from "./rules";
 import { isSoftRule } from "./softRules";
 import { ruleLabel, tickForSource } from "./ruleLabels";
 import { applyTypedPrecedentsForTxn } from "./typedPrecedents";
@@ -367,6 +367,18 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
         evidence: [] };
     }
     const waivedCheck: DecisionCheck[] = [];
+    // A per-unit prior-approval question the itemized receipt already answers (every unit below the threshold)
+    // is settled by the deterministic check, not left open on the model's doubt.
+    if (cat?.ruleId === "R-PRIOR-APPROVAL" && c.concern && !hardOnly(txnFindings).some((f) => f.ruleId === "R-PRIOR-APPROVAL")) {
+      const ref = cat.evidence.find((e) => e.source === "contract")?.ref ?? c.concern.clauseRef ?? "";
+      const pa = input.grants.flatMap((gr) => gr.priorApproval).find((p) => p.perUnit && p.thresholdUsd != null && clauseRefEquals(ref, p.clauseRef));
+      const unit = pa ? maxUnitCostCents(receiptsByTxn.get(t.txnId)?.receipt.extracted) : null;
+      if (pa && unit != null && unit < pa.thresholdUsd! * 100) {
+        waivedCheck.push({ ruleId: null, label: "Question settled", tick: "Ⓡ",
+          message: `${c.concern.reason} (settled: the itemized receipt shows a highest per-unit cost of $${(unit / 100).toFixed(2)}, below the $${pa.thresholdUsd!.toFixed(2)} per-unit threshold in ${pa.clauseRef})` });
+        cat = null;
+      }
+    }
     if (waived) {
       note += ` No exception: ${waiver}, and the coding agrees with the bookkeeper.`;
       if (c.concern) waivedCheck.push({ ruleId: null, label: "Question waived", message: `${c.concern.reason} (waived: ${waiver})`, tick: "Ⓑ" });

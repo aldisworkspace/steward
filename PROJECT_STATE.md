@@ -135,6 +135,30 @@ Written by an agent that did not read the detection code or fix round 3 (zip sha
 - Demo v2 after seeding back: 10/10 caught, 3/152 false alarms.
 - **This hold-out is now spent.**
 
+## Fix round 4 — hold-out v4 false alarms (2026-11-23)
+General rules only; offline tests are in `scripts/test-holdout-v4-fixes.ts`.
+- **Threshold inclusivity.** `receiptThresholdExclusive` is set for wording like "exceeding $75": exactly $75.00 then needs no receipt. Applies to R-RECEIPT-MISSING and the package RECEIPTS check.
+- **Other documenting records.** `receiptExemptions` now also covers charges documented by another record, wherever the clause sits (e.g. "stipends are documented by the stipend roster" → costTerms `stipend`, documentTerms `roster`).
+- **Per-unit prior approval.** A per-unit threshold is tested per item (`priorApproval[].perUnit`):
+  - quantity is read from the receipt (new optional `lineItems[].quantity`, also added to the Convex validators) or from the item text;
+  - tax, delivery and installation lines are spread over the goods, not counted as units;
+  - with no itemized invoice it is a `needs_review` question;
+  - a model prior-approval question that the itemized receipt settles is closed (check "Question settled").
+
+Results on dev, with contracts and receipts re-read using the new prompts:
+- **Demo v2: 10/10 caught, status 10/10, 2–3/152 false alarms.** One intermediate run had D-h as `needs_review`: tax and delivery were counted as units. Fixed before these numbers.
+- **Hold-out v4, sanity only (the set is spent):**
+  - **false alarms 0/86 (was 11/86)** in 3 runs, plus 1/86 in the run before the "Question settled" fix;
+  - caught 11–12/13, status 10–11/13, blocked cents 6/8.
+
+Still open on v4:
+- H4-11: an unrecorded refund is missed.
+- H4-09: a split allocation error is caught only in some runs (depends on the model).
+- H4-03: a fine itemised on a receipt blocks the whole line.
+- H4-04: a receipt mismatch is blocked via alcohol.
+
+A new sealed hold-out v5 is needed for any public claim.
+
 ## Known limits / risks
 - **Real data.** No auth, single workspace, shared dev deployment. **Do not load real nonprofit data** until real auth, an `orgId` on every table and data deletion exist.
 - **Old leaked passcode.** The demo passcode from commit `307470c` is still in public `main` history. Rotating `DEMO_PASSCODE` is the owner's call.

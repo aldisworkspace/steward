@@ -75,7 +75,7 @@ export default defineSchema({
         vendor: v.union(v.string(), v.null()),
         date: v.union(v.string(), v.null()),
         totalCents: v.union(v.number(), v.null()),
-        lineItems: v.array(v.object({ description: v.string(), amountCents: v.number() })),
+        lineItems: v.array(v.object({ description: v.string(), amountCents: v.number(), quantity: v.optional(v.union(v.number(), v.null())) })),
         purposeText: v.union(v.string(), v.null()),
       }),
       v.null(),

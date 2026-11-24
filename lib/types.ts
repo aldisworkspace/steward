@@ -16,7 +16,9 @@ export const GrantTermsZ = z.object({
   budgetLines: z.array(z.object({ code: z.string(), name: z.string(), amount: z.number().nonnegative() })).min(1),
   lineVarianceLimitPct: z.number().nullable(),
   unallowable: z.array(z.object({ rule: z.string(), clauseRef: z.string() })),
-  priorApproval: z.array(z.object({ rule: z.string(), thresholdUsd: z.number().nullable(), clauseRef: z.string() })),
+  priorApproval: z.array(z.object({ rule: z.string(), thresholdUsd: z.number().nullable(), clauseRef: z.string(),
+    /** The threshold is a per-unit acquisition cost ("any item whose per-unit cost is $5,000 or more"), not the order total. */
+    perUnit: z.boolean().nullable().optional() })),
   indirectCapPct: z.number().nullable(),
   reportDue: z.string().nullable(),
   restrictedPurpose: z.string(),
@@ -30,6 +32,8 @@ export const GrantTermsZ = z.object({
   indirectBase: z.enum(["salaries", "direct", "mtdc"]).nullable().optional(),
   /** Contract's own receipt threshold in dollars ("receipts for every non-payroll charge of $50 or more"); null if not stated. */
   receiptThresholdUsd: z.number().nonnegative().nullable().optional(),
+  /** True when the clause requires receipts only above the threshold ("exceeding $75"); absent/false = at or above. */
+  receiptThresholdExclusive: z.boolean().nullable().optional(),
   /**
    * Charges the documentation clause exempts from per-payment receipts (e.g. "rent paid under the lease on file").
    * A GL line is exempt when its memo/description/account names one of documentTerms (the agreement that documents
@@ -58,6 +62,7 @@ export const ReceiptZ = z.object({
   lineItems: z.array(z.object({
     description: z.string(),
     amountCents: z.number().int().describe("Printed line amount in integer cents; negative for discounts/credits"),
+    quantity: z.number().positive().nullable().optional().describe("Printed quantity for this line (e.g. 5 for \"5 @ $1,233.00\"), or null if not printed"),
   })),
   purposeText: z.string().nullable().describe("Any written note about purpose or program (e.g. a handwritten 'for Literacy Lab'), or null"),
 });
