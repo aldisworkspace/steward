@@ -7,6 +7,7 @@
  *   npx tsx scripts/eval-v2-dev.ts --from out.json # score a saved dump (offline)
  *   npx tsx scripts/eval-v2-dev.ts --dir steward-holdout-v2 # score against that folder's expected_v2.json
  *   npx tsx scripts/eval-v2-dev.ts --dir steward-holdout-v3 # expected_v3.json: also compares blocked cents
+ *   npx tsx scripts/eval-v2-dev.ts --dir steward-holdout-v4 # expected_v4.json (v3 schema)
  *
  * Reads through internal queries (evalDev:dump) and the public packages:list / packages:get with
  * `npx convex run` (the CLI handles auth and targets dev by default; never --prod).
@@ -81,7 +82,8 @@ function lineFor(ref: GlRef, txns: Txn[]): Txn | null {
 }
 
 function main() {
-  const keyFile = existsSync(`${dataDir}/expected_v3.json`) ? "expected_v3.json" : "expected_v2.json";
+  // Newest key schema first; v4 uses the v3 schema.
+  const keyFile = ["expected_v4.json", "expected_v3.json", "expected_v2.json"].find((f) => existsSync(`${dataDir}/${f}`)) ?? "expected_v2.json";
   const raw = JSON.parse(readFileSync(`${dataDir}/${keyFile}`, "utf8")) as Expected;
   const exp: Expected = { ...raw,
     issues: raw.issues.map((is) => ({ ...is, glRef: normRef(is.glRef, is.cls), relatedRefs: is.relatedRefs?.map((r) => normRef(r)) })),

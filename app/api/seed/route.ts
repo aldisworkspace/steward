@@ -10,7 +10,7 @@ import type { Precedent } from "@/lib/types";
 export const maxDuration = 300;
 
 type GlSet = { dir: string; grants: readonly string[]; organizationName: string; fileHistory: boolean; glFile?: string };
-/** GL-first sample sets. `holdout-v2` / `holdout-v3` are sealed evaluation sets: every package stays live (no seeded history). */
+/** GL-first sample sets. `holdout-v2` / `holdout-v3` / `holdout-v4` are sealed evaluation sets: every package stays live (no seeded history). */
 const GL_SETS: Record<string, GlSet> = {
   v2: { dir: "steward-data-v2", grants: ["contract_city_FS-27-0412.pdf", "grant_foundation_RF-26-118.pdf"],
     organizationName: "Calle Nueva Family Center", fileHistory: true },
@@ -19,6 +19,9 @@ const GL_SETS: Record<string, GlSet> = {
   "holdout-v3": { dir: "steward-holdout-v3",
     grants: ["contract_NONA-27-0193_state_new_americans.pdf", "grant_LAFF-2026-14_linden_ash_foundation.pdf"],
     organizationName: "Cedar Hollow Refugee Welcome Center", fileHistory: false, glFile: "gl_transaction_detail_by_account.csv" },
+  "holdout-v4": { dir: "steward-holdout-v4",
+    grants: ["contract_OEWD-27-0058_westmere_environmental_workforce.pdf", "grant_HPF-2026-077_halvorsen_pike_foundation.pdf"],
+    organizationName: "Kettle Basin Conservation Corps", fileHistory: false, glFile: "gl_transaction_detail_by_account.csv" },
 };
 const RECEIPT_TYPES: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg" };
 

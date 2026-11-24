@@ -120,6 +120,21 @@ Results (dev, contracts re-extracted with the new prompt, 1 run each):
   Miss: H3-11 (split amounts swapped between two grants) came out `auto` — model-dependent, caught in one of the two earlier runs.
 - **No public claim from these numbers.** A new sealed hold-out v4, written without seeing these fixes, is needed.
 
+## Hold-out v4 result (sealed, opened once on 2026-11-23, 2 runs, identical scores)
+Written by an agent that did not read the detection code or fix round 3 (zip sha256 `6e1c71d3…`). The contracts were extracted cold with the current prompt.
+- **Recall: caught 12/13.** H4-11 was missed: a refund was not recorded, and the line came out `auto`.
+- **Status matches the key on 11/13. Blocked cents match 6/8.**
+  - H4-03: a fine itemised on a receipt blocks the whole line ($455.09) instead of the fine itself ($60.00).
+  - H4-04: a receipt amount mismatch comes out `blocked` via R-UNALLOWABLE-ALCOHOL_STAFF; the key expects `needs_review`.
+  - H4-05 (duplicate) was caught only through R-RECEIPT-MISSING.
+- **False alarms: 11/86**, all three causes deterministic:
+  - 9 biweekly stipend-roster lines get R-RECEIPT-MISSING (participant stipends documented by a roster need no receipt);
+  - a line of exactly $75.00 is flagged, but the contract says "exceeding $75" (threshold inclusivity is not extracted);
+  - R-PRIOR-APPROVAL tests the order total, but the contract tests per unit cost.
+- **Packages:** April ties to the cent. May–July differ by the items above.
+- Demo v2 after seeding back: 10/10 caught, 3/152 false alarms.
+- **This hold-out is now spent.**
+
 ## Known limits / risks
 - **Real data.** No auth, single workspace, shared dev deployment. **Do not load real nonprofit data** until real auth, an `orgId` on every table and data deletion exist.
 - **Old leaked passcode.** The demo passcode from commit `307470c` is still in public `main` history. Rotating `DEMO_PASSCODE` is the owner's call.
