@@ -66,6 +66,38 @@ synthetic data labelled.
   - the hold-out seed deletes the v2 contracts.
 - **This hold-out is now spent.** Any fix made after seeing it must be measured on a NEW sealed hold-out before claiming numbers.
 
+
+## Fix round 2 + hold-out v3 (2026-11-24)
+Fixes (8 commits after `9dc2cc8`):
+- the receipt threshold is now taken from the contract;
+- "can't be billed as-is" = `blocked` for the blocked portion: prohibitions incl. receipt line items, missing prior approval, line overrun, indirect excess;
+- the materiality waiver needs consistent evidence;
+- a pending recode no longer moves the invoice;
+- advance-paid grants get no invoice packages;
+- an un-awaited callback is fixed;
+- seeds park other sets' contracts.
+
+Demo v2 after the fixes: 10/10 caught, 10/10 status, 1–3/152 false alarms.
+
+**Hold-out v3** (sealed, written independently of the fixes, opened once; 2 runs):
+- **caught 11/12 and 12/12**;
+- **status matches the key 9/12 and 10/12**;
+- blocked cents match 4/6;
+- **false alarms 12/85 in both runs**, so precision is the weak spot;
+- no packages for the advance-paid grant (correct).
+
+Main false-alarm causes:
+- a lease exemption in the contract isn't modelled (4 rent lines);
+- the MTDC base is built from a line-name regex and does not exclude client direct assistance (3 indirect JEs + a wrong blocked amount);
+- receipts are judged "for another org" because the org name isn't in the prompt;
+- R-PRIOR-APPROVAL ignores precedents.
+
+Other misses and bugs:
+- out-of-period H3-01: a bank-line tie in the receipt matcher hides it;
+- the GL parser rejects a file with a one-cell footer row.
+
+The v3 hold-out is now spent too.
+
 ## Known limits / risks
 - **Real data.** No auth, single workspace, shared dev deployment. **Do not load real nonprofit data** until real auth, an `orgId` on every table and data deletion exist.
 - **Old leaked passcode.** The demo passcode from commit `307470c` is still in public `main` history. Rotating `DEMO_PASSCODE` is the owner's call.
