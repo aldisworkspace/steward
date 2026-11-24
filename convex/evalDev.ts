@@ -2,6 +2,7 @@
  * Read-only dump + maintenance hooks for scripts/eval-v2-dev.ts (internal functions only, so they can be
  * called with `npx convex run` but never from a client). Never reads the answer key.
  */
+import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { rematchAll } from "./receipts";
 
@@ -36,5 +37,25 @@ export const rematchReceipts = internalMutation({
     await rematchAll(ctx);
     const rows = await ctx.db.query("receipts").collect();
     return { receipts: rows.length, matched: rows.filter((r) => r.matchedTxnId).length };
+  },
+});
+
+/**
+ * Force the next seed to re-read these contracts (after an extraction-prompt change): drops the cached terms,
+ * keeps the stored PDF. Dev maintenance only (internal); audited like any change to grant terms.
+ */
+export const resetGrantTerms = internalMutation({
+  args: { fileNames: v.array(v.string()) },
+  handler: async (ctx, { fileNames }) => {
+    const reset: string[] = [];
+    for (const fileName of fileNames) {
+      const g = await ctx.db.query("grants").withIndex("by_fileName", (q) => q.eq("fileName", fileName)).first();
+      if (!g) continue;
+      await ctx.db.patch(g._id, { terms: null, status: "uploaded", error: undefined });
+      await ctx.db.insert("auditLog", { at: new Date().toISOString(), actor: "eval script", action: "grant_terms_reset",
+        targetId: String(g._id), why: "Re-extract terms after an extraction prompt change (dev eval).", evidence: [fileName] });
+      reset.push(fileName);
+    }
+    return { reset };
   },
 });

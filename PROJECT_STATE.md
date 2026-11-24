@@ -98,6 +98,28 @@ Other misses and bugs:
 
 The v3 hold-out is now spent too.
 
+## Fix round 3 — hold-out v3 causes (2026-11-23)
+General rules only (no vendor or line-id cases); offline tests in `scripts/test-holdout-v3-fixes.ts` and `test-gl-detail.ts`.
+1. **Receipt exemptions.** Terms get optional `receiptExemptions` (`documentTerms` naming the agreement + optional `costTerms`).
+   A line is exempt only when its memo/account names the agreement ("lease on file"); "client rent assistance" is not.
+   Honoured by R-RECEIPT-MISSING and the package RECEIPTS check.
+2. **Indirect base.** Optional `indirectBaseLines` / `indirectExcludedLines` from the contract; the line-name regex is a fallback only.
+3. **Organization name** (workspace settings) is in the coding context.
+4. **Free-text prior approval.** A precedent with approval wording (not "no approval…") in scope of the grant or grant:line,
+   within its "not to exceed $X" cap, and tied to the line (memo quotes its reference, or the model cites it) clears
+   R-PRIOR-APPROVAL and the model's matching concern. Typed `prior_approval_granted` now clears that concern too.
+5. **GL-first receipts** never match bank lines; **R-PERIOD** also fires when the matched invoice/receipt is dated outside the period.
+6. **GL parser** skips one-cell title/footer rows (and account headings in the date column); the seed-route workaround is gone.
+
+Contracts must be re-read after an extraction-prompt change: `npx convex run evalDev:resetGrantTerms '{"fileNames":[…]}'`, then seed again.
+
+Results (dev, contracts re-extracted with the new prompt, 1 run each):
+- **Demo v2: 10/10 caught, status 10/10, 3/152 false alarms** (all three are model questions on office/art supplies).
+- **Hold-out v3 — sanity only, the set is spent:** caught 11/12 (was 11–12), status 11/12 (was 9–10),
+  blocked cents 6/6 (was 4/6), **false alarms 0/85 (was 12/85)**; every NONA package ties once Steward's blocked portions are approved.
+  Miss: H3-11 (split amounts swapped between two grants) came out `auto` — model-dependent, caught in one of the two earlier runs.
+- **No public claim from these numbers.** A new sealed hold-out v4, written without seeing these fixes, is needed.
+
 ## Known limits / risks
 - **Real data.** No auth, single workspace, shared dev deployment. **Do not load real nonprofit data** until real auth, an `orgId` on every table and data deletion exist.
 - **Old leaked passcode.** The demo passcode from commit `307470c` is still in public `main` history. Rotating `DEMO_PASSCODE` is the owner's call.
@@ -113,3 +135,4 @@ Never set `NEXT_PUBLIC_DEMO_KEY`. Dev deployment: `judicious-hummingbird-654`; p
 ## Checks
 `npx tsc --noEmit` · `npx eslint app lib convex --quiet` · `npm run build` · `scripts/test-*.ts` · `scripts/check-*.ts` · `scripts/verify-judge-scenario.ts`.
 Live demo score: `npx convex run evalDev:rematchReceipts && npx convex run agentRunner:run && npx tsx scripts/eval-v2-dev.ts`.
+After an extraction-prompt change: `evalDev:resetGrantTerms` on the set's contracts, then seed the set again.
