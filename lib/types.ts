@@ -30,6 +30,23 @@ export const GrantTermsZ = z.object({
   indirectBase: z.enum(["salaries", "direct", "mtdc"]).nullable().optional(),
   /** Contract's own receipt threshold in dollars ("receipts for every non-payroll charge of $50 or more"); null if not stated. */
   receiptThresholdUsd: z.number().nonnegative().nullable().optional(),
+  /**
+   * Charges the documentation clause exempts from per-payment receipts (e.g. "rent paid under the lease on file").
+   * A GL line is exempt when its memo/description/account names one of documentTerms (the agreement that documents
+   * it) and, when costTerms is non-empty, one of costTerms (the kind of charge). Optional; null/absent = none.
+   */
+  receiptExemptions: z.array(z.object({
+    rule: z.string().describe("The exemption as written"),
+    clauseRef: z.string(),
+    costTerms: z.array(z.string()).describe("Words naming the kind of charge, e.g. [\"rent\"]; empty if any charge"),
+    documentTerms: z.array(z.string()).describe("Words naming the agreement that documents it, e.g. [\"lease\"] or [\"lease\", \"service agreement\"]"),
+  })).nullable().optional(),
+  /**
+   * The contract's explicit indirect base: budget line codes in the base (e.g. MTDC "lines A1, A2, A4") and/or lines
+   * it excludes ("MTDC excludes client direct assistance (line A3)"). Optional; absent → derived from line names.
+   */
+  indirectBaseLines: z.array(z.string()).nullable().optional(),
+  indirectExcludedLines: z.array(z.string()).nullable().optional(),
 });
 export type GrantTerms = z.infer<typeof GrantTermsZ>;
 

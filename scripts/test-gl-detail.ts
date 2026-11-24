@@ -168,5 +168,25 @@ check("bad date reports the row", () => {
   assert.match(r.error ?? "", /Row 2/);
 });
 
+check("one-cell title/footer rows are skipped, not a bad date (QuickBooks footer)", () => {
+  const text = `${QB}\nSYNTHETIC — generated for testing. Accrual basis. Fictional data.\n"Monday, November 23, 2026 10:15 AM GMT-05:00"\n`;
+  const r = parseGlDetail(text);
+  assert.equal(r.error, null);
+  assert.equal(r.lines.length, parseGlDetail(QB).lines.length);
+  assert.ok(r.skipped.some((s) => s.reason === "title/footer row"));
+});
+
+check("account heading in the date column sets the section account", () => {
+  const r = parseGlDetail(`Date,Transaction Type,Num,Name,Memo/Description,Account,Class,Amount\n6100 Office Supplies,,,,,,,\n07/03/2026,Expense,1,Staples,Paper,,GA-1:A1,10.00\n`);
+  assert.equal(r.error, null);
+  assert.equal(r.lines.length, 1);
+  assert.equal(r.lines[0]!.account, "6100 Office Supplies");
+});
+
+check("a multi-cell row with a bad date still fails loudly", () => {
+  const r = parseGlDetail(`Date,Name,Account,Amount\nnot a date,X,6100 Supplies,1.00\n`);
+  assert.match(r.error ?? "", /Row 2/);
+});
+
 if (failures) { console.log(`\n${failures} GL detail check(s) failed`); process.exit(1); }
 console.log("\nAll GL detail checks passed");

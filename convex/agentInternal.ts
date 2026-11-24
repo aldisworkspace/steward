@@ -116,6 +116,7 @@ export const loadPipelineInput = internalQuery({
       })) as BankLine[],
       receipts,
       receiptThresholdCents: settings.receiptThresholdCents,
+      organizationName: settings.organizationName,
     };
   },
 });

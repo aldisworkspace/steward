@@ -25,6 +25,8 @@ export interface PipelineInput {
   /** Receipts uploaded for this workspace (matched deterministically before the run). */
   receipts?: ReceiptRecord[];
   receiptThresholdCents?: number;
+  /** The nonprofit whose books these are (workspace settings): receipts addressed to it are its own. */
+  organizationName?: string;
 }
 
 /** Receipt per line: a receipt matched to a split group documents every row of that group. */
@@ -163,6 +165,7 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
     JSON.stringify(value).replace(/</g, "\\u003c");
 
   const context = jsonForModel({
+    ...(input.organizationName?.trim() ? { organization: input.organizationName.trim() } : {}),
     grants: input.grants.map((g) => ({ grantId: g.grantId, program: g.program, restrictedPurpose: g.restrictedPurpose,
       period: [g.periodStart, g.periodEnd], budgetLines: g.budgetLines, unallowable: g.unallowable, priorApproval: g.priorApproval })),
     precedents: input.precedents,
@@ -394,6 +397,10 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       typed: input.typedPrecedents ?? [],
       grants: input.grants,
       chargedGrantIds: [g?.class, c.grantId],
+      untyped: input.precedents,
+      chargedLines: [{ grantId: g?.class, budgetLine: g?.budgetLine }, { grantId: c.grantId, budgetLine: c.budgetLine }],
+      citedPrecedentIds: c.clauseRefs.filter((r) => /^P\d+$/.test(r)),
+      concernRuleId: cat?.ruleId ?? null,
     });
     // Substantive findings first so the queue label (ruleHits[0]) names the real issue.
     // Open questions (R-NEEDS-DOCS / R-MODEL-REVIEW) go last: a deterministic fact such as a $0.01 receipt

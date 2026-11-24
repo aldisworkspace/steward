@@ -11,7 +11,8 @@
  *   revenue/refund line). Cash, bank, card, payable/receivable and clearing accounts are always
  *   skipped: they are the payment side of an expense line already counted, so keeping them
  *   would double count.
- * - Zero-amount, total and section-heading rows are skipped and reported in `skipped`.
+ * - Zero-amount, total, section-heading and one-cell title/footer rows (QuickBooks prints "Accrual basis …"
+ *   and a timestamp under the report) are skipped and reported in `skipped`.
  */
 import { parseCsv } from "./parse";
 import { parseFlexibleAmount, parseFlexibleDate } from "./parseFlexible";
@@ -158,6 +159,12 @@ export interface GlParseResult {
   error: string | null;
 }
 
+/** A section heading that names an account ("6100 Office Supplies"). */
+const ACCOUNT_HEADING = /^\d{3,6}\s+\S/;
+function looksLikeDate(raw: string) {
+  try { parseFlexibleDate(raw); return true; } catch { return false; }
+}
+
 /** QuickBooks exports start with title rows; find the real header line. */
 function stripPreamble(text: string): string {
   const lines = text.split(/\r?\n/);
@@ -189,6 +196,14 @@ export function parseGlDetail(csvText: string, mappingOverride?: Partial<GlColum
     const rowNo = idx + 2;
     const dateRaw = get(r, "date");
     const firstCell = (Object.values(r)[0] ?? "").trim();
+    const filled = Object.values(r).filter((x) => x.trim()).length;
+    // A one-cell row whose text is not a date is a report title / footer ("Accrual basis …", a print
+    // timestamp) or a section heading in the date column: never a data row.
+    if (dateRaw && filled === 1 && !looksLikeDate(dateRaw)) {
+      if (ACCOUNT_HEADING.test(dateRaw)) sectionAccount = dateRaw;
+      skipped.push({ row: rowNo, reason: ACCOUNT_HEADING.test(dateRaw) ? "section heading" : "title/footer row" });
+      continue;
+    }
     if (!dateRaw) {
       // QuickBooks section heading ("6100 Office Supplies") or a "Total for …" row.
       if (firstCell && !/^total/i.test(firstCell) && Object.values(r).filter((x) => x.trim()).length === 1) sectionAccount = firstCell;

@@ -16,7 +16,7 @@
  */
 import { isPayrollTxn } from "./payrollMatch";
 import { vendorKey } from "./vendorKey";
-import type { ReceiptExtract, Txn } from "./types";
+import type { GrantTerms, ReceiptExtract, Txn } from "./types";
 
 export const RECEIPT_DATE_WINDOW_DAYS = 5;
 
@@ -54,6 +54,26 @@ export function daysApart(a: string, b: string) {
 /** Lines that never carry a vendor receipt: payroll (time records are the evidence), journal entries. */
 export function receiptExempt(t: Txn) {
   return isPayrollTxn(t) || /journal|allocation|depreciation|accrual/i.test(t.txnType ?? "");
+}
+
+const escapeRe = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const mentions = (text: string, terms: string[]) =>
+  terms.some((w) => w.trim() && new RegExp(`\\b${escapeRe(w.trim())}`, "i").test(text));
+
+/**
+ * The contract clause that exempts this line from a per-payment receipt (e.g. rent paid under the lease on file),
+ * or null. Deterministic: the line's memo, description or account must name the documenting agreement
+ * (documentTerms) and, when the exemption is limited to a kind of charge, that kind (costTerms).
+ */
+export function contractReceiptExemption(t: Txn, grant: Pick<GrantTerms, "receiptExemptions"> | undefined): { rule: string; clauseRef: string } | null {
+  if (t.amountCents >= 0) return null;
+  const text = `${t.description} ${t.memo} ${t.account ?? ""}`;
+  for (const ex of grant?.receiptExemptions ?? []) {
+    if (!ex.documentTerms?.length || !mentions(text, ex.documentTerms)) continue;
+    if (ex.costTerms?.length && !mentions(text, ex.costTerms)) continue;
+    return { rule: ex.rule, clauseRef: ex.clauseRef };
+  }
+  return null;
 }
 
 const lineVendor = (t: Txn) => `${t.vendor ?? ""} ${t.description}`;
@@ -122,7 +142,10 @@ function cmp(a: number[], b: number[]) {
 export function matchReceipts(receipts: ReceiptInput[], txns: Txn[]): Map<string, ReceiptMatch> {
   const out = new Map<string, ReceiptMatch>();
   const claimed = new Set<string>();
-  const pool = txns.filter((t) => t.amountCents < 0 && !receiptExempt(t));
+  // GL-first: receipts document GL lines only. A bank line (a placeholder for an outflow the GL lacks) is
+  // never a candidate, or it ties with the GL line it pays and hides the receipt.
+  const glFirst = txns.some((t) => t.source === "gl");
+  const pool = txns.filter((t) => t.amountCents < 0 && !receiptExempt(t) && !(glFirst && t.source === "bank"));
 
   const docs: Doc[] = pool.map((t) => ({ ids: [t.txnId], rows: [t], cents: -t.amountCents, date: t.date }));
   const seenGroups = new Set<string>();

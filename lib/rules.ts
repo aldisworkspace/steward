@@ -5,7 +5,7 @@
  * that a human must approve.
  */
 import { NON_CASH_TYPE, reconcileGlToBank } from "./matchLedger";
-import { daysApart, RECEIPT_DATE_WINDOW_DAYS, receiptCoverage, receiptExempt } from "./matchReceipts";
+import { contractReceiptExemption, daysApart, RECEIPT_DATE_WINDOW_DAYS, receiptCoverage, receiptExempt } from "./matchReceipts";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
 import { applyRate, baseLineCodes, indirectLineCode, receiptThresholdFor } from "./tieOut";
 import { vendorKey } from "./vendorKey";
@@ -122,6 +122,20 @@ export function runRules(input: RuleInput): Finding[] {
         evidence: [{ source: "contract", ref: `${g.grantId} period of performance`, note: `${g.periodStart} – ${g.periodEnd}` },
                    { source: "bank", ref: t.txnId, note: `${t.date} ${t.description}` }],
         suggestion: [{ grantId: null, budgetLine: null, amountCents: t.amountCents }] });
+    } else if (g && isOutflow(t) && t.source === "gl") {
+      // GL-first: the date a cost was incurred is the vendor's document date, not the date it was booked. An
+      // invoice dated before the period (booked inside it) is a pre-award cost the funder returns.
+      const cov = coverage.get(t.txnId);
+      const rd = cov?.receipt.extracted?.date;
+      if (rd && (rd < g.periodStart || rd > g.periodEnd)) {
+        blockedOrDup.add(t.txnId);
+        findings.push({ ruleId: "R-PERIOD", txnId: t.txnId, status: "blocked",
+          message: `Booked ${t.date}, but the matched ${/invoice/i.test(cov!.receipt.fileName) ? "invoice" : "receipt/invoice"} is dated ${rd}, outside ${g.grantId}'s period (${g.periodStart} to ${g.periodEnd}): the cost was incurred ${rd < g.periodStart ? "before the period began" : "after the period ended"}. Cannot be charged to this grant; move to unrestricted funds.`,
+          evidence: [{ source: "contract", ref: `${g.grantId} period of performance`, note: `${g.periodStart} – ${g.periodEnd}` },
+                     { source: "receipt", ref: cov!.receipt.receiptId, note: receiptNote(cov!.receipt) },
+                     { source: "gl", ref: t.txnId, note: `${t.date} ${t.vendor ?? t.description}` }],
+          suggestion: [{ grantId: null, budgetLine: null, amountCents: t.amountCents }] });
+      }
     }
 
     // R-UNALLOWABLE: keyword heuristics matched against the grant's own unallowable list.
@@ -332,7 +346,8 @@ export function receiptFindings(input: RuleInput): Finding[] {
     const cov = coverage.get(t.txnId);
     const r = cov?.receipt;
     const threshold = grant ? thresholdOf(grant) : 0;
-    if (receipts && !r && grant && abs >= threshold && !receiptExempt(t)) {
+    // The charged grant's own documentation clause can exempt a charge (rent under the lease on file).
+    if (receipts && !r && grant && abs >= threshold && !receiptExempt(t) && !contractReceiptExemption(t, grantById.get(grant))) {
       const tie = ambiguous.get(t.txnId);
       if (tie?.length) {
         const others = [...new Set(tie.flatMap((x) => x.candidates ?? []))].filter((id) => id !== t.txnId);

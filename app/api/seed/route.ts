@@ -34,9 +34,7 @@ async function seedGlSet(client: ConvexHttpClient, passcode: string | undefined,
     readFile(path.join(dir, "staff_allocation.csv"), "utf-8"),
     readFile(path.join(dir, "precedents.json"), "utf-8"),
   ]);
-  // parseGlDetail rejects a trailing one-cell report footer ("… Accrual basis …") as a bad date, so drop
-  // footer lines (no delimiter) after the last data row before parsing.
-  const gl = parseGlDetail(stripReportFooter(glText));
+  const gl = parseGlDetail(glText);
   if (gl.error) throw new Error(`GL detail: ${gl.error}`);
   const bankLines = parseBank(bankText).map((t, i) => ({
     lineId: `B${String(i + 1).padStart(4, "0")}`, date: t.date, description: t.description, amountCents: t.amountCents, memo: t.memo,
@@ -89,12 +87,6 @@ async function seedGlSet(client: ConvexHttpClient, passcode: string | undefined,
   // run (it decides which lines are exceptions) inside the route budget, then file the history.
   const history = await fileDemoHistory(client, passcode, startedAt);
   return { ...summary, history };
-}
-
-function stripReportFooter(text: string): string {
-  const rows = text.split(/\r?\n/);
-  while (rows.length && !rows[rows.length - 1]!.includes(",")) rows.pop();
-  return rows.join("\n") + "\n";
 }
 
 const HISTORY_THROUGH = "2026-09-30";

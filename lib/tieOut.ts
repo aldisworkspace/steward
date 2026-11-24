@@ -7,7 +7,7 @@
  */
 import { issueLabel } from "./issueLabel";
 import { isPayrollTxn } from "./payrollMatch";
-import { receiptCoverage } from "./matchReceipts";
+import { contractReceiptExemption, receiptCoverage } from "./matchReceipts";
 import type { GrantTerms, ReceiptExtract, Txn } from "./types";
 
 export const DEFAULT_RECEIPT_THRESHOLD = 75_00;
@@ -122,7 +122,16 @@ export function indirectLineCode(grant: GrantTerms): string | null {
   return grant.budgetLines.find((l) => INDIRECT_LINE.test(l.name) || INDIRECT_LINE.test(l.code))?.code ?? null;
 }
 
+/**
+ * Budget lines in the indirect base. The contract's explicit list wins (indirectBaseLines, then
+ * indirectExcludedLines); only when it states neither is the base derived from line names.
+ */
 export function baseLineCodes(grant: GrantTerms, base: "salaries" | "direct" | "mtdc", indirect: string | null) {
+  const codes = new Set(grant.budgetLines.map((l) => l.code));
+  const listed = (grant.indirectBaseLines ?? []).filter((c) => codes.has(c) && c !== indirect);
+  if (listed.length) return grant.budgetLines.map((l) => l.code).filter((c) => listed.includes(c));
+  const excluded = (grant.indirectExcludedLines ?? []).filter((c) => codes.has(c));
+  if (excluded.length) return grant.budgetLines.map((l) => l.code).filter((c) => c !== indirect && !excluded.includes(c));
   return grant.budgetLines.filter((l) => {
     if (l.code === indirect) return false;
     if (base === "salaries") return SALARY_LINE.test(l.name) && !NOT_SALARY.test(l.name);
@@ -284,7 +293,7 @@ export function buildPackage(input: BuildPackageInput): BillingPackage {
   const txnById = new Map(selected.map((t) => [t.txnId, t]));
   const needReceipt = [...new Set(lines.map((l) => l.txnId))].filter((id) => {
     const t = txnById.get(id)!;
-    return -t.amountCents >= threshold && !receiptExempt(t) && !receiptByTxn.has(id);
+    return -t.amountCents >= threshold && !receiptExempt(t) && !contractReceiptExemption(t, grant) && !receiptByTxn.has(id);
   });
   checks.push({ id: "RECEIPTS", label: `Receipts for every non-payroll charge ≥ ${usd(threshold)}`, pass: !needReceipt.length,
     detail: needReceipt.length ? `No matched receipt: ${needReceipt.join(", ")}.` : "Every charge at or above the threshold has a matched receipt.",
