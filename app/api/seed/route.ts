@@ -9,29 +9,34 @@ import type { Precedent } from "@/lib/types";
 
 export const maxDuration = 300;
 
-type GlSet = { dir: string; grants: readonly string[]; organizationName: string; fileHistory: boolean };
-/** GL-first sample sets. `holdout-v2` is the sealed evaluation set: every package stays live (no seeded history). */
+type GlSet = { dir: string; grants: readonly string[]; organizationName: string; fileHistory: boolean; glFile?: string };
+/** GL-first sample sets. `holdout-v2` / `holdout-v3` are sealed evaluation sets: every package stays live (no seeded history). */
 const GL_SETS: Record<string, GlSet> = {
   v2: { dir: "steward-data-v2", grants: ["contract_city_FS-27-0412.pdf", "grant_foundation_RF-26-118.pdf"],
     organizationName: "Calle Nueva Family Center", fileHistory: true },
   "holdout-v2": { dir: "steward-holdout-v2", grants: ["agreement_county_YR-27-0093.pdf", "grant_foundation_QL-26-052.pdf"],
     organizationName: "Northfen Youth Athletics League", fileHistory: false },
+  "holdout-v3": { dir: "steward-holdout-v3",
+    grants: ["contract_NONA-27-0193_state_new_americans.pdf", "grant_LAFF-2026-14_linden_ash_foundation.pdf"],
+    organizationName: "Cedar Hollow Refugee Welcome Center", fileHistory: false, glFile: "gl_transaction_detail_by_account.csv" },
 };
 const RECEIPT_TYPES: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg" };
 
 /**
  * SYNTHETIC GL-first sample (v2 demo or hold-out): GL detail is the primary record, bank statement
- * and receipts are evidence. Never reads expected_v2.json (answer key, eval scripts only).
+ * and receipts are evidence. Never reads expected_v2.json / expected_v3.json (answer keys, eval scripts only).
  */
 async function seedGlSet(client: ConvexHttpClient, passcode: string | undefined, set: GlSet) {
   const dir = path.join(process.cwd(), set.dir);
   const [glText, bankText, staffText, precedentsText] = await Promise.all([
-    readFile(path.join(dir, "gl_detail_qb.csv"), "utf-8"),
+    readFile(path.join(dir, set.glFile ?? "gl_detail_qb.csv"), "utf-8"),
     readFile(path.join(dir, "bank_statement.csv"), "utf-8"),
     readFile(path.join(dir, "staff_allocation.csv"), "utf-8"),
     readFile(path.join(dir, "precedents.json"), "utf-8"),
   ]);
-  const gl = parseGlDetail(glText);
+  // parseGlDetail rejects a trailing one-cell report footer ("… Accrual basis …") as a bad date, so drop
+  // footer lines (no delimiter) after the last data row before parsing.
+  const gl = parseGlDetail(stripReportFooter(glText));
   if (gl.error) throw new Error(`GL detail: ${gl.error}`);
   const bankLines = parseBank(bankText).map((t, i) => ({
     lineId: `B${String(i + 1).padStart(4, "0")}`, date: t.date, description: t.description, amountCents: t.amountCents, memo: t.memo,
@@ -84,6 +89,12 @@ async function seedGlSet(client: ConvexHttpClient, passcode: string | undefined,
   // run (it decides which lines are exceptions) inside the route budget, then file the history.
   const history = await fileDemoHistory(client, passcode, startedAt);
   return { ...summary, history };
+}
+
+function stripReportFooter(text: string): string {
+  const rows = text.split(/\r?\n/);
+  while (rows.length && !rows[rows.length - 1]!.includes(",")) rows.pop();
+  return rows.join("\n") + "\n";
 }
 
 const HISTORY_THROUGH = "2026-09-30";
