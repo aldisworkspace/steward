@@ -84,6 +84,7 @@ function Uploads({ onError, onDone }: { onError: (m: string | null) => void; onD
   const [gl, setGl] = useState<{ name: string; raw: string; mapping: GlColumnMapping; headers: string[]; lines: GlLine[]; skipped: number; error: string | null } | null>(null);
   const [bank, setBank] = useState<{ name: string; raw: string; mapping: BankColumnMapping; headers: string[]; txns: Txn[]; error: string | null } | null>(null);
   const [staff] = useState<StaffAllocation[]>([]);
+  const contracts = useContractUpload(onError);
   const [busy, setBusy] = useState(false);
   const [confirmReplace, setConfirmReplace] = useState(false);
 
@@ -150,9 +151,10 @@ function Uploads({ onError, onDone }: { onError: (m: string | null) => void; onD
           The ledger is the record Steward checks: QuickBooks Transaction Detail by Account, Xero Account Transactions or Sage Intacct GL detail, as CSV.
         </StepHead>
         <DropZone
-          accept=".csv,text/csv"
+          allow={["csv"]}
           label={gl ? `Replace ${gl.name}` : "Drop the GL detail CSV, or choose a file"}
           disabled={!app.canWrite}
+          onPdfElsewhere={(files) => void contracts.upload(files)}
           onFiles={(files) => {
             const f = files[0];
             if (f) void f.text().then((t) => parseGl(f.name, t));
@@ -224,7 +226,7 @@ function Uploads({ onError, onDone }: { onError: (m: string | null) => void; onD
       <ReceiptsStep receipts={receipts} />
 
       {/* 3. Contracts */}
-      <ContractsStep grants={grants} onError={onError} />
+      <ContractsStep grants={grants} onError={onError} contracts={contracts} />
 
       {/* 4. Bank statement */}
       <Card className="p-5 sm:p-6">
@@ -232,9 +234,10 @@ function Uploads({ onError, onDone }: { onError: (m: string | null) => void; onD
           For reconciliation only: Steward checks that what the books paid is what left the bank.
         </StepHead>
         <DropZone
-          accept=".csv,text/csv"
+          allow={["csv"]}
           label={bank ? `Replace ${bank.name}` : "Drop a bank CSV, or choose a file"}
           disabled={!app.canWrite}
+          onPdfElsewhere={(files) => void contracts.upload(files)}
           onFiles={(files) => {
             const f = files[0];
             if (f) void f.text().then((t) => parseBank(f.name, t));
@@ -346,53 +349,110 @@ function StepHead({
   );
 }
 
+type FileKind = "csv" | "pdf" | "image" | "other";
+
+function fileKind(f: File): FileKind {
+  const ext = f.name.toLowerCase().split(".").pop() ?? "";
+  if (ext === "csv" || f.type === "text/csv") return "csv";
+  if (ext === "pdf" || f.type === "application/pdf") return "pdf";
+  if (["png", "jpg", "jpeg", "heic", "heif", "webp", "gif"].includes(ext) || f.type.startsWith("image/")) return "image";
+  return "other";
+}
+
+const KIND_WORD: Record<FileKind, string> = { csv: "a CSV", pdf: "a PDF", image: "an image", other: "not a supported file" };
+
+/** Where a file of this kind belongs, said plainly. */
+function belongsIn(kind: FileKind): string {
+  if (kind === "pdf") return "contracts go in Contracts, receipts in Receipts";
+  if (kind === "image") return "photos of receipts go in Receipts";
+  if (kind === "csv") return "CSVs go in GL detail or Bank statement";
+  return "use CSV for the ledger and bank, PDF or a photo for contracts and receipts";
+}
+
+const ACCEPT: Record<Exclude<FileKind, "other">, string> = {
+  csv: ".csv,text/csv",
+  pdf: ".pdf,application/pdf",
+  image: ".png,.jpg,.jpeg,.heic,.webp,image/png,image/jpeg,image/heic,image/webp",
+};
+
 function DropZone({
-  accept,
+  allow,
   label,
   multiple,
   disabled,
   busy,
   onFiles,
+  onPdfElsewhere,
 }: {
-  accept: string;
+  allow: Exclude<FileKind, "other">[];
   label: string;
   multiple?: boolean;
   disabled?: boolean;
   busy?: boolean;
   onFiles: (files: File[]) => void;
+  /** A contract PDF dropped in the wrong zone is sent to Contracts instead of being held here. */
+  onPdfElsewhere?: (files: File[]) => void;
 }) {
   const [over, setOver] = useState(false);
+  const [note, setNote] = useState<{ text: string; tone: "error" | "info" } | null>(null);
+
+  function take(all: File[]) {
+    const ok = all.filter((f) => (allow as FileKind[]).includes(fileKind(f)));
+    const wrong = all.filter((f) => !ok.includes(f));
+    const pdfs = wrong.filter((f) => fileKind(f) === "pdf");
+    if (wrong.length && onPdfElsewhere && pdfs.length === wrong.length) {
+      onPdfElsewhere(pdfs);
+      setNote({ text: `${pdfs.length === 1 ? `${pdfs[0]!.name} is a PDF` : `${pdfs.length} PDFs`}, so ${pdfs.length === 1 ? "it went" : "they went"} to Contracts below.`, tone: "info" });
+    } else if (wrong.length) {
+      const k = fileKind(wrong[0]!);
+      setNote({ text: `${wrong[0]!.name} is ${KIND_WORD[k]} — ${belongsIn(k)}. Nothing was added here.`, tone: "error" });
+    } else {
+      setNote(null);
+    }
+    if (ok.length) onFiles(multiple ? ok : ok.slice(0, 1));
+  }
+
   return (
-    <label
-      onDragOver={(e) => {
-        e.preventDefault();
-        if (!disabled) setOver(true);
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        if (!disabled && e.dataTransfer.files.length) onFiles([...e.dataTransfer.files]);
-      }}
-      className={`flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-sm border border-dashed px-4 py-6 text-center transition-colors duration-150 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ink ${
-        disabled ? "cursor-not-allowed border-rule text-ink-2" : over ? "border-ink bg-paper-2 text-ink" : "border-rule-strong bg-paper/50 text-ink hover:border-ink-2"
-      }`}
-    >
-      <span className="text-base">{busy ? "Working…" : label}</span>
-      <span className="mt-1 text-xs text-ink-2">{multiple ? "You can drop many files at once" : "One file"}</span>
-      <input
-        type="file"
-        accept={accept}
-        multiple={multiple}
-        disabled={disabled || busy}
-        className="sr-only"
-        onChange={(e) => {
-          const files = [...(e.target.files ?? [])];
-          e.target.value = "";
-          if (files.length) onFiles(files);
+    <div>
+      <label
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (!disabled) setOver(true);
         }}
-      />
-    </label>
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          if (!disabled && e.dataTransfer.files.length) take([...e.dataTransfer.files]);
+        }}
+        className={`flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-sm border border-dashed px-4 py-6 text-center transition-colors duration-150 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ink ${
+          disabled ? "cursor-not-allowed border-rule text-ink-2" : over ? "border-ink bg-paper-2 text-ink" : "border-rule-strong bg-paper/50 text-ink hover:border-ink-2"
+        }`}
+      >
+        <span className="text-base">{busy ? "Working…" : label}</span>
+        <span className="mt-1 text-xs text-ink-2">
+          {allow.map((k) => (k === "csv" ? "CSV" : k === "pdf" ? "PDF" : "PNG, JPG, HEIC")).join(" or ")}
+          {multiple ? " · many files at once" : " · one file"}
+        </span>
+        <input
+          type="file"
+          accept={allow.map((k) => ACCEPT[k]).join(",")}
+          multiple={multiple}
+          disabled={disabled || busy}
+          className="sr-only"
+          onChange={(e) => {
+            const files = [...(e.target.files ?? [])];
+            e.target.value = "";
+            if (files.length) take(files);
+          }}
+        />
+      </label>
+      {note && (
+        <p role={note.tone === "error" ? "alert" : "status"} className={`mt-2 text-sm ${note.tone === "error" ? "text-redpen-ink" : "text-ink-2"}`}>
+          {note.text}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -453,7 +513,7 @@ function ReceiptsStep({ receipts }: { receipts: ReceiptRow[] | undefined }) {
       <StepHead n="Receipts" status={rows.length ? `${n.matched} of ${rows.length} matched` : "None yet"} tone={rows.length && n.matched === rows.length ? "green" : rows.length ? "amber" : "neutral"}>
         PDFs or photos of receipts and vendor invoices. Steward reads each one and matches it to a GL line by amount, date and vendor.
       </StepHead>
-      <DropZone accept="application/pdf,image/png,image/jpeg,image/webp" multiple label="Drop receipts, or choose files" disabled={!app.canWrite} busy={busy === "upload"} onFiles={(f) => void upload(f)} />
+      <DropZone allow={["pdf", "image"]} multiple label="Drop receipts, or choose files" disabled={!app.canWrite} busy={busy === "upload"} onFiles={(f) => void upload(f)} />
       {progress && (
         <p className="mt-2 text-sm text-ink-2" role="status">
           {progress}
@@ -593,21 +653,20 @@ function RelinkControl({
 
 type GrantRow = { _id: string; fileName: string; grantId?: string; status: string; source?: string; terms: unknown; error?: string };
 
-function ContractsStep({ grants, onError }: { grants: GrantRow[] | undefined; onError: (m: string | null) => void }) {
+/** Contract PDF upload + extraction, shared so a PDF dropped in the wrong zone still lands here. */
+function useContractUpload(onError: (m: string | null) => void) {
   const app = useApp();
   const uploadUrl = useMutation(api.grants.generateUploadUrl);
   const register = useMutation(api.grants.registerGrant);
   const extract = useAction(api.agent.extractGrant);
   const [busy, setBusy] = useState(false);
-  const rows = grants ?? [];
-  const ready = rows.filter((g) => g.status === "ready").length;
-
   async function upload(files: File[]) {
+    if (!app.canWrite) return;
     setBusy(true);
     onError(null);
     try {
       for (const file of files) {
-        if (!file.name.toLowerCase().endsWith(".pdf")) continue;
+        if (fileKind(file) !== "pdf") continue;
         const u = await uploadUrl({ passcode: app.passcode });
         const res = await fetch(u, { method: "POST", headers: { "Content-Type": "application/pdf" }, body: file });
         if (!res.ok) throw new Error(`Upload failed: ${file.name}`);
@@ -621,13 +680,28 @@ function ContractsStep({ grants, onError }: { grants: GrantRow[] | undefined; on
       setBusy(false);
     }
   }
+  return { upload, busy };
+}
+
+function ContractsStep({
+  grants,
+  onError,
+  contracts,
+}: {
+  grants: GrantRow[] | undefined;
+  onError: (m: string | null) => void;
+  contracts: ReturnType<typeof useContractUpload>;
+}) {
+  const app = useApp();
+  const rows = grants ?? [];
+  const ready = rows.filter((g) => g.status === "ready").length;
 
   return (
     <Card className="p-5 sm:p-6">
       <StepHead n="Contracts" status={ready ? `${ready} confirmed` : rows.length ? "Confirm terms" : "Needed"} tone={ready ? "green" : "amber"}>
         Grant agreements and city contracts as PDF. Steward reads the terms; you confirm them before they are used.
       </StepHead>
-      <DropZone accept="application/pdf" multiple label="Drop contract PDFs, or choose files" disabled={!app.canWrite} busy={busy} onFiles={(f) => void upload(f)} />
+      <DropZone allow={["pdf"]} multiple label="Drop contract PDFs, or choose files" disabled={!app.canWrite} busy={contracts.busy} onFiles={(f) => void contracts.upload(f)} />
       {rows.length > 0 && (
         <ul className="mt-4 divide-y divide-rule border-y border-rule">
           {rows.map((g) => (

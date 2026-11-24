@@ -40,6 +40,7 @@ export function TopBar({
   onOpenCommand: () => void;
 }) {
   const running = runStatus === "running";
+  const me = people.find((p) => p.name === actor);
   const activeNav: AppTab = tab === "package" ? "packages" : tab;
   return (
     <header className="no-print z-30 border-b border-rule bg-paper/95 backdrop-blur-[6px] lg:sticky lg:top-0">
@@ -76,17 +77,19 @@ export function TopBar({
             <span className="hidden sm:inline">Acting as</span>
             <span className="sr-only sm:hidden">Acting as</span>
             <select
+              title={me ? me.roles.map((r) => ROLE_WORD[r]).join(", ") : undefined}
               className="min-h-11 max-w-[8.5rem] rounded-pill sm:max-w-[14rem] border border-rule-strong bg-sheet py-1 pl-3 pr-7 text-sm text-ink sm:min-h-8"
               value={actor}
               onChange={(e) => setActor(e.target.value)}
             >
               {people.map((p) => (
                 <option key={p.name} value={p.name}>
-                  {shortName(p.name)} · {ROLE_WORD[p.roles[0]!]}
+                  {shortName(p.name)}
                 </option>
               ))}
             </select>
           </label>
+          {me && <span className="hidden whitespace-nowrap text-xs text-ink-2 sm:inline">{me.roles.map((r) => ROLE_WORD[r]).join(" · ")}</span>}
           <button
             type="button"
             onClick={onOpenCommand}

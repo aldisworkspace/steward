@@ -504,7 +504,7 @@ function CaseInner({
 
       {/* What to do */}
       {!clean && !resolved && (
-        <section className="mt-auto border-t border-rule bg-paper/50 px-5 py-5 sm:px-8" aria-labelledby={`todo-${txn.txnId}`}>
+        <section className="border-t border-rule bg-paper/50 px-5 py-5 sm:px-8" aria-labelledby={`todo-${txn.txnId}`}>
           <h3 id={`todo-${txn.txnId}`} className="text-xs font-medium text-ink-2">
             What to do
           </h3>
@@ -655,7 +655,7 @@ function CaseInner({
         </section>
       )}
       {resolved && (
-        <p className="mt-auto border-t border-rule px-5 py-5 text-base text-ink-2 sm:px-8">A person already decided this line.</p>
+        <p className="border-t border-rule px-5 py-5 text-base text-ink-2 sm:px-8">A person already decided this line.</p>
       )}
     </article>
   );
