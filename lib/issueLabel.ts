@@ -22,6 +22,8 @@ export function issueLabel(ruleId: string | null | undefined, status: string): s
       return "Needs funder approval";
     case "R-LINE-OVERRUN":
       return "Over budget line";
+    case "R-INDIRECT-RATE":
+      return blocked ? "Indirect over the contract rate" : "Indirect doesn't match the rate";
     case "R-EFFORT":
       return "Pay exceeds time sheet";
     case "R-DUPLICATE":

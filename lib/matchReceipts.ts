@@ -1,10 +1,20 @@
 /**
- * Deterministic receipt → GL line matcher. The model only reads the receipt; matching is rules:
- *   1. exact amount (cents), 2. date within ±5 days, 3. vendor word overlap (lib/vendorKey.ts).
- * If no line has the exact amount, a single same-vendor line within the date window is matched so
- * the amount difference surfaces as R-RECEIPT-MISMATCH. Ties are never guessed: the receipt stays
- * unmatched and its candidate lines go to needs_review. Human links are kept as-is.
+ * Deterministic receipt → GL line matcher. The model only reads the receipt; matching is rules.
+ *
+ * A receipt documents one purchase. In a GL-first workspace one purchase can be booked as several
+ * split rows (same date, vendor, transaction type and Num), so the things a receipt is matched to are
+ * "documents": every single line plus every multi-row split group, whose amount is the group sum.
+ *
+ * Matching is a global one-to-one assignment (each receipt to at most one document, each line to at
+ * most one receipt), strongest evidence first:
+ *   1. exact amount (cents) beats a same-vendor near amount (the difference surfaces as R-RECEIPT-MISMATCH);
+ *   2. date within ±5 days beats outside the window; inside the window, vendor word overlap, then the
+ *      closest date; for a near amount, the smallest difference;
+ * A receipt is left unmatched with its candidates (→ R-RECEIPT-AMBIGUOUS) only when two or more free
+ * documents are equally good on every criterion, e.g. the same amount on two dates equidistant from the
+ * receipt date. Ties are never guessed. Human links are kept as-is and claim their lines first.
  */
+import { isPayrollTxn } from "./payrollMatch";
 import { vendorKey } from "./vendorKey";
 import type { ReceiptExtract, Txn } from "./types";
 
@@ -41,12 +51,87 @@ export function daysApart(a: string, b: string) {
   return Math.abs((Date.parse(a) - Date.parse(b)) / 86_400_000);
 }
 
+/** Lines that never carry a vendor receipt: payroll (time records are the evidence), journal entries. */
+export function receiptExempt(t: Txn) {
+  return isPayrollTxn(t) || /journal|allocation|depreciation|accrual/i.test(t.txnType ?? "");
+}
+
 const lineVendor = (t: Txn) => `${t.vendor ?? ""} ${t.description}`;
+
+/** Rows of one booked purchase: GL-first, same date, vendor, transaction type and document number. */
+const splitKey = (t: Txn) => `${t.date}|${vendorKey(t.vendor ?? t.description)}|${(t.txnType ?? "").toLowerCase()}|${(t.docRef ?? "").trim()}`;
+
+/** Multi-row split groups (outflow, receipt-bearing GL rows only), keyed by every member's txnId. */
+export function splitGroups(txns: Txn[]): Map<string, Txn[]> {
+  const byKey = new Map<string, Txn[]>();
+  for (const t of txns) {
+    if (t.source !== "gl" || t.amountCents >= 0 || receiptExempt(t)) continue;
+    const k = splitKey(t);
+    byKey.set(k, [...(byKey.get(k) ?? []), t]);
+  }
+  const out = new Map<string, Txn[]>();
+  for (const rows of byKey.values()) {
+    if (rows.length < 2) continue;
+    const sorted = [...rows].sort((a, b) => a.txnId.localeCompare(b.txnId));
+    for (const t of sorted) out.set(t.txnId, sorted);
+  }
+  return out;
+}
+
+export type ReceiptCoverage<R> = { receipt: R; lineIds: string[]; coveredCents: number };
+
+/**
+ * Which lines a matched receipt documents: the matched line, or its whole split group when the receipt
+ * total is closer to the group sum than to the single line (the matcher links a group by its first row).
+ */
+export function receiptCoverage<R extends { matchedTxnId: string | null; extracted?: ReceiptExtract | null }>(
+  receipts: R[], txns: Txn[],
+): Map<string, ReceiptCoverage<R>> {
+  const groups = splitGroups(txns);
+  const byId = new Map(txns.map((t) => [t.txnId, t]));
+  const out = new Map<string, ReceiptCoverage<R>>();
+  for (const r of receipts) {
+    if (!r.matchedTxnId) continue;
+    const t = byId.get(r.matchedTxnId);
+    const total = r.extracted?.totalCents ?? null;
+    const group = groups.get(r.matchedTxnId);
+    let rows: Txn[] = t ? [t] : [];
+    if (t && group && total != null) {
+      const groupSum = group.reduce((a, x) => a - x.amountCents, 0);
+      if (Math.abs(total - groupSum) < Math.abs(total + t.amountCents)) rows = group;
+    }
+    const cov = { receipt: r, lineIds: rows.length ? rows.map((x) => x.txnId) : [r.matchedTxnId],
+      coveredCents: rows.reduce((a, x) => a - x.amountCents, 0) };
+    for (const id of cov.lineIds) if (!out.has(id)) out.set(id, cov);
+  }
+  return out;
+}
+
+type Doc = { ids: string[]; rows: Txn[]; cents: number; date: string };
+type Edge = { doc: Doc; key: number[]; score: number; note: string };
+
+/** Lexicographic compare of edge keys (higher is better at every position). */
+function cmp(a: number[], b: number[]) {
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const d = (a[i] ?? 0) - (b[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+}
 
 export function matchReceipts(receipts: ReceiptInput[], txns: Txn[]): Map<string, ReceiptMatch> {
   const out = new Map<string, ReceiptMatch>();
   const claimed = new Set<string>();
-  const pool = txns.filter((t) => t.amountCents < 0);
+  const pool = txns.filter((t) => t.amountCents < 0 && !receiptExempt(t));
+
+  const docs: Doc[] = pool.map((t) => ({ ids: [t.txnId], rows: [t], cents: -t.amountCents, date: t.date }));
+  const seenGroups = new Set<string>();
+  for (const rows of splitGroups(pool).values()) {
+    const k = rows.map((r) => r.txnId).join(",");
+    if (seenGroups.has(k)) continue;
+    seenGroups.add(k);
+    docs.push({ ids: rows.map((r) => r.txnId), rows, cents: rows.reduce((a, r) => a - r.amountCents, 0), date: rows[0]!.date });
+  }
 
   for (const r of receipts) {
     if (r.matchedBy === "human") {
@@ -55,8 +140,7 @@ export function matchReceipts(receipts: ReceiptInput[], txns: Txn[]): Map<string
     }
   }
 
-  type Proposal = { r: ReceiptInput; strength: number; cands: Txn[]; score: number; note: string };
-  const proposals: Proposal[] = [];
+  const edgesByReceipt = new Map<string, Edge[]>();
   for (const r of receipts) {
     if (r.matchedBy === "human") continue;
     const x = r.extracted;
@@ -64,38 +148,62 @@ export function matchReceipts(receipts: ReceiptInput[], txns: Txn[]): Map<string
       out.set(r.receiptId, { matchedTxnId: null, matchScore: null, matchedBy: null, candidates: [], note: "no printed total to match" });
       continue;
     }
-    const inWindow = (t: Txn) => !x.date || daysApart(t.date, x.date) <= RECEIPT_DATE_WINDOW_DAYS;
-    const sameVendor = (t: Txn) => vendorOverlap(x.vendor, lineVendor(t));
-    const exact = pool.filter((t) => -t.amountCents === x.totalCents);
-    if (exact.length) {
-      let cands = exact.filter(inWindow);
-      let note = "exact amount, date within 5 days";
-      if (!cands.length) { cands = exact.filter(sameVendor); note = "exact amount and vendor, date outside 5 days"; }
-      if (cands.length > 1) {
-        const v = cands.filter(sameVendor);
-        if (v.length) { cands = v; note += ", vendor"; }
+    const edges: Edge[] = [];
+    for (const doc of docs) {
+      const days = x.date ? daysApart(doc.date, x.date) : 0;
+      const inWindow = days <= RECEIPT_DATE_WINDOW_DAYS;
+      const sameVendor = doc.rows.some((t) => vendorOverlap(x.vendor, lineVendor(t)));
+      const split = doc.rows.length > 1 ? ` across ${doc.rows.length} split lines` : "";
+      // Inside the window the closer date wins; outside it a date difference proves nothing.
+      const dateKey = inWindow ? -days : -999;
+      if (doc.cents === x.totalCents) {
+        if (!inWindow && !sameVendor) continue;
+        edges.push({ doc, key: [2, inWindow ? 1 : 0, sameVendor ? 1 : 0, 0, dateKey],
+          score: 0.5 + (inWindow ? 0.3 : 0) + (sameVendor ? 0.2 : 0),
+          note: `exact amount${split}${sameVendor ? ", vendor" : ""}, ${inWindow ? `date ${days} day(s) apart` : "date outside 5 days"}` });
+      } else if (sameVendor && inWindow) {
+        edges.push({ doc, key: [1, 1, 1, -Math.abs(doc.cents - x.totalCents), dateKey], score: 0.5,
+          note: `same vendor within 5 days${split}, amount differs` });
       }
-      const score = 0.5 + (cands.every(inWindow) ? 0.3 : 0) + (cands.every(sameVendor) ? 0.2 : 0);
-      proposals.push({ r, strength: 2, cands, score, note });
+    }
+    if (!edges.length) {
+      out.set(r.receiptId, { matchedTxnId: null, matchScore: null, matchedBy: null, candidates: [], note: "no GL line matches" });
       continue;
     }
-    const near = pool.filter((t) => sameVendor(t) && inWindow(t));
-    proposals.push({ r, strength: 1, cands: near, score: 0.5, note: "same vendor within 5 days, amount differs" });
+    edgesByReceipt.set(r.receiptId, edges);
   }
 
-  // Exact-amount proposals claim lines before vendor-only ones.
-  proposals.sort((a, b) => b.strength - a.strength);
-  for (const p of proposals) {
-    const free = p.cands.filter((t) => !claimed.has(t.txnId));
-    if (free.length === 1) {
-      claimed.add(free[0]!.txnId);
-      out.set(p.r.receiptId, { matchedTxnId: free[0]!.txnId, matchScore: Math.round(p.score * 100) / 100, matchedBy: "auto", candidates: [], note: p.note });
-    } else if (free.length > 1) {
-      out.set(p.r.receiptId, { matchedTxnId: null, matchScore: null, matchedBy: null, candidates: free.map((t) => t.txnId),
-        note: `tie between ${free.map((t) => t.txnId).join(", ")}; a person must link it` });
+  const free = (d: Doc) => d.ids.every((id) => !claimed.has(id));
+  const bestOf = (edges: Edge[]) => {
+    const open = edges.filter((e) => free(e.doc));
+    if (!open.length) return null;
+    const top = open.reduce((a, e) => (cmp(e.key, a.key) > 0 ? e : a));
+    return { top, tied: open.filter((e) => cmp(e.key, top.key) === 0) };
+  };
+
+  // Global greedy assignment: the strongest remaining receipt→document pair is decided first.
+  const pending = new Set(edgesByReceipt.keys());
+  while (pending.size) {
+    let pick: { id: string; best: NonNullable<ReturnType<typeof bestOf>> } | null = null;
+    for (const id of [...pending].sort()) {
+      const best = bestOf(edgesByReceipt.get(id)!);
+      if (!best) {
+        pending.delete(id);
+        out.set(id, { matchedTxnId: null, matchScore: null, matchedBy: null, candidates: [], note: "matching line already has a receipt" });
+        continue;
+      }
+      if (!pick || cmp(best.top.key, pick.best.top.key) > 0) pick = { id, best };
+    }
+    if (!pick) break;
+    pending.delete(pick.id);
+    const { top, tied } = pick.best;
+    if (tied.length === 1) {
+      for (const id of top.doc.ids) claimed.add(id);
+      out.set(pick.id, { matchedTxnId: top.doc.ids[0]!, matchScore: Math.round(top.score * 100) / 100, matchedBy: "auto", candidates: [], note: top.note });
     } else {
-      out.set(p.r.receiptId, { matchedTxnId: null, matchScore: null, matchedBy: null, candidates: [],
-        note: p.cands.length ? "matching line already has a receipt" : "no GL line matches" });
+      const ids = [...new Set(tied.flatMap((e) => e.doc.ids))].sort();
+      out.set(pick.id, { matchedTxnId: null, matchScore: null, matchedBy: null, candidates: ids,
+        note: `tie between ${ids.join(", ")} (equally close on amount, date and vendor); a person must link it` });
     }
   }
   return out;

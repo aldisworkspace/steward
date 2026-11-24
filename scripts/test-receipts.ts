@@ -6,9 +6,10 @@
  */
 import assert from "node:assert/strict";
 import type { ModelClient } from "../lib/llm";
-import { matchReceipts, type ReceiptInput } from "../lib/matchReceipts";
-import { runPipeline } from "../lib/pipeline";
-import { runRules } from "../lib/rules";
+import { matchReceipts, receiptCoverage, type ReceiptInput } from "../lib/matchReceipts";
+import { documentationWaiver, runPipeline } from "../lib/pipeline";
+import { indirectRateFindings, runRules } from "../lib/rules";
+import type { GrantTerms } from "../lib/types";
 import { issueLabel } from "../lib/issueLabel";
 import { ReceiptZ, type Candidate, type GlRow, type ReceiptExtract, type ReceiptRecord, type Txn } from "../lib/types";
 import { FIXTURE_GRANTS } from "./fixtures";
@@ -47,10 +48,59 @@ async function main() {
     assert.equal(m.get("R1")!.matchedTxnId, "L0001");
     assert.equal(m.get("R1")!.matchedBy, "auto");
   });
-  await check("ambiguous: same amount, same vendor, both in window → unmatched with candidates", () => {
+  await check("same amount, same vendor, both in window: the closer date wins", () => {
     const m = matchReceipts([rin("R2", rx("Golden Gate Charter", "2026-07-10", 240000))], M);
-    assert.equal(m.get("R2")!.matchedTxnId, null);
-    assert.deepEqual(m.get("R2")!.candidates, ["L0004", "L0005"]);
+    assert.equal(m.get("R2")!.matchedTxnId, "L0004");
+  });
+  await check("ambiguous only when equidistant: same amount, receipt dated between two lines → unmatched with candidates", () => {
+    const lines = [gl("L0020", "2026-09-10", "Costco", -9556, "GA-2026-114", "A4"), gl("L0021", "2026-09-14", "Costco", -9556, "HLF-26-031", "B3")];
+    const m = matchReceipts([rin("R2b", rx("Costco Wholesale", "2026-09-12", 9556))], lines).get("R2b")!;
+    assert.equal(m.matchedTxnId, null);
+    assert.deepEqual(m.candidates, ["L0020", "L0021"]);
+  });
+  await check("monthly recurring identical amounts resolve by date (one-to-one, every month)", () => {
+    const months = ["07", "08", "09", "10"];
+    const lines = months.map((mm, i) => gl(`L00${30 + i}`, `2026-${mm}-01`, "Ninth & Corliss Holdings", -375000, "GA-2026-114", "A6", { txnType: "Bill", docRef: `NC-26${mm}` }));
+    const rs = months.map((mm) => rin(`RENT-${mm}`, rx("Ninth & Corliss Holdings LLC", `2026-${mm}-01`, 375000)));
+    const m = matchReceipts(rs, lines);
+    months.forEach((mm, i) => assert.equal(m.get(`RENT-${mm}`)!.matchedTxnId, `L00${30 + i}`, `${mm} rent`));
+  });
+  await check("split purchase: one receipt = sum of split rows → matched to the group, coverage documents every row", () => {
+    const split = (id: string, cents: number, cls: string | null, line: string | null) =>
+      gl(id, "2026-07-01", "Ninth & Corliss Holdings", cents, cls, line, { txnType: "Bill", docRef: "NC-2607" });
+    const lines = [split("L0040", -250000, "GA-2026-114", "A6"), split("L0041", -125000, null, null)];
+    const m = matchReceipts([rin("RS", rx("Ninth & Corliss Holdings LLC", "2026-07-01", 375000))], lines).get("RS")!;
+    assert.equal(m.matchedTxnId, "L0040");
+    assert.deepEqual(m.candidates, []);
+    const cov = receiptCoverage([{ receiptId: "RS", matchedTxnId: "L0040", extracted: rx("N", "2026-07-01", 375000) }], lines);
+    assert.deepEqual(cov.get("L0041")!.lineIds, ["L0040", "L0041"]);
+    assert.equal(cov.get("L0040")!.coveredCents, 375000);
+    // Rules: no MISSING/AMBIGUOUS/MISMATCH on either split row.
+    const recs: ReceiptRecord[] = [{ receiptId: "RS", fileName: "rent.pdf", extracted: rx("N", "2026-07-01", 375000), matchedTxnId: "L0040", matchScore: 1, matchedBy: "auto" }];
+    const glr: GlRow[] = lines.map((l) => ({ bankRef: l.txnId, date: l.date, description: l.description, amountCents: l.amountCents, account: l.account!, class: l.glClass ?? null, budgetLine: l.glBudgetLine ?? null, enteredBy: "bk" }));
+    const cands = new Map<string, Candidate>(lines.map((t) => [t.txnId, { txnId: t.txnId, grantId: t.glClass ?? null, budgetLine: t.glBudgetLine ?? null, origin: "gl" as const }]));
+    const fs = runRules({ txns: lines, gl: glr, staff: [], grants: FIXTURE_GRANTS, precedents: [], candidates: cands, receipts: recs, receiptThresholdCents: 7500 });
+    assert.deepEqual(fs.filter((f) => /RECEIPT|PURPOSE/.test(f.ruleId)).map((f) => `${f.txnId}:${f.ruleId}`), []);
+  });
+  await check("split group: receipt a cent off the group sum → one MISMATCH on the grant row, not MISSING", () => {
+    const lines = [gl("L0050", "2026-08-24", "Amazon", -8877, "GA-2026-114", "A3"), gl("L0051", "2026-08-24", "Amazon", -4641, null, null)];
+    const recs: ReceiptRecord[] = [{ receiptId: "RA", fileName: "amz.pdf", extracted: rx("Amazon.com", "2026-08-24", 13519), matchedTxnId: "L0050", matchScore: 0.5, matchedBy: "auto" }];
+    assert.equal(matchReceipts([rin("RA", recs[0]!.extracted)], lines).get("RA")!.matchedTxnId, "L0050");
+    const glr: GlRow[] = lines.map((l) => ({ bankRef: l.txnId, date: l.date, description: l.description, amountCents: l.amountCents, account: l.account!, class: l.glClass ?? null, budgetLine: l.glBudgetLine ?? null, enteredBy: "bk" }));
+    const cands = new Map<string, Candidate>(lines.map((t) => [t.txnId, { txnId: t.txnId, grantId: t.glClass ?? null, budgetLine: t.glBudgetLine ?? null, origin: "gl" as const }]));
+    const fs = runRules({ txns: lines, gl: glr, staff: [], grants: FIXTURE_GRANTS, precedents: [], candidates: cands, receipts: recs, receiptThresholdCents: 7500 });
+    assert.deepEqual(fs.filter((f) => /RECEIPT/.test(f.ruleId)).map((f) => `${f.txnId}:${f.ruleId}:${f.exposureCents}`), ["L0050:R-RECEIPT-MISMATCH:1"]);
+  });
+  await check("one receipt, duplicate entry the next day: the same-day line gets it, the duplicate stays undocumented", () => {
+    const lines = [gl("L0060", "2026-08-19", "Alder Street Print", -31767, "GA-2026-114", "A3", { txnType: "Bill", docRef: "4471" }),
+      gl("L0061", "2026-08-20", "Alder Street Print", -31767, "GA-2026-114", "A3", { txnType: "Bill", docRef: "4471" })];
+    assert.equal(matchReceipts([rin("RD", rx("Alder Street Print & Copy", "2026-08-19", 31767))], lines).get("RD")!.matchedTxnId, "L0060");
+  });
+  await check("global assignment: a weaker receipt cannot take a line a stronger one claims", () => {
+    const lines = [gl("L0070", "2026-07-01", "Costco", -5000, "GA-2026-114", "A3"), gl("L0071", "2026-07-04", "Costco", -5000, "GA-2026-114", "A3")];
+    const m = matchReceipts([rin("RX", rx("Costco", "2026-07-03", 5000)), rin("RY", rx("Costco", "2026-07-01", 5000))], lines);
+    assert.equal(m.get("RY")!.matchedTxnId, "L0070", "exact date first");
+    assert.equal(m.get("RX")!.matchedTxnId, "L0071", "then the remaining line");
   });
   await check("date window: ±5 days narrows exact-amount candidates", () => {
     const lines = [gl("L0010", "2026-07-01", "Costco", -9999, "GA-2026-114", "A3"), gl("L0011", "2026-07-20", "Costco", -9999, "GA-2026-114", "A3")];
@@ -161,6 +211,64 @@ async function main() {
     assert.equal(d("L0104").atRiskCents, 50, "mismatch: only the difference");
     assert.equal(d("L0103").ruleHits[0], "R-RECEIPT-MISSING");
     assert.ok(res.decisions.every((x) => x.status !== "blocked"));
+  });
+
+  // ---- documentation waiver (pipeline post-processing)
+  await check("waiver: agreement + matched receipt total / general funds / credit / immaterial; never with a finding or a disagreement", () => {
+    const g = (t: Txn): GlRow => ({ bankRef: t.txnId, date: t.date, description: t.description, amountCents: t.amountCents, account: t.account!, class: t.glClass ?? null, budgetLine: t.glBudgetLine ?? null, enteredBy: "bk" });
+    const big = gl("L0080", "2026-07-22", "Willowmark Art Supply", -26448, "HLF-26-031", "B2");
+    const cov = { receipt: { receiptId: "RW", fileName: "w.pdf", extracted: rx("Willowmark", "2026-07-22", 26448), matchedTxnId: "L0080", matchScore: 1, matchedBy: "auto" as const }, lineIds: ["L0080"], coveredCents: 26448 };
+    const agree = { grantId: "HLF-26-031", budgetLine: "B2" };
+    assert.match(documentationWaiver(big, g(big), agree, [], cov, false, 0.8)!, /receipt total/);
+    assert.equal(documentationWaiver(big, g(big), agree, [], cov, false, 0.6), null, "material + Steward unsure → stays a question even with a receipt");
+    assert.equal(documentationWaiver(big, g(big), agree, [], undefined, false, 0.8), null, "material, no receipt → stays a question");
+    assert.equal(documentationWaiver(big, g(big), agree, [], { ...cov, coveredCents: 26447 }, false, 0.8), null, "receipt total differs");
+    assert.equal(documentationWaiver(big, g(big), { grantId: null, budgetLine: null }, [], cov, false, 0.8), null, "Steward disagrees");
+    const soft = { ruleId: "R-RECEIPT-AMBIGUOUS", txnId: "L0080", status: "needs_review" as const, message: "", evidence: [] };
+    assert.equal(documentationWaiver(big, g(big), agree, [soft], cov, false, 0.8), null, "any finding keeps it open");
+    const general = gl("L0081", "2026-08-25", "Juniper Hall Events", -150000, null, null);
+    assert.match(documentationWaiver(general, g(general), { grantId: null, budgetLine: null }, [], undefined, false, 0.8)!, /general funds/);
+    const credit = gl("L0082", "2026-07-16", "Amazon", 2497, "HLF-26-031", "B2");
+    assert.match(documentationWaiver(credit, g(credit), agree, [], undefined, true, 0.8)!, /credit/);
+    assert.match(documentationWaiver({ ...big, amountCents: -3706 }, g({ ...big, amountCents: -3706 }), agree, [], undefined, true, 0.8)!, /materiality/);
+    assert.equal(documentationWaiver({ ...big, source: undefined }, g(big), agree, [], cov, false, 0.8), null, "bank-first lines unchanged");
+  });
+  await check("pipeline: a model documentation question on a documented line is waived (auto); a cited prohibition is not", async () => {
+    const lines = [gl("L0090", "2026-07-22", "Willowmark Art Supply", -26448, "HLF-26-031", "B2", { memo: "art supplies" }),
+      gl("L0091", "2026-07-23", "Willowmark Art Supply", -30000, "HLF-26-031", "B2", { memo: "art supplies" })];
+    const recs: ReceiptRecord[] = [{ receiptId: "RW", fileName: "w.pdf", extracted: rx("Willowmark Art Supply", "2026-07-22", 26448, ["Clay"]), matchedTxnId: "L0090", matchScore: 1, matchedBy: "auto" },
+      { receiptId: "RW2", fileName: "w2.pdf", extracted: rx("Willowmark Art Supply", "2026-07-23", 30000, ["Wine"]), matchedTxnId: "L0091", matchScore: 1, matchedBy: "auto" }];
+    const alcohol = FIXTURE_GRANTS.find((x) => x.grantId === "HLF-26-031")!.unallowable[0]!;
+    const fake: ModelClient = { async json() { return { data: { codings: [
+      { txnId: "L0090", grantId: "HLF-26-031", budgetLine: "B2", confidence: 0.75, rationale: "Art supplies.", clauseRefs: [],
+        concern: { status: "needs_review", reason: "Confirm the items were used by program participants.", clauseRef: null } },
+      { txnId: "L0091", grantId: "HLF-26-031", budgetLine: "B2", confidence: 0.8, rationale: "Receipt shows wine.", clauseRefs: [],
+        concern: { status: "blocked", reason: "Receipt shows wine.", clauseRef: alcohol.clauseRef } },
+    ] } as never, usage: { input: 0, output: 0 } }; } };
+    const glr: GlRow[] = lines.map((l) => ({ bankRef: l.txnId, date: l.date, description: l.description, amountCents: l.amountCents, account: l.account!, class: l.glClass ?? null, budgetLine: l.glBudgetLine ?? null, enteredBy: "bk" }));
+    const res = await runPipeline(fake, { txns: lines, gl: glr, staff: [], grants: FIXTURE_GRANTS, precedents: [], receipts: recs, receiptThresholdCents: 7500 });
+    const d = (id: string) => res.decisions.find((x) => x.txnId === id)!;
+    assert.equal(d("L0090").status, "auto");
+    assert.ok(d("L0090").checks!.some((c) => c.label === "Question waived"));
+    assert.match(d("L0090").rationale, /No exception: the matched receipt total equals the GL amount/);
+    assert.equal(d("L0091").status, "blocked", "verified prohibition is never waived");
+  });
+
+  // ---- indirect rate (GL-first)
+  await check("R-INDIRECT-RATE: booked indirect above rate × base → blocked with the excess split off; exact → nothing", () => {
+    const grant: GrantTerms = { ...FIXTURE_GRANTS[0]!, grantId: "FS-1", indirectCapPct: 10, indirectBase: "salaries",
+      budgetLines: [{ code: "C1", name: "Personnel", amount: 100000 }, { code: "C7", name: "Indirect", amount: 10000 }] };
+    const pay = (id: string, cents: number) => gl(id, "2026-10-16", "Pat Doe", cents, "FS-1", "C1", { account: "6010 Salaries & Wages", txnType: "Paycheck" });
+    const je = (cents: number) => gl("L0099", "2026-10-31", "Indirect 10% - Oct", cents, "FS-1", "C7", { account: "6900 Indirect Cost Allocation", txnType: "Journal Entry", docRef: "JE-2610-03" });
+    const run = (indirect: number) => indirectRateFindings({ txns: [pay("L0097", -500000), pay("L0098", -506523), je(indirect)], gl: [], staff: [], grants: [grant], precedents: [], candidates: new Map() });
+    const [f] = run(-100660);
+    assert.equal(f!.ruleId, "R-INDIRECT-RATE");
+    assert.equal(f!.status, "blocked");
+    assert.equal(f!.exposureCents, 8);
+    assert.deepEqual(f!.suggestion!.map((s) => s.amountCents), [-100652, -8]);
+    assert.match(f!.message, /\$1,006\.52/);
+    assert.deepEqual(run(-100652), []);
+    assert.equal(run(-100600)[0]!.status, "needs_review", "under-claim is a correction, not a prohibition");
   });
 
   if (failures) { console.log(`\n${failures} receipt check(s) failed`); process.exit(1); }

@@ -61,6 +61,18 @@ How to decide:
   (mention the missing memo in the rationale, keep confidence >= 0.75, no concern).
 - Materiality: for routine purchases under $250 that fit a budget line, do not raise a concern just
   because documentation is thin.
+- Documented lines: when receipt.totalMatchesGl is true and the receipt items, account, memo/department and the
+  bookkeeper's line are consistent with the grant's purpose, the line is documented: keep the coding with
+  confidence >= 0.8 and no concern. Differences between the item subtotal and the total (tax, tip, delivery,
+  fees), the number of cards/units behind a total, or a missing purpose note are not concerns.
+- receipt.splitAcrossLines means one receipt was split by the bookkeeper across those GL rows (e.g. part to a
+  grant, part to general funds). The split itself is the allocation; do not ask to "confirm the split" and do
+  not treat the other rows as duplicates or as a missing receipt.
+- Lines the bookkeeper left in general funds (gl.class null) that you also leave unrestricted need no concern,
+  even if the cost would be unallowable on a grant: no grant is charged. Credits/refunds (positive amounts)
+  reduce a grant charge and need no concern.
+- Recurring costs with a clear basis (rent and its split, utilities, insurance, stipend card loads matching the
+  monthly pattern, mileage reimbursements) follow the established coding; do not question them.
 - Apply the precedents (prior rulings by the organization or funder) when they are relevant, and cite them.
 - Your job is whether EACH transaction is allowable and correctly coded. Do NOT raise concerns about
   duplicates, cumulative budget totals or line overruns — deterministic checks handle those across all rows.
@@ -68,6 +80,14 @@ How to decide:
   entertainment, fines, fundraising, lobbying...), when it is outside the grant period, when it needs prior
   approval, or when its purpose genuinely does not fit any grant. Use "blocked" only when the grant terms
   clearly prohibit it.
+- A prohibition concern needs positive evidence in the memo, receipt or account (e.g. "staff appreciation
+  dinner", a bar tab, "gala"). Do not speculate that ordinary supplies or food "might have been for staff".
+- Every concern.reason must name the specific missing or contradicting fact and how it would change the coding
+  or allowability (e.g. "no receipt for a $1,461 charge and no memo saying which program"). Generic requests to
+  "confirm", "verify" or "document" are not concerns; if you cannot name such a fact, set concern to null.
+- Do not move a line off the bookkeeper's grant because its purpose is not explicitly listed in the restricted
+  purpose: supplies, materials and meals that fit a budget line by their nature are consistent with it. Propose
+  a different coding only on positive contrary evidence (receipt items, memo, department, a precedent).
 - Cite only clauseRefs that appear in the grant terms provided. Never invent a clause.
 - receipt (when present) is the vendor's own document for this line: its line items and purpose note are
   the best evidence of what was bought and for which program.

@@ -28,6 +28,9 @@ export function atRiskCentsForTxn(
     if (chargedGrant || d.grantId) return abs;
   }
 
+  const indirect = fs.find((f) => f.ruleId === "R-INDIRECT-RATE");
+  if (indirect?.exposureCents != null) return Math.min(abs, indirect.exposureCents);
+
   const effort = fs.find((f) => f.ruleId === "R-EFFORT");
   if (effort?.exposureCents != null) return Math.min(abs, effort.exposureCents);
   if (effort) {

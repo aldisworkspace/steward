@@ -6,6 +6,7 @@ export function ruleLabel(ruleId: string): string {
     "R-DUPLICATE": "Possible duplicate",
     "R-EFFORT": "Pay exceeds time records",
     "R-LINE-OVERRUN": "Over budget line",
+    "R-INDIRECT-RATE": "Indirect ≠ rate × base",
     "R-DEPOSIT-MISMATCH": "Ledger ≠ bank",
     "R-GL-DISAGREE": "Bookkeeper disagrees",
     "R-GL-ORPHAN": "No matching bank line",

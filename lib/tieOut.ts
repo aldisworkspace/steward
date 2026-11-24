@@ -97,7 +97,7 @@ export function indirectLineCode(grant: GrantTerms): string | null {
   return grant.budgetLines.find((l) => INDIRECT_LINE.test(l.name) || INDIRECT_LINE.test(l.code))?.code ?? null;
 }
 
-function baseLineCodes(grant: GrantTerms, base: "salaries" | "direct" | "mtdc", indirect: string | null) {
+export function baseLineCodes(grant: GrantTerms, base: "salaries" | "direct" | "mtdc", indirect: string | null) {
   return grant.budgetLines.filter((l) => {
     if (l.code === indirect) return false;
     if (base === "salaries") return SALARY_LINE.test(l.name) && !NOT_SALARY.test(l.name);

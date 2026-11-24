@@ -5,8 +5,9 @@
  * that a human must approve.
  */
 import { NON_CASH_TYPE, reconcileGlToBank } from "./matchLedger";
-import { daysApart, RECEIPT_DATE_WINDOW_DAYS } from "./matchReceipts";
+import { daysApart, RECEIPT_DATE_WINDOW_DAYS, receiptCoverage, receiptExempt } from "./matchReceipts";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
+import { applyRate, baseLineCodes, indirectLineCode } from "./tieOut";
 import { vendorKey } from "./vendorKey";
 import type { BankLine, Candidate, Evidence, Finding, GlRow, GrantTerms, Precedent, ReceiptRecord, StaffAllocation, Txn } from "./types";
 
@@ -182,6 +183,7 @@ export function runRules(input: RuleInput): Finding[] {
     }
   }
 
+  if (txns.some((t) => t.source === "gl")) findings.push(...indirectRateFindings(input));
   if (input.bankLines?.length) findings.push(...reconciliationFindings(input));
   findings.push(...receiptFindings(input));
 
@@ -232,11 +234,6 @@ export function reconciliationFindings(input: RuleInput): Finding[] {
   return out;
 }
 
-/** Lines that never carry a vendor receipt: payroll (time records are the evidence), journal entries. */
-function receiptExempt(t: Txn) {
-  return isPayrollTxn(t) || /journal|allocation|depreciation|accrual/i.test(t.txnType ?? "");
-}
-
 export const receiptNote = (r: ReceiptRecord) => {
   const x = r.extracted;
   if (!x) return `${r.fileName} (not read)`;
@@ -250,7 +247,8 @@ export const receiptNote = (r: ReceiptRecord) => {
  * - R-RECEIPT-AMBIGUOUS: a receipt ties between this line and others; a person must link it.
  * - R-RECEIPT-MISMATCH: matched receipt total differs by ≥1 cent, or its date is >5 days from the line.
  * - R-PURPOSE-UNCLEAR (GL-first): the same vendor is charged to ≥2 grants in one billing month and
- *   this line has neither a memo nor a receipt purpose note — the two-Office-Depot problem.
+ *   this line has neither a memo nor a matched receipt — the two-Office-Depot problem.
+ * A receipt matched to a split group documents every row of that group (lib/matchReceipts.ts).
  */
 export function receiptFindings(input: RuleInput): Finding[] {
   const out: Finding[] = [];
@@ -259,8 +257,8 @@ export function receiptFindings(input: RuleInput): Finding[] {
   const threshold = input.receiptThresholdCents ?? DEFAULT_RECEIPT_THRESHOLD_CENTS;
   const chargedGrant = (t: Txn) => t.glClass ?? input.candidates.get(t.txnId)?.grantId ?? null;
   const lines = input.txns.filter((t) => t.amountCents < 0 && !(glFirst && t.source === "bank"));
-  const byTxn = new Map<string, ReceiptRecord>();
-  for (const r of receipts ?? []) if (r.matchedTxnId) byTxn.set(r.matchedTxnId, r);
+  // A receipt documents its matched line, or the whole split group it was matched to.
+  const coverage = receiptCoverage(receipts ?? [], input.txns);
   const ambiguous = new Map<string, ReceiptRecord[]>();
   for (const r of receipts ?? []) {
     if (r.matchedTxnId) continue;
@@ -270,7 +268,8 @@ export function receiptFindings(input: RuleInput): Finding[] {
   for (const t of lines) {
     const grant = chargedGrant(t);
     const abs = -t.amountCents;
-    const r = byTxn.get(t.txnId);
+    const cov = coverage.get(t.txnId);
+    const r = cov?.receipt;
     if (receipts && !r && grant && abs >= threshold && !receiptExempt(t)) {
       const tie = ambiguous.get(t.txnId);
       if (tie?.length) {
@@ -286,13 +285,16 @@ export function receiptFindings(input: RuleInput): Finding[] {
           exposureCents: abs });
       }
     }
-    if (r?.extracted) {
+    // Report a receipt difference once per receipt: on its first grant-charged covered line.
+    const reportsFor = cov && (cov.lineIds.find((id) => { const l = input.txns.find((x) => x.txnId === id); return l && chargedGrant(l); }) ?? cov.lineIds[0]);
+    if (r?.extracted && cov && reportsFor === t.txnId) {
       const x = r.extracted;
-      const diff = x.totalCents == null ? null : Math.abs(x.totalCents - abs);
+      const split = cov.lineIds.length > 1;
+      const diff = x.totalCents == null ? null : Math.abs(x.totalCents - cov.coveredCents);
       const dateOff = x.date ? daysApart(x.date, t.date) : 0;
       if ((diff != null && diff >= 1) || dateOff > RECEIPT_DATE_WINDOW_DAYS) {
         const parts = [
-          diff != null && diff >= 1 ? `the receipt total is ${usd(x.totalCents!)} vs ${usd(t.amountCents)} in the GL (difference ${usd(diff)})` : null,
+          diff != null && diff >= 1 ? `the receipt total is ${usd(x.totalCents!)} vs ${usd(cov.coveredCents)} in the GL${split ? ` (split lines ${cov.lineIds.join(", ")})` : ""} (difference ${usd(diff)})` : null,
           dateOff > RECEIPT_DATE_WINDOW_DAYS ? `the receipt is dated ${x.date}, ${Math.round(dateOff)} days from the GL date ${t.date}` : null,
         ].filter(Boolean);
         out.push({ ruleId: "R-RECEIPT-MISMATCH", txnId: t.txnId, status: "needs_review",
@@ -315,7 +317,8 @@ export function receiptFindings(input: RuleInput): Finding[] {
       if (grants.size < 2) continue;
       for (const t of members) {
         const grant = chargedGrant(t);
-        if (!grant || t.memo.trim() || byTxn.get(t.txnId)?.extracted?.purposeText?.trim()) continue;
+        // A matched receipt documents what was bought; the question is only for undocumented lines.
+        if (!grant || t.memo.trim() || coverage.has(t.txnId)) continue;
         out.push({ ruleId: "R-PURPOSE-UNCLEAR", txnId: t.txnId, status: "needs_review",
           message: `${t.vendor ?? t.description} is charged to ${[...grants].join(" and ")} in ${t.date.slice(0, 7)}, and this ${usd(t.amountCents)} line has no memo or receipt note saying which program it was for. Attach a receipt or note which program this was for.`,
           evidence: members.filter((m) => m.txnId !== t.txnId).map<Evidence>((m) => ({ source: "gl", ref: m.txnId, note: `${m.date} ${usd(m.amountCents)} → ${chargedGrant(m) ?? "general funds"}` })),
@@ -367,4 +370,46 @@ function glEffortFinding(t: Txn, c: Candidate, txns: Txn[], staff: StaffAllocati
       ? [{ grantId: c.grantId, budgetLine: c.budgetLine, amountCents: share.allowedCents }, { grantId: null, budgetLine: null, amountCents: t.amountCents - share.allowedCents }]
       : [{ grantId: null, budgetLine: null, amountCents: t.amountCents }],
     exposureCents: over };
+}
+
+/**
+ * R-INDIRECT-RATE (GL-first): the indirect line is computed once, to the cent, from the stated base
+ * (e.g. 10% of the month's C1 salaries as booked). A booked allocation above the computed amount is a
+ * claim the funder returns → blocked, with the excess moved to unrestricted; below it → needs_review.
+ * Only grants whose terms state both the rate and its base are checked (a cap on direct costs is a
+ * ceiling, handled at tie-out).
+ */
+export function indirectRateFindings(input: RuleInput): Finding[] {
+  const out: Finding[] = [];
+  const lines = input.txns.filter((t) => t.source === "gl");
+  for (const g of input.grants) {
+    const code = indirectLineCode(g);
+    if (!code || g.indirectCapPct == null || !g.indirectBase) continue;
+    const rateBps = Math.round(g.indirectCapPct * 100);
+    const baseCodes = baseLineCodes(g, g.indirectBase, code);
+    const months = new Map<string, { base: number; booked: Txn[] }>();
+    for (const t of lines) {
+      if (t.glClass !== g.grantId) continue;
+      const m = months.get(t.date.slice(0, 7)) ?? { base: 0, booked: [] };
+      if (t.glBudgetLine === code) m.booked.push(t);
+      else if (t.glBudgetLine && baseCodes.includes(t.glBudgetLine)) m.base -= t.amountCents;
+      months.set(t.date.slice(0, 7), m);
+    }
+    for (const [month, m] of months) {
+      if (!m.booked.length) continue;
+      const booked = m.booked.reduce((a, t) => a - t.amountCents, 0);
+      const computed = applyRate(m.base, rateBps);
+      if (booked === computed) continue;
+      const t = [...m.booked].sort((a, b) => a.date.localeCompare(b.date) || a.txnId.localeCompare(b.txnId)).at(-1)!;
+      const over = booked - computed;
+      const ownCents = -t.amountCents;
+      out.push({ ruleId: "R-INDIRECT-RATE", txnId: t.txnId, status: over > 0 ? "blocked" : "needs_review",
+        message: `${month} indirect on ${g.grantId} ${code} is booked at ${usd(booked)}, but ${g.indirectCapPct}% of the ${g.indirectBase} base ${usd(m.base)} (lines ${baseCodes.join(", ")}) is ${usd(computed)} — ${over > 0 ? `over by ${usd(over)}. Claim the computed amount and move the excess to unrestricted.` : `under by ${usd(-over)}. Correct the allocation entry before billing.`}`,
+        evidence: [{ source: "contract", ref: `${g.grantId} indirect rate`, note: `${g.indirectCapPct}% of ${g.indirectBase} (${baseCodes.join(", ")})` },
+                   { source: "gl", ref: t.txnId, note: `${t.date} ${t.docRef ?? ""} ${usd(t.amountCents)} on ${code}`.replace(/\s+/g, " ") }],
+        ...(over > 0 && over <= ownCents ? { suggestion: [{ grantId: g.grantId, budgetLine: code, amountCents: t.amountCents + over }, { grantId: null, budgetLine: null, amountCents: -over }] } : {}),
+        exposureCents: Math.abs(over) });
+    }
+  }
+  return out;
 }

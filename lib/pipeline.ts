@@ -13,6 +13,7 @@ import { glPayrollShare, MATERIALITY_CENTS, receiptNote, runRules } from "./rule
 import { isSoftRule } from "./softRules";
 import { ruleLabel, tickForSource } from "./ruleLabels";
 import { applyTypedPrecedentsForTxn } from "./typedPrecedents";
+import { receiptCoverage, type ReceiptCoverage } from "./matchReceipts";
 import { type BankLine, type Candidate, type Decision, type DecisionCheck, type Evidence, type Finding, type GlRow, type GrantTerms, GrantTermsZ,
   type Precedent, type ReceiptRecord, type StaffAllocation, type Status, type Txn, type TypedPrecedent } from "./types";
 
@@ -26,10 +27,21 @@ export interface PipelineInput {
   receiptThresholdCents?: number;
 }
 
-function receiptByTxn(receipts: ReceiptRecord[] | undefined) {
-  const m = new Map<string, ReceiptRecord>();
-  for (const r of receipts ?? []) if (r.matchedTxnId && r.extracted) m.set(r.matchedTxnId, r);
+/** Receipt per line: a receipt matched to a split group documents every row of that group. */
+function receiptByTxn(receipts: ReceiptRecord[] | undefined, txns: Txn[]) {
+  const m = new Map<string, ReceiptCoverage<ReceiptRecord>>();
+  for (const [id, cov] of receiptCoverage((receipts ?? []).filter((r) => r.extracted), txns)) m.set(id, cov);
   return m;
+}
+
+/**
+ * Monthly allocation journal entries (fringe, indirect): their basis is payroll and the contract rate,
+ * both verified deterministically (R-EFFORT, R-INDIRECT-RATE, tie-out), so the model is not asked
+ * to second-guess them.
+ */
+const ALLOCATION_JE = /alloc|indirect|fringe|benefit|overhead/i;
+export function isAllocationEntry(t: Txn) {
+  return t.source === "gl" && /journal/i.test(t.txnType ?? "") && ALLOCATION_JE.test(`${t.description} ${t.memo} ${t.account ?? ""}`);
 }
 
 /** GL-first workspace: the primary records are GL detail lines (source "gl"). */
@@ -96,6 +108,14 @@ function codePayrollGl(t: Txn, staff: StaffAllocation[], txns: Txn[]): (Coding &
     rationale: `Charged per ${person.employee}'s time-and-effort allocation (${alloc}); the excess over ${Math.round(share.pct * 100)}% of the paycheck goes to general funds.` };
 }
 
+/** Allocation JE: keep the bookkeeper's claim when it names a real grant line (or general funds). */
+function codeAllocationEntry(t: Txn, grants: GrantTerms[]): Coding | null {
+  const cls = t.glClass ?? null, line = t.glBudgetLine ?? null;
+  if (cls && !grants.find((g) => g.grantId === cls)?.budgetLines.some((l) => l.code === line)) return null;
+  return { txnId: t.txnId, grantId: cls, budgetLine: cls ? line : null, confidence: 1, clauseRefs: [], concern: null,
+    rationale: `Monthly allocation journal entry (${t.docRef || t.description}) kept on the bookkeeper's ${cls ? `${cls}:${line}` : "general funds"} coding; its base and rate are checked deterministically.` };
+}
+
 /** Payroll is coded from time records (system of record for effort), not by the model. */
 function codePayroll(t: Txn, staff: StaffAllocation[]): (Coding & { splits?: Decision["splits"] }) | null {
   const person = matchStaffForTxn(t, staff);
@@ -134,7 +154,8 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
         clauseRefs: [], concern: null });
       continue;
     }
-    const p = !isPayroll(t) ? null : t.source === "gl" ? codePayrollGl(t, input.staff, input.txns) : codePayroll(t, input.staff);
+    const p = isAllocationEntry(t) ? codeAllocationEntry(t, input.grants)
+      : !isPayroll(t) ? null : t.source === "gl" ? codePayrollGl(t, input.staff, input.txns) : codePayroll(t, input.staff);
     if (p) codings.set(t.txnId, p); else forModel.push(t);
   }
 
@@ -157,7 +178,7 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
   }
 
   const validGrants = new Map(input.grants.map((g) => [g.grantId, new Set(g.budgetLines.map((l) => l.code))]));
-  const receipts = receiptByTxn(input.receipts);
+  const receipts = receiptByTxn(input.receipts, input.txns);
   const batchStarts: number[] = [];
   for (let i = 0; i < forModel.length; i += BATCH) batchStarts.push(i);
 
@@ -168,14 +189,19 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
         const g = glByRef.get(t.txnId);
         const vendorHistory = (history.get(vendorKey(t.description)) ?? []).filter((h) => h.txnId !== t.txnId).slice(-3)
           .map(({ class: c, budgetLine, memo, amountCents, date }) => ({ grantId: c, budgetLine, memo, amountUsd: amountCents / 100, date }));
-        const r = receipts.get(t.txnId)?.extracted;
+        const cov = receipts.get(t.txnId);
+        const r = cov?.receipt.extracted;
         return { txnId: t.txnId, date: t.date, description: t.description, amountUsd: t.amountCents / 100, memo: t.memo,
           gl: g ? { class: g.class, budgetLine: g.budgetLine, enteredBy: g.enteredBy,
             // GL-first: this is the bookkeeper's claim being checked, with its GL dimensions.
             ...(t.source === "gl" ? { account: t.account, department: t.department, docRef: t.docRef, txnType: t.txnType, vendor: t.vendor } : {}) } : null,
           vendorHistory,
           // Receipt text is untrusted data (escaped below with the rest of the row).
-          ...(r ? { receipt: { vendor: r.vendor, date: r.date, totalUsd: r.totalCents == null ? null : r.totalCents / 100,
+          ...(r && cov ? { receipt: { vendor: r.vendor, date: r.date, totalUsd: r.totalCents == null ? null : r.totalCents / 100,
+            // Deterministic facts: does the printed total equal what the GL booked (for a split purchase, all its rows)?
+            totalMatchesGl: r.totalCents != null && r.totalCents === cov.coveredCents,
+            ...(cov.lineIds.length > 1 ? { splitAcrossLines: cov.lineIds.map((id) => { const x = input.txns.find((y) => y.txnId === id)!;
+              return { txnId: id, class: x.glClass ?? null, budgetLine: x.glBudgetLine ?? null, amountUsd: x.amountCents / 100 }; }) } : {}),
             lineItems: r.lineItems.map((i) => ({ description: i.description, amountUsd: i.amountCents / 100 })), purposeText: r.purposeText } } : {}) };
       });
       try {
@@ -238,11 +264,17 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
 }
 
 // ---------------------------------------------------------------------------
-const GL_PASS_RULES = /^R-(EFFORT|UNALLOWABLE|PERIOD|PRIOR-APPROVAL|DEPOSIT-MISMATCH|GL-ORPHAN)/;
+const GL_PASS_RULES = /^R-(EFFORT|UNALLOWABLE|PERIOD|PRIOR-APPROVAL|DEPOSIT-MISMATCH|GL-ORPHAN|INDIRECT-RATE)/;
+// GL-first: the bookkeeper's claim is what gets invoiced, so cumulative line variance is checked on it too.
+const GL_FIRST_PASS_RULES = /^R-LINE-OVERRUN$/;
+
+/** Concern categories that ask a question rather than cite a verified prohibition. */
+const QUESTION_RULES = new Set(["R-NEEDS-DOCS", "R-MODEL-REVIEW"]);
 
 export function verify(input: PipelineInput, codings: Map<string, Coding & { splits?: Decision["splits"] }>): Omit<PipelineResult, "usage" | "errors"> {
   const glByRef = new Map(input.gl.map((r) => [r.bankRef, r]));
-  const receiptsByTxn = receiptByTxn(input.receipts);
+  const receiptsByTxn = receiptByTxn(input.receipts, input.txns);
+  const glFirst = isGlFirst(input.txns);
 
   // Pass M: verify Steward's own proposals.
   const modelCands = new Map<string, Candidate>([...codings.values()].map((c) => [c.txnId,
@@ -253,7 +285,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
   const glCands = new Map<string, Candidate>(input.gl.map((r) => [r.bankRef,
     { txnId: r.bankRef, grantId: r.class, budgetLine: r.budgetLine, origin: "gl" as const }]));
   const fg = runRules({ ...input, candidates: glCands })
-    .filter((f) => GL_PASS_RULES.test(f.ruleId))
+    .filter((f) => GL_PASS_RULES.test(f.ruleId) || (glFirst && GL_FIRST_PASS_RULES.test(f.ruleId)))
     .map((f) => ({ ...f, message: f.ruleId === "R-DEPOSIT-MISMATCH" || f.ruleId === "R-GL-ORPHAN" ? f.message : `Bookkeeper's coding: ${f.message}` }));
 
   const seen = new Set<string>();
@@ -300,7 +332,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
 
     // The model's concern is verified like any proposal: only an exact clause of the grant this line is
     // charged to (bookkeeper) or that Steward proposes can make it a block. Anything else is a question.
-    const cat =
+    let cat =
       c.concern && !materialityAuto
         ? categorizeConcern(
             { status: c.concern.status, reason: c.concern.reason, clauseRef: c.concern.clauseRef },
@@ -309,6 +341,19 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
             [g?.class, grantId, c.grantId, ...(splits ?? []).map((s) => s.grantId)],
           )
         : null;
+
+    // GL-first: a documentation question (or low confidence) is not an exception when Steward agrees with
+    // the bookkeeper, no rule fired, and the line is documented or nothing is at stake. A question citing a
+    // verified prohibition is never waived, and an undocumented, material, uncertain line stays a question.
+    const waiver = documentationWaiver(t, g, { grantId, budgetLine, splits }, txnFindings, receiptsByTxn.get(t.txnId), immaterial, c.confidence);
+    const waived = !!waiver && (!cat || QUESTION_RULES.has(cat.ruleId)) && (!!c.concern || c.confidence < 0.7);
+    const waivedCheck: DecisionCheck[] = [];
+    if (waived) {
+      note += ` No exception: ${waiver}, and the coding agrees with the bookkeeper.`;
+      if (c.concern) waivedCheck.push({ ruleId: null, label: "Question waived", message: `${c.concern.reason} (waived: ${waiver})`, tick: "Ⓑ" });
+      cat = null;
+    }
+
     let concernForApply: { status: Status; reason: string } | null =
       cat && c.concern ? { status: cat.status, reason: c.concern.reason } : null;
 
@@ -341,7 +386,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       budgetLine = precedentApply.budgetLine;
     }
 
-    let status: Status = c.confidence < 0.7 ? "needs_review" : "auto";
+    let status: Status = c.confidence < 0.7 && !waived ? "needs_review" : "auto";
     if (concernForApply) status = worst(status, concernForApply.status);
     for (const f of txnFindings) status = worst(status, f.status);
     if (precedentApply.forcedStatus) status = precedentApply.forcedStatus;
@@ -361,7 +406,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
         tick: "Ⓑ",
       });
     }
-    checks.push(...precedentApply.checks);
+    checks.push(...precedentApply.checks, ...waivedCheck);
 
     const knownClauseRefs: string[] = [];
     for (const gr of input.grants) {
@@ -390,7 +435,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     };
 
     const precById = new Map(input.precedents.map((p) => [p.id, p]));
-    const receipt = receiptsByTxn.get(t.txnId);
+    const receipt = receiptsByTxn.get(t.txnId)?.receipt;
     const evidence: Evidence[] = [
       t.source === "gl"
         ? { source: "gl", ref: t.txnId, note: `${t.date} ${t.vendor ?? t.description} ${(t.amountCents / 100).toFixed(2)} · ${t.account ?? ""}${t.docRef ? ` · #${t.docRef}` : ""}${t.memo ? ` — "${t.memo}"` : ""}` }
@@ -426,6 +471,29 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
   });
 
   return { decisions, findings, entries: proposeEntries(input, decisions, findings) };
+}
+
+/**
+ * Why a GL-first line needs no human question even if the model was unsure: returns the basis, or null.
+ * Requires agreement with the bookkeeper's coding and no finding of any kind (soft ones included). Bases:
+ * general funds on both sides (no grant charged), a credit, under materiality, or (confidence >= 0.7) a
+ * matched receipt whose total equals the GL amount.
+ */
+export function documentationWaiver(
+  t: Txn, g: GlRow | undefined, coding: { grantId: string | null; budgetLine: string | null; splits?: Decision["splits"] },
+  findings: Finding[], cov: ReceiptCoverage<ReceiptRecord> | undefined, immaterial: boolean, confidence: number,
+): string | null {
+  if (t.source !== "gl" || !g || coding.splits || findings.length) return null;
+  if ((g.class ?? null) !== coding.grantId) return null;
+  if (coding.grantId && (g.budgetLine ?? null) !== coding.budgetLine) return null;
+  if (coding.grantId === null) return "it stays in general funds, so no grant is charged";
+  if (t.amountCents > 0) return "it is a credit that reduces the grant charge";
+  if (immaterial) return `it is under the $${MATERIALITY_CENTS / 100} materiality threshold`;
+  // A material line is documented by a receipt whose total ties to the cent, unless Steward itself is unsure
+  // of the coding (confidence < 0.7): an unresolved doubt on a material charge stays a question.
+  const total = cov?.receipt.extracted?.totalCents;
+  if (cov && total != null && total === cov.coveredCents && confidence >= 0.7) return "the matched receipt total equals the GL amount";
+  return null;
 }
 
 /** Correcting journal entries for the bookkeeper's GL. Proposed only; a human must approve. */
