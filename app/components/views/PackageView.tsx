@@ -533,7 +533,7 @@ function Actions({ d, pkgKey }: { d: Detail; pkgKey: string }) {
               >
                 Mark ready for review
               </Button>
-              <p className="min-w-0 flex-1 text-sm text-ink-2">
+              <p className="w-full min-w-0 text-sm text-ink-2 sm:w-auto sm:flex-1">
                 {!app.isPreparer
                   ? "The preparer sends this to the reviewer. Switch “Acting as” to a preparer."
                   : failing.length
@@ -552,7 +552,7 @@ function Actions({ d, pkgKey }: { d: Detail; pkgKey: string }) {
               >
                 Sign package
               </Button>
-              <p id="sign-why" className="min-w-0 flex-1 text-sm text-ink-2">
+              <p id="sign-why" className="w-full min-w-0 text-sm text-ink-2 sm:w-auto sm:flex-1">
                 {signBlock ?? "All checks pass. Steward can't sign; you can."}
               </p>
             </>
@@ -569,7 +569,7 @@ function Actions({ d, pkgKey }: { d: Detail; pkgKey: string }) {
               >
                 Export CSV
               </ButtonLink>
-              <p className="min-w-0 flex-1 text-sm text-ink-2">
+              <p className="w-full min-w-0 text-sm text-ink-2 sm:w-auto sm:flex-1">
                 {d.status === "exported" ? "Exported. The CSV is built from the signed snapshot." : "Signed. Export the expenditure report for the funder."}
               </p>
             </>

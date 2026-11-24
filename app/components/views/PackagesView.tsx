@@ -65,6 +65,9 @@ export function PackagesView({ onGoData }: { onGoData: () => void }) {
   const dueByNext = nextDue ? open.filter((p) => p.dueDate && p.dueDate <= nextDue) : overdue;
   const later = open.length - dueByNext.length;
   const thisYear = nowMs ? new Date(nowMs).getFullYear() : 0;
+  const soon = !!nextDue && (dueLabel(nextDue, nowMs).days ?? 999) <= 45;
+  const headCount = soon ? dueByNext.length : open.length;
+  const dateText = (iso: string) => shortDate(iso, Number(iso.slice(0, 4)) !== thisYear);
   const worst = open.find((p) => p.failing.length > 0);
 
   return (
@@ -74,33 +77,45 @@ export function PackagesView({ onGoData }: { onGoData: () => void }) {
           <h1 className="font-serif text-xl text-ink text-balance sm:text-2xl">
             Every package is signed. <em className="italic text-ink-2">Nothing needs you.</em>
           </h1>
+        ) : soon || overdue.length === 0 ? (
+          <>
+            <h1 className="font-serif text-xl text-ink text-balance sm:text-2xl">
+              {headCount} {headCount === 1 ? "package needs" : "packages need"} you
+              {nextDue ? (
+                <>
+                  {" "}
+                  <em className="italic text-ink-2">{soon ? "before" : "— next due"} {dateText(nextDue)}</em>
+                </>
+              ) : null}
+              .
+            </h1>
+            {(overdue.length > 0 || later > 0) && (
+              <p className="mt-2 text-base">
+                {overdue.length > 0 && (
+                  <span className="font-medium text-redpen-ink">
+                    {overdue.length} {overdue.length === 1 ? "is" : "are"} already overdue.{" "}
+                  </span>
+                )}
+                {later > 0 && (
+                  <span className="text-ink-2">
+                    {later} more {later === 1 ? "is" : "are"} due later.
+                  </span>
+                )}
+              </p>
+            )}
+          </>
         ) : (
-          <h1 className="font-serif text-xl text-ink text-balance sm:text-2xl">
-            {dueByNext.length || open.length} {(dueByNext.length || open.length) === 1 ? "package needs" : "packages need"} you
-            {nextDue ? (
-              <>
-                {" "}
-                <em className="italic text-ink-2">
-                  before {shortDate(nextDue, Number(nextDue.slice(0, 4)) !== thisYear)}
-                </em>
-              </>
-            ) : null}
-            .
-          </h1>
-        )}
-        {(overdue.length > 0 || later > 0) && (
-          <p className="mt-2 text-base text-ink">
-            {overdue.length > 0 && (
-              <span className="font-medium text-redpen-ink">
-                {overdue.length} {overdue.length === 1 ? "is" : "are"} already overdue.{" "}
-              </span>
+          <>
+            <h1 className="font-serif text-xl text-ink text-balance sm:text-2xl">
+              {overdue.length} {overdue.length === 1 ? "package is" : "packages are"} overdue
+              <em className="italic text-ink-2"> — oldest first.</em>
+            </h1>
+            {nextDue && (
+              <p className="mt-2 text-base text-ink-2">
+                {open.length - overdue.length} more {open.length - overdue.length === 1 ? "is" : "are"} due by {dateText(nextDue)}.
+              </p>
             )}
-            {later > 0 && (
-              <span className="text-ink-2">
-                {later} more {later === 1 ? "is" : "are"} due later.
-              </span>
-            )}
-          </p>
+          </>
         )}
         {worst && (
           <p className="mt-3 max-w-[64ch] text-base text-ink-2">

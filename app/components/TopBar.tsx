@@ -44,8 +44,8 @@ export function TopBar({
   return (
     <header className="no-print z-30 border-b border-rule bg-paper/95 backdrop-blur-[6px] lg:sticky lg:top-0">
       <div className="mx-auto flex max-w-[1360px] flex-wrap items-center gap-x-6 gap-y-2 px-4 pt-3 sm:px-6 lg:flex-nowrap lg:pb-0 lg:pt-0">
-        <div className="flex min-w-0 items-center gap-3 lg:h-16">
-          <Link href="/" className="font-serif text-[22px] leading-none tracking-[-0.02em] text-ink">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3 lg:h-16">
+          <Link href="/" className="inline-flex min-h-11 items-center font-serif text-[22px] leading-none tracking-[-0.02em] text-ink">
             Steward
           </Link>
           <span className="hidden h-4 w-px bg-rule-strong sm:block" aria-hidden />
@@ -76,7 +76,7 @@ export function TopBar({
             <span className="hidden sm:inline">Acting as</span>
             <span className="sr-only sm:hidden">Acting as</span>
             <select
-              className="min-h-11 max-w-[9.5rem] rounded-pill sm:max-w-[14rem] border border-rule-strong bg-sheet py-1 pl-3 pr-7 text-sm text-ink sm:min-h-8"
+              className="min-h-11 max-w-[8.5rem] rounded-pill sm:max-w-[14rem] border border-rule-strong bg-sheet py-1 pl-3 pr-7 text-sm text-ink sm:min-h-8"
               value={actor}
               onChange={(e) => setActor(e.target.value)}
             >
