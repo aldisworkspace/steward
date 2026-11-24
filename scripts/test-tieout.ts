@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { packageCsv } from "../lib/packageCsv";
 import { parseGlDetail } from "../lib/parseGlDetail";
-import { applyRate, billingPeriods, buildPackage, type BuildPackageInput, type TieOutDecision } from "../lib/tieOut";
+import { applyRate, billingPeriods, buildPackage, invoicePeriods, noInvoiceReason, type BuildPackageInput, type TieOutDecision } from "../lib/tieOut";
 import type { Txn } from "../lib/types";
 import { FIXTURE_GRANTS_V2 } from "./fixturesV2";
 
@@ -204,6 +204,18 @@ check("billing periods: monthly for the city contract, quarterly for the foundat
   assert.deepEqual(q.map((x) => `${x.periodStart}..${x.periodEnd}`), ["2026-06-01..2026-08-31", "2026-09-01..2026-11-30"]);
   // No schedule in the terms: packages are cut quarterly (an assumption the UI states).
   assert.deepEqual(billingPeriods({ ...CITY, billing: null }, "2026-10-15").map((x) => x.periodStart), ["2026-07-01", "2026-10-01"]);
+});
+
+check("advance-paid grant (or terms with no invoicing) gets no invoice packages", () => {
+  const foundation = FIXTURE_GRANTS_V2[1]!;
+  assert.equal(foundation.billing?.costBasis, "advance");
+  assert.equal(noInvoiceReason(foundation), "advance");
+  assert.deepEqual(invoicePeriods(foundation, "2026-10-15"), []);
+  assert.equal(noInvoiceReason({ ...CITY, billing: { frequency: "none", invoiceDueDays: null, costBasis: null } }), "no_invoicing");
+  assert.deepEqual(invoicePeriods({ ...CITY, billing: { frequency: "none", invoiceDueDays: null, costBasis: "reimbursement" } }, "2026-10-15"), []);
+  assert.equal(noInvoiceReason(CITY), null);
+  assert.equal(invoicePeriods(CITY, "2026-10-15").length, 4, "the reimbursement contract is still invoiced monthly");
+  assert.equal(invoicePeriods({ ...CITY, billing: null }, "2026-10-15").length, 2, "no billing block: quarterly assumption unchanged");
 });
 
 check("v2 GL July package builds and ties (bookkeeper coding, no review yet)", () => {

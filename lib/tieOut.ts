@@ -336,6 +336,21 @@ export function periodBasis(grant: GrantTerms): { frequency: "monthly" | "quarte
   return { frequency: "quarterly", assumed: true };
 }
 
+/**
+ * Why a grant gets no invoice packages, or null when it is invoiced: an advance-paid grant (the funder pays up
+ * front and expects reports, not invoices) or terms that state no invoicing. A report schedule can come later.
+ */
+export function noInvoiceReason(grant: GrantTerms): "advance" | "no_invoicing" | null {
+  if (grant.billing?.costBasis === "advance") return "advance";
+  if (grant.billing?.frequency === "none") return "no_invoicing";
+  return null;
+}
+
+/** Invoice package periods: the billing periods of an invoiced grant, none for an advance-paid one. */
+export function invoicePeriods(grant: GrantTerms, lastDataDate: string | null) {
+  return noInvoiceReason(grant) ? [] : billingPeriods(grant, lastDataDate);
+}
+
 /** Billing periods from the terms, clipped to the grant period and to the last date with data. */
 export function billingPeriods(grant: GrantTerms, lastDataDate: string | null): { periodStart: string; periodEnd: string }[] {
   if (!lastDataDate || lastDataDate < grant.periodStart) return [];

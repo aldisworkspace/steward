@@ -27,11 +27,52 @@ function urgency(p: PackageSummary, nowMs: number) {
   return [done ? 1 : 0, due, p.periodStart] as const;
 }
 
+type NoInvoiceGrant = { grantId: string; program: string; funder: string; reason: "advance" | "no_invoicing" };
+
+/** Grants that get no invoice packages, said plainly so their absence isn't a mystery. */
+function NoInvoiceNote({ grants }: { grants: NoInvoiceGrant[] }) {
+  if (!grants.length) return null;
+  return (
+    <section className="mt-12" aria-labelledby="no-invoice-heading">
+      <h2 id="no-invoice-heading" className="font-serif text-lg text-ink">
+        No invoices <em className="italic text-ink-2">for these grants</em>
+      </h2>
+      <ul className="mt-4 divide-y divide-rule border-y border-rule">
+        {grants.map((g) => (
+          <li key={g.grantId} className="py-3 text-base">
+            <span className="text-ink">{g.program}</span>{" "}
+            <span className="text-sm text-ink-2">
+              {g.grantId} · {g.funder.replace(/\s*\(fictional[^)]*\)/i, "")}
+            </span>
+            <p className="mt-0.5 max-w-[64ch] text-sm text-ink-2">
+              {g.reason === "advance"
+                ? "Paid in advance, so there is nothing to invoice. Its spending reports aren't scheduled here yet."
+                : "The terms set no invoicing, so there are no invoice packages for it."}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function PackagesView({ onGoData }: { onGoData: () => void }) {
   const list = useQuery(api.packages.list) as PackageSummary[] | undefined;
+  const noInvoice = (useQuery(api.packages.noInvoice) ?? []) as NoInvoiceGrant[];
   const nowMs = useNowMs();
 
   if (list === undefined) return <PackagesSkeleton />;
+
+  if (list.length === 0 && noInvoice.length) {
+    return (
+      <div className="mx-auto max-w-[1040px]">
+        <h1 className="pb-2 pt-2 font-serif text-xl text-ink text-balance sm:pt-6 sm:text-2xl">
+          No invoice packages <em className="italic text-ink-2">to build.</em>
+        </h1>
+        <NoInvoiceNote grants={noInvoice} />
+      </div>
+    );
+  }
 
   if (list.length === 0) {
     return (
@@ -133,6 +174,7 @@ export function PackagesView({ onGoData }: { onGoData: () => void }) {
           </ul>
         </section>
       )}
+      <NoInvoiceNote grants={noInvoice} />
     </div>
   );
 }

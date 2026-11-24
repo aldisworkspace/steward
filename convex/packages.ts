@@ -10,7 +10,7 @@ import { assertDemoPasscode } from "./passcode";
 import { assertRole } from "./approverGuard";
 import { getSettingsDoc } from "./settings";
 import {
-  billingPeriods, periodBasis, buildPackage, withGlClaims, defaultInvoiceNo, type BillingPackage, type PriorPackage, type Resolution,
+  invoicePeriods, noInvoiceReason, periodBasis, buildPackage, withGlClaims, defaultInvoiceNo, type BillingPackage, type PriorPackage, type Resolution,
   type TieOutDecision,
 } from "../lib/tieOut";
 import type { GrantTerms, Txn } from "../lib/types";
@@ -87,7 +87,7 @@ export const list = query({
     const last = glDates[glDates.length - 1] ?? null;
     const out = [];
     for (const grant of inp.grants) {
-      for (const { periodStart, periodEnd } of billingPeriods(grant, last)) {
+      for (const { periodStart, periodEnd } of invoicePeriods(grant, last)) {
         const row = inp.packages.find((p) => p.grantId === grant.grantId && p.periodStart === periodStart);
         const pkg = frozen(row) ? (row!.snapshot as BillingPackage) : build(inp, grant, periodStart, periodEnd);
         out.push(summary(grant, periodStart, periodEnd, row, pkg));
@@ -97,12 +97,27 @@ export const list = query({
   },
 });
 
+/** Confirmed grants that get no invoice packages (advance-paid, or no invoicing in the terms), for the Packages screen. */
+export const noInvoice = query({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("grants").collect();
+    return rows
+      .filter((g) => g.status === "ready" && g.terms)
+      .map((g) => g.terms as GrantTerms)
+      .flatMap((t) => {
+        const reason = noInvoiceReason(t);
+        return reason ? [{ grantId: t.grantId, program: t.program, funder: t.funder, reason }] : [];
+      });
+  },
+});
+
 export const get = query({
   args: { grantId: v.string(), periodStart: v.string(), periodEnd: v.string() },
   handler: async (ctx, { grantId, periodStart, periodEnd }) => {
     const inp = await loadInputs(ctx);
     const grant = inp.grants.find((g) => g.grantId === grantId);
-    if (!grant) return null;
+    if (!grant || noInvoiceReason(grant)) return null;
     const row = inp.packages.find((p) => p.grantId === grantId && p.periodStart === periodStart);
     const pkg = frozen(row) ? (row!.snapshot as BillingPackage) : build(inp, grant, periodStart, periodEnd);
     return { ...summary(grant, periodStart, periodEnd, row, pkg), package: pkg, live: !frozen(row) };
@@ -139,7 +154,8 @@ export const markReady = mutation({
     const inp = await loadInputs(ctx);
     const grant = inp.grants.find((g) => g.grantId === args.grantId);
     if (!grant) throw new ConvexError(`Grant ${args.grantId} is not ready`);
-    if (!billingPeriods(grant, args.periodEnd).some((p) => p.periodStart === args.periodStart && p.periodEnd === args.periodEnd)) {
+    if (noInvoiceReason(grant)) throw new ConvexError(`${args.grantId} is ${noInvoiceReason(grant) === "advance" ? "paid in advance" : "not invoiced under its terms"}, so it has no invoice packages.`);
+    if (!invoicePeriods(grant, args.periodEnd).some((p) => p.periodStart === args.periodStart && p.periodEnd === args.periodEnd)) {
       throw new ConvexError(`${args.periodStart}–${args.periodEnd} is not a billing period of ${args.grantId}`);
     }
     const row = inp.packages.find((p) => p.grantId === args.grantId && p.periodStart === args.periodStart);
@@ -251,7 +267,7 @@ export const seedDemoHistory = mutation({
     const last = glDates[glDates.length - 1] ?? null;
     const filed: string[] = [];
     for (const grant of first.grants) {
-      for (const { periodStart, periodEnd } of billingPeriods(grant, last)) {
+      for (const { periodStart, periodEnd } of invoicePeriods(grant, last)) {
         if (periodEnd > through) continue;
         // Decide what was still open on this grant's lines in the period (in order, so priors chain).
         let inp = await loadInputs(ctx);
