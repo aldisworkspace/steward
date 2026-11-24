@@ -20,6 +20,20 @@ export default defineSchema({
     .index("by_fileName", ["fileName"])
     .index("by_grantId", ["grantId"]),
 
+  /**
+   * Demo seeds only: confirmed contracts of another sample set, set aside (with their extracted terms) while a
+   * different set is loaded, so switching back restores them instead of re-reading the PDFs. Never read by the
+   * pipeline, packages or UI.
+   */
+  parkedGrants: defineTable({
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    grantId: v.optional(v.string()),
+    terms: v.any(),
+    source: v.optional(v.union(v.literal("demo"), v.literal("upload"))),
+    parkedAt: v.string(),
+  }).index("by_fileName", ["fileName"]),
+
   transactions: defineTable({
     txnId: v.string(),
     date: v.string(),

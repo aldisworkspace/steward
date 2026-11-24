@@ -38,15 +38,18 @@ async function seedGlSet(client: ConvexHttpClient, passcode: string | undefined,
   }));
   const precedents = (JSON.parse(precedentsText) as Omit<Precedent, "id">[]).map((p) => ({ date: p.date, by: p.by, ruling: p.ruling, scope: p.scope }));
 
-  // Keep already-extracted grants of this set; everything else (e.g. the legacy demo grants) is dropped.
+  // Keep already-extracted grants of this set (restoring any parked by another set's seed); other sample sets'
+  // contracts are parked with their terms, not deleted; everything else (e.g. the legacy demo grants) is dropped.
   const startedAt = Date.now();
   // A fresh sample starts from drafts: earlier signatures (e.g. from a walkthrough) are dropped.
   await client.mutation(api.packages.clearForDemoSeed, { passcode });
   const existing = await Promise.all(set.grants.map((f) => client.query(api.grants.getByFileName, { fileName: f })));
   const keepIds = existing.filter((g) => g?._id).map((g) => g!._id as Id<"grants">);
+  const otherSets = Object.values(GL_SETS).filter((s) => s !== set).flatMap((s) => s.grants);
   await client.mutation(api.ingest.startGlWorkspace, {
     passcode, lines: gl.lines, bankLines, staffAllocations: parseStaff(staffText), grantDocIds: keepIds,
     dataSource: "demo", precedents, clearReceipts: true,
+    keepGrantFileNames: [...set.grants], parkGrantFileNames: otherSets,
   });
   // Each GL-first set is a different (fictional) organization from the legacy demo.
   await client.mutation(api.settings.update, { passcode, organizationName: set.organizationName });

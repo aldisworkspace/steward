@@ -290,6 +290,36 @@ async function setDataSource(ctx: MutationCtx, dataSource: "demo" | "custom") {
   }
 }
 
+/**
+ * Demo seeds switch between sample sets. Each set's confirmed contracts (by file name) are parked with their
+ * extracted terms when another set loads, and restored when their own set loads again, so a reseed never
+ * re-extracts a contract it already read.
+ */
+async function parkAndRestoreGrants(ctx: MutationCtx, parkFileNames: string[], keepFileNames: string[]) {
+  const park = new Set(parkFileNames.filter((f) => !keepFileNames.includes(f)));
+  const at = new Date().toISOString();
+  for (const g of await ctx.db.query("grants").collect()) {
+    if (!park.has(g.fileName) || g.status !== "ready" || !g.terms) continue;
+    const prior = await ctx.db.query("parkedGrants").withIndex("by_fileName", (q) => q.eq("fileName", g.fileName)).collect();
+    for (const p of prior) await ctx.db.delete(p._id);
+    await ctx.db.insert("parkedGrants", { storageId: g.storageId, fileName: g.fileName, grantId: g.grantId, terms: g.terms, source: g.source, parkedAt: at });
+    await ctx.db.delete(g._id);
+  }
+  for (const fileName of keepFileNames) {
+    const parked = await ctx.db.query("parkedGrants").withIndex("by_fileName", (q) => q.eq("fileName", fileName)).first();
+    if (!parked) continue;
+    const live = await ctx.db.query("grants").withIndex("by_fileName", (q) => q.eq("fileName", fileName)).first();
+    if (live?.status === "ready" && live.terms) {
+      await ctx.db.delete(parked._id);
+      continue;
+    }
+    const fields = { storageId: parked.storageId, fileName, grantId: parked.grantId, terms: parked.terms, source: parked.source, status: "ready" as const, error: undefined };
+    if (live) await ctx.db.patch(live._id, fields);
+    else await ctx.db.insert("grants", fields);
+    await ctx.db.delete(parked._id);
+  }
+}
+
 async function clearRunState(ctx: MutationCtx) {
   for (const table of ["decisions", "proposedEntries", "inboxResolutions", "runs"] as const) {
     for (const row of await ctx.db.query(table).collect()) await ctx.db.delete(row._id);
@@ -312,6 +342,10 @@ export const startGlWorkspace = mutation({
     precedents: v.optional(v.array(precedent)),
     /** Drop previously uploaded receipts (demo reseed). Default keeps them. */
     clearReceipts: v.optional(v.boolean()),
+    /** Demo seeds: this set's contract file names. Confirmed contracts parked earlier are restored and kept. */
+    keepGrantFileNames: v.optional(v.array(v.string())),
+    /** Demo seeds: other sets' contract file names. Their confirmed contracts are parked instead of deleted. */
+    parkGrantFileNames: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     assertDemoPasscode(args.passcode);
@@ -319,7 +353,10 @@ export const startGlWorkspace = mutation({
       for (const row of await ctx.db.query("receipts").collect()) await ctx.db.delete(row._id);
     }
     if (!args.lines.length) throw new ConvexError("Upload a GL detail file with at least one expense line.");
+    await parkAndRestoreGrants(ctx, args.parkGrantFileNames ?? [], args.keepGrantFileNames ?? []);
+    const keepNames = new Set(args.keepGrantFileNames ?? []);
     const keep = new Set(args.grantDocIds.map(String));
+    for (const g of await ctx.db.query("grants").collect()) if (keepNames.has(g.fileName)) keep.add(String(g._id));
     for (const table of ["transactions", "glRows", "staffAllocations", "bankLines"] as const) {
       for (const row of await ctx.db.query(table).collect()) await ctx.db.delete(row._id);
     }
