@@ -25,6 +25,19 @@ export default defineSchema({
    * different set is loaded, so switching back restores them instead of re-reading the PDFs. Never read by the
    * pipeline, packages or UI.
    */
+  /**
+   * Pilot requests from the landing page ("run it on your own books"). Contact details only: no files are
+   * accepted here; documents are exchanged privately after a reply. Read in the Convex dashboard.
+   */
+  pilotRequests: defineTable({
+    name: v.string(),
+    organization: v.string(),
+    email: v.string(),
+    system: v.string(),
+    note: v.string(),
+    createdAt: v.string(),
+  }).index("by_email", ["email"]),
+
   parkedGrants: defineTable({
     storageId: v.id("_storage"),
     fileName: v.string(),

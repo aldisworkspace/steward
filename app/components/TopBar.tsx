@@ -130,7 +130,10 @@ export function TopBar({
       </div>
       {viewOnly && (
         <p className="border-t border-rule px-4 py-1.5 text-center text-xs text-ink-2 sm:px-6">
-          View-only demo: you can look at everything; changes need the demo key in the link.
+          View-only demo: you can look at everything; changes need the demo key in the link.{" "}
+          <Link href="/#pilot" className="font-medium text-ink underline underline-offset-2">
+            Run it on your own books — request a pilot
+          </Link>
         </p>
       )}
     </header>

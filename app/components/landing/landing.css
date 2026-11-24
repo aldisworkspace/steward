@@ -1362,3 +1362,138 @@ html:has(.ld) {
     border-radius: 12px;
   }
 }
+
+/* ---------- pilot ---------- */
+@media (min-width: 1024px) {
+  .ld-section--pilot {
+    min-height: 0;
+  }
+}
+
+.ld-pilot__points {
+  margin-top: 28px;
+  display: grid;
+  gap: 12px;
+  color: var(--ld-muted);
+}
+
+.ld-pilot__points li {
+  padding-left: 22px;
+  position: relative;
+}
+
+.ld-pilot__points li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 10px;
+  height: 1px;
+  background: var(--ld-green-dark);
+}
+
+.ld-pilot__form {
+  display: grid;
+  gap: 18px;
+}
+
+.ld-pilot__row {
+  display: grid;
+  gap: 18px;
+}
+
+@media (min-width: 640px) {
+  .ld-pilot__row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.ld-field {
+  display: grid;
+  gap: 8px;
+}
+
+.ld-field__label {
+  font-size: 14px;
+  color: var(--ld-muted);
+}
+
+.ld-field__opt {
+  margin-left: 6px;
+  color: var(--ld-faint);
+}
+
+.ld-field__input {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--ld-line-strong);
+  background: var(--ld-raised);
+  color: var(--ld-ink);
+  font: inherit;
+  font-size: 16px;
+  transition: border-color 160ms ease;
+}
+
+.ld-field__input:hover {
+  border-color: var(--ld-muted);
+}
+
+.ld-field__input:focus-visible {
+  outline: 2px solid var(--ld-green-dark);
+  outline-offset: 2px;
+  border-color: transparent;
+}
+
+.ld-field__input--area {
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.ld-field__input::placeholder {
+  color: var(--ld-faint);
+}
+
+.ld-pilot__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+}
+
+.ld-pilot__actions .ld-micro {
+  margin-top: 0;
+}
+
+.ld-pilot__actions .ld-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.ld-pilot__error {
+  color: var(--ld-red-dark);
+  font-size: 15px;
+}
+
+.ld-pilot__done {
+  padding: 28px;
+  border-radius: 18px;
+  border: 1px solid var(--ld-line-strong);
+  background: var(--ld-raised);
+}
+
+.ld-pilot__done-title {
+  font-family: var(--ld-serif);
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+
+.ld-pilot__hp {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}

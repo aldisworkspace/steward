@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { landingSans, landingSerif } from "./fonts";
 import { HeroCard } from "./ProductPanels";
+import { PilotForm } from "./PilotForm";
 import { ProductReveal } from "./ProductReveal";
 import { Strike } from "./Strike";
 import "./landing.css";
@@ -86,6 +87,7 @@ export function LandingPage() {
             <a href="#how">How it works</a>
             <a href="#safeguards">Safeguards</a>
             <a href="#testing">Testing</a>
+            <a href="#pilot">Pilot</a>
             <a href={GITHUB} target="_blank" rel="noreferrer">
               GitHub
             </a>
@@ -302,6 +304,27 @@ export function LandingPage() {
                 </p>
               </li>
             </ul>
+          </div>
+        </section>
+        {/* Pilot: contact details only; real documents only after a reply, in a private workspace. */}
+        <section id="pilot" className="ld-section ld-section--pilot" aria-labelledby="pilot-title">
+          <div className="ld-wrap ld-split">
+            <div>
+              <Eyebrow>Pilot</Eyebrow>
+              <h2 id="pilot-title" className="ld-h2">
+                Run it on <em className="ld-italic">your own</em> books.
+              </h2>
+              <p className="ld-body">
+                The public demo runs on synthetic data. For your own GL export, receipts and contracts, we set up a
+                private workspace and walk through the first month&rsquo;s package with you.
+              </p>
+              <ul className="ld-pilot__points">
+                <li>Your files stay in a workspace only you and we can see.</li>
+                <li>Nothing is posted, signed or paid. Steward only proposes.</li>
+                <li>Delete everything when the pilot ends.</li>
+              </ul>
+            </div>
+            <PilotForm />
           </div>
         </section>
       </main>
