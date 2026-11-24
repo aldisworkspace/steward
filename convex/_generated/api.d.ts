@@ -18,6 +18,7 @@ import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
 import type * as deadlines from "../deadlines.js";
 import type * as demoAuth from "../demoAuth.js";
+import type * as evalDev from "../evalDev.js";
 import type * as grants from "../grants.js";
 import type * as ingest from "../ingest.js";
 import type * as packages from "../packages.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   dashboard: typeof dashboard;
   deadlines: typeof deadlines;
   demoAuth: typeof demoAuth;
+  evalDev: typeof evalDev;
   grants: typeof grants;
   ingest: typeof ingest;
   packages: typeof packages;
