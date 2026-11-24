@@ -3,7 +3,10 @@ import { query } from "./_generated/server";
 import { computeFundBreakdown } from "../lib/fundBreakdown";
 import { computeInboxOpenMetrics } from "../lib/inboxOpenMetrics";
 import { isInboxResolved } from "../lib/inboxResolved";
+import { issueLabel } from "../lib/issueLabel";
 import { ruleLabel } from "../lib/ruleLabels";
+import { receiptCoverage } from "../lib/matchReceipts";
+import type { ReceiptExtract, Txn } from "../lib/types";
 
 const STATUS_RANK: Record<string, number> = { blocked: 0, needs_review: 1, auto: 2 };
 
@@ -54,7 +57,7 @@ export const dashboardStats = query({
       if (!t || t.amountCents >= 0) continue;
       const risk = d.atRiskCents ?? 0;
       if (risk <= 0) continue;
-      const label = d.ruleHits[0] ? ruleLabel(d.ruleHits[0]) : "Steward's judgment";
+      const label = issueLabel(d.ruleHits[0] ?? null, d.status);
       breakdownMap.set(label, (breakdownMap.get(label) ?? 0) + risk);
     }
     for (const [label, cents] of breakdownMap) breakdown.push({ label, cents });
@@ -322,5 +325,59 @@ export const auditFeed = query({
       return [...summaries, ...other].slice(0, 40);
     }
     return rows.filter((r) => !hide.has(r.action));
+  },
+});
+
+/** Receipts relevant to one line: the one matched to it, plus any the matcher could not choose between. */
+export const caseReceipts = query({
+  args: { txnId: v.string() },
+  handler: async (ctx, { txnId }) => {
+    const [rows, txns] = await Promise.all([ctx.db.query("receipts").collect(), ctx.db.query("transactions").collect()]);
+    // A receipt matched to one row of a split purchase documents every row of that group.
+    const coverage = receiptCoverage(
+      rows.filter((r) => r.status === "ready").map((r) => ({ ...r, extracted: (r.extracted as ReceiptExtract | null) ?? null })),
+      txns as unknown as Txn[],
+    );
+    const covering = coverage.get(txnId)?.receipt._id;
+    const hits = rows.filter(
+      (r) => r.matchedTxnId === txnId || r._id === covering || (r.matchCandidates ?? []).includes(txnId),
+    );
+    return Promise.all(
+      hits.map(async (r) => ({
+        _id: r._id,
+        fileName: r.fileName,
+        contentType: r.contentType ?? null,
+        status: r.status,
+        url: await ctx.storage.getUrl(r.storageId),
+        matched: r.matchedTxnId === txnId || r._id === covering,
+        coversGroup: r._id === covering && r.matchedTxnId !== txnId,
+        matchedBy: r.matchedBy,
+        matchedTxnId: r.matchedTxnId,
+        candidates: r.matchCandidates ?? [],
+        extracted: r.extracted,
+        matchNote: r.matchNote ?? null,
+      })),
+    );
+  },
+});
+
+/** One receipt's file URL, for the preview in the Data view. */
+export const receiptUrl = query({
+  args: { receiptId: v.id("receipts") },
+  handler: async (ctx, { receiptId }) => {
+    const r = await ctx.db.get(receiptId);
+    if (!r) return null;
+    return { url: await ctx.storage.getUrl(r.storageId), contentType: r.contentType ?? null, fileName: r.fileName };
+  },
+});
+
+/** Who did what on one package (prepared, signed, reopened, exported), newest first. */
+export const packageAudit = query({
+  args: { packageId: v.id("packages") },
+  handler: async (ctx, { packageId }) => {
+    const rows = await ctx.db.query("auditLog").order("desc").take(400);
+    return rows
+      .filter((r) => r.targetId === String(packageId))
+      .map((r) => ({ at: r.at, actor: r.actor, action: r.action, why: r.why }));
   },
 });

@@ -1,22 +1,31 @@
 import Link from "next/link";
-import { RedPenStrikeClient } from "./components/landing/RedPenStrikeClient";
+import { landingSans, landingSerif } from "./components/landing/fonts";
+import { Strike } from "./components/landing/Strike";
+import "./components/landing/landing.css";
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-paper px-6">
-      <div className="max-w-md rounded-[8px] border border-rule bg-sheet p-8 text-center">
-        <p className="text-[17px] text-ink-2">
-          <RedPenStrikeClient text="Page" />
-        </p>
-        <p className="mt-2 font-display text-[28px] font-semibold text-money">Not in the ledger.</p>
-        <p className="mt-3 text-[14px] text-ink-2">This page doesn&apos;t exist. The books still balance.</p>
-        <Link
-          href="/"
-          className="mt-6 inline-block rounded-[6px] bg-money px-4 py-2 text-[14px] font-semibold text-white hover:brightness-95"
-        >
-          Back to Steward
-        </Link>
-      </div>
+    <div className={`ld ${landingSans.variable} ${landingSerif.variable}`}>
+      <main className="ld-404">
+        <div className="ld-wrap">
+          <p className="ld-eyebrow">
+            <span aria-hidden className="ld-eyebrow__rule" />
+            404
+          </p>
+          <h1 className="ld-h1">
+            <Strike draw delay={200} label="struck:">
+              Page
+            </Strike>{" "}
+            <em className="ld-italic">not in the ledger.</em>
+          </h1>
+          <p className="ld-lead">This page doesn&rsquo;t exist. The books still balance.</p>
+          <div className="ld-cta-row">
+            <Link href="/" className="ld-btn ld-btn--primary">
+              Back to Steward
+            </Link>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

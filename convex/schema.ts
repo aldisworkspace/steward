@@ -20,13 +20,72 @@ export default defineSchema({
     .index("by_fileName", ["fileName"])
     .index("by_grantId", ["grantId"]),
 
+  /**
+   * Demo seeds only: confirmed contracts of another sample set, set aside (with their extracted terms) while a
+   * different set is loaded, so switching back restores them instead of re-reading the PDFs. Never read by the
+   * pipeline, packages or UI.
+   */
+  parkedGrants: defineTable({
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    grantId: v.optional(v.string()),
+    terms: v.any(),
+    source: v.optional(v.union(v.literal("demo"), v.literal("upload"))),
+    parkedAt: v.string(),
+  }).index("by_fileName", ["fileName"]),
+
   transactions: defineTable({
     txnId: v.string(),
     date: v.string(),
     description: v.string(),
     amountCents: v.number(),
     memo: v.string(),
+    // GL-first fields (optional so legacy bank-first rows stay valid).
+    source: v.optional(v.union(v.literal("gl"), v.literal("bank"))),
+    vendor: v.optional(v.string()),
+    account: v.optional(v.string()),
+    department: v.optional(v.string()),
+    docRef: v.optional(v.string()),
+    txnType: v.optional(v.string()),
+    glClass: v.optional(v.union(v.string(), v.null())),
+    glBudgetLine: v.optional(v.union(v.string(), v.null())),
+    enteredBy: v.optional(v.string()),
+    programApprovedBy: v.optional(v.union(v.string(), v.null())),
+    programApprovedAt: v.optional(v.string()),
   }).index("by_txnId", ["txnId"]),
+
+  /** Optional bank statement lines (GL-first workspaces); used only for reconciliation. */
+  bankLines: defineTable({
+    lineId: v.string(),
+    date: v.string(),
+    description: v.string(),
+    amountCents: v.number(),
+    memo: v.string(),
+  }).index("by_lineId", ["lineId"]),
+
+  /** Receipts / vendor invoices (PDF or image). The model reads them; matching is deterministic. */
+  receipts: defineTable({
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    contentType: v.optional(v.string()),
+    status: v.union(v.literal("uploaded"), v.literal("extracting"), v.literal("ready"), v.literal("error")),
+    error: v.optional(v.string()),
+    extracted: v.union(
+      v.object({
+        vendor: v.union(v.string(), v.null()),
+        date: v.union(v.string(), v.null()),
+        totalCents: v.union(v.number(), v.null()),
+        lineItems: v.array(v.object({ description: v.string(), amountCents: v.number(), quantity: v.optional(v.union(v.number(), v.null())) })),
+        purposeText: v.union(v.string(), v.null()),
+      }),
+      v.null(),
+    ),
+    matchedTxnId: v.union(v.string(), v.null()),
+    matchScore: v.union(v.number(), v.null()),
+    matchedBy: v.union(v.literal("auto"), v.literal("human"), v.null()),
+    matchCandidates: v.optional(v.array(v.string())),
+    matchNote: v.optional(v.string()),
+  }).index("by_matchedTxnId", ["matchedTxnId"]),
 
   glRows: defineTable({
     bankRef: v.string(),
@@ -133,7 +192,28 @@ export default defineSchema({
     approverName: v.string(),
     approverTitle: v.string(),
     dataSource: v.union(v.literal("demo"), v.literal("custom")),
+    /** Grant-charged lines at or above this need a receipt (default $75). */
+    receiptThresholdCents: v.optional(v.number()),
+    // Name-based roles until real auth lands (see convex/approverGuard.ts).
+    programApprovers: v.optional(v.array(v.string())),
+    preparers: v.optional(v.array(v.string())),
+    reviewers: v.optional(v.array(v.string())),
   }).index("by_key", ["key"]),
+
+  /** Monthly/quarterly billing package (invoice + expenditure report) per grant and period. */
+  packages: defineTable({
+    grantId: v.string(),
+    periodStart: v.string(),
+    periodEnd: v.string(),
+    invoiceNo: v.string(),
+    status: v.union(v.literal("draft"), v.literal("ready_for_review"), v.literal("signed"), v.literal("exported")),
+    preparedBy: v.union(v.string(), v.null()),
+    reviewedBy: v.union(v.string(), v.null()),
+    /** buildPackage() output frozen at signing (null until signed). */
+    snapshot: v.union(v.any(), v.null()),
+    createdAt: v.string(),
+    signedAt: v.union(v.string(), v.null()),
+  }).index("by_grant_period", ["grantId", "periodStart"]),
 
   inboxResolutions: defineTable({
     txnId: v.string(),

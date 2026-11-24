@@ -14,11 +14,11 @@ export function StatusBar({
     <div
       role="status"
       aria-live="polite"
-      className="status-toast-enter fixed bottom-4 left-4 z-50 flex items-center gap-3 rounded-[8px] border border-rule bg-sheet px-4 py-2 text-[14px] text-ink shadow-[0_8px_24px_rgba(14,27,44,0.12)]"
+      className="no-print status-toast-enter fixed bottom-4 left-4 right-4 z-50 flex items-center gap-4 rounded-md bg-ink px-4 py-3 text-base text-sheet shadow-float sm:right-auto sm:max-w-[520px]"
     >
-      <span>{message}</span>
+      <span className="min-w-0">{message}</span>
       {undoLabel && onUndo && (
-        <button type="button" className="font-medium text-[#2563EB]" onClick={onUndo}>
+        <button type="button" className="ml-auto min-h-11 shrink-0 font-medium text-sheet underline underline-offset-4 sm:min-h-0" onClick={onUndo}>
           {undoLabel}
         </button>
       )}

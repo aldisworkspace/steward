@@ -53,10 +53,11 @@ async function main() {
     {
       status: "blocked",
       reason: "Fundraising event deposit prohibited",
-      clauseRef: "HLF-26-031; §4.2",
+      clauseRef: "HLF-26-031 §3.1",
     },
     FIXTURE_GRANTS,
     { txnId: "T-TEST", date: "2026-09-01", description: "PALACE OF FINE ARTS", amountCents: -350000, memo: "" },
+    ["HLF-26-031"],
   );
   if (!cat.ruleId.startsWith("R-UNALLOWABLE") && cat.ruleId !== "R-PRIOR-APPROVAL") {
     throw new Error(`categorizeConcern expected unallowable, got ${cat.ruleId}`);

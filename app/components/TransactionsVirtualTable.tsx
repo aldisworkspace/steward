@@ -37,16 +37,17 @@ export function TransactionsVirtualTable({
   });
 
   return (
-    <div ref={parentRef} className="max-h-[70vh] overflow-auto border border-rule bg-sheet">
-      <table className="w-full border-collapse text-[13px]">
+    <div ref={parentRef} className="max-h-[70vh] overflow-auto rounded-md border border-rule bg-sheet shadow-sheet">
+      <table className="w-full min-w-[860px] border-collapse text-sm">
+        <caption className="sr-only">Ledger lines with Steward&apos;s coding</caption>
         <thead className="sticky top-0 z-10 bg-sheet">
-          <tr className="border-b border-rule text-left text-ink-2">
-            <th className="px-3 py-2 font-medium">Date</th>
-            <th className="px-3 py-2 font-medium">Description</th>
-            <th className="px-3 py-2 font-medium">Memo</th>
-            <th className="px-3 py-2 text-right font-medium">Amount</th>
-            <th className="px-3 py-2 font-medium">Steward&apos;s coding</th>
-            <th className="px-3 py-2 font-medium">Status</th>
+          <tr className="border-b border-rule text-left text-xs text-ink-2">
+            <th scope="col" className="px-3 py-2 font-medium">Date</th>
+            <th scope="col" className="px-3 py-2 font-medium">Description</th>
+            <th scope="col" className="px-3 py-2 font-medium">Memo</th>
+            <th scope="col" className="px-3 py-2 text-right font-medium">Amount</th>
+            <th scope="col" className="px-3 py-2 font-medium">Steward&apos;s coding</th>
+            <th scope="col" className="px-3 py-2 font-medium">Status</th>
           </tr>
         </thead>
         <tbody style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}>
@@ -58,8 +59,8 @@ export function TransactionsVirtualTable({
                 className="absolute left-0 w-full border-b border-rule"
                 style={{ transform: `translateY(${vRow.start}px)`, height: `${vRow.size}px` }}
               >
-                <td className="px-3 py-2">{r.date}</td>
-                <td className="max-w-[200px] truncate px-3 py-2">{r.description}</td>
+                <td className="tabular whitespace-nowrap px-3 py-2 text-ink-2">{r.date}</td>
+                <td className="max-w-[220px] truncate px-3 py-2">{r.description} <span className="text-ink-2">{r.txnId}</span></td>
                 <td className="max-w-[120px] truncate px-3 py-2 text-ink-2">{r.memo}</td>
                 <td className="tabular px-3 py-2 text-right">{fmtTableAmount(r.amountCents)}</td>
                 <td className="px-3 py-2">
@@ -74,7 +75,6 @@ export function TransactionsVirtualTable({
                         description: r.description,
                         memo: r.memo,
                       })}
-                      className="text-[13px]"
                     />
                   ) : (
                     stewardCodingLabel({
@@ -89,7 +89,9 @@ export function TransactionsVirtualTable({
                     })
                   )}
                 </td>
-                <td className="px-3 py-2">{r.status.replace("_", " ")}</td>
+                <td className={`whitespace-nowrap px-3 py-2 ${r.status === "blocked" ? "text-redpen-ink" : r.status === "auto" ? "text-ink-2" : "text-amber-ink"}`}>
+                  {r.status === "auto" ? "Clean" : r.status === "blocked" ? "Not allowed" : "Needs you"}
+                </td>
               </tr>
             );
           })}

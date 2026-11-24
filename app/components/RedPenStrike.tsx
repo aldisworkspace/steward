@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+/**
+ * The red-pen signature: a hand-drawn stroke through the wrong coding.
+ * Drawn as a background on an inline span with box-decoration-break: clone, so every wrapped
+ * line gets its own stroke. Draws once (left to right); static under reduced motion.
+ */
+const STROKE =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 10" preserveAspectRatio="none"><path d="M1 6 C 14 3, 32 8, 52 5 S 84 7, 99 5" fill="none" stroke="#E0433A" stroke-width="2.2" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`,
+  );
 
 export function RedPenStrike({
   text,
@@ -11,43 +20,22 @@ export function RedPenStrike({
   className?: string;
   animate?: boolean;
 }) {
-  const textRef = useRef<HTMLSpanElement>(null);
-  const [width, setWidth] = useState(0);
-
-  useEffect(() => {
-    const el = textRef.current;
-    if (!el) return;
-    const measure = () => setWidth(el.getBoundingClientRect().width);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [text]);
-
-  const w = Math.max(width, 1);
-
   return (
-    <span className={`relative inline-block text-ink-2 ${className}`}>
-      <span ref={textRef}>{text}</span>
-      {w > 0 && (
-        <svg
-          className="pointer-events-none absolute left-0 top-[55%] overflow-visible"
-          width={w}
-          height={8}
-          viewBox={`0 0 ${w} 8`}
-          aria-hidden
-        >
-          <path
-            d={`M1 5 C ${w * 0.15} 2, ${w * 0.35} 7, ${w * 0.55} 4 S ${w * 0.85} 6, ${w - 1} 5`}
-            fill="none"
-            stroke="var(--redpen)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            className={animate ? "redpen-strike-animate" : undefined}
-            pathLength={120}
-          />
-        </svg>
-      )}
+    <span className={`text-ink-2 ${className}`}>
+      <span className="sr-only">Struck out: </span>
+      <span
+        className={animate ? "redpen-strike-draw" : undefined}
+        style={{
+          backgroundImage: `url("${STROKE}")`,
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "0 60%",
+          backgroundSize: "100% 0.55em",
+          WebkitBoxDecorationBreak: "clone",
+          boxDecorationBreak: "clone",
+        }}
+      >
+        {text}
+      </span>
     </span>
   );
 }

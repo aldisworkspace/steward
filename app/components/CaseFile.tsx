@@ -1,884 +1,737 @@
 "use client";
 
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
-import { messageFromConvexError } from "../lib/convexError";
+import type { Id } from "@/convex/_generated/dataModel";
 import { contractClausesFromDecision } from "@/lib/clauseText";
-import type { RulingType } from "@/lib/types";
-import { vendorKey } from "@/lib/vendorKey";
 import { stewardCodingLabel } from "@/lib/codingLabel";
-import type { GrantTerms } from "@/lib/types";
 import { displayVendor } from "@/lib/displayVendor";
-import { fmtDate, fmtSentenceAmount, fmtTableAmount } from "../format";
-import { caseNarrative } from "@/lib/caseNarrative";
-import { EvidenceChip } from "./EvidenceChip";
-import { RedPenStrike } from "./RedPenStrike";
-import { RubberStamp } from "./RubberStamp";
-import { StatusPill } from "./StatusPill";
-import { FundLabelDisplay, BudgetLineDisplay } from "./FundLabelDisplay";
-import { GlossaryTerm } from "./GlossaryTerm";
-import { getFundLabel } from "@/lib/fundLabels";
+import { getFundLabel, grantLineText } from "@/lib/fundLabels";
+import { issueLabel } from "@/lib/issueLabel";
 import { shouldIgnoreAppShortcut } from "@/lib/keyboardGuard";
+import type { GrantTerms, RulingType } from "@/lib/types";
+import { vendorKey } from "@/lib/vendorKey";
+import { messageFromConvexError } from "../lib/convexError";
+import { fixTypeOf } from "../lib/fixType";
+import { shortDate } from "../lib/packageText";
+import { shortName, useApp } from "./AppContext";
+import { GlossaryTerm } from "./GlossaryTerm";
+import { RedPenStrike } from "./RedPenStrike";
+import { Badge } from "./ui/Badge";
+import { Button } from "./ui/Button";
+import { fmtUsd, Money } from "./ui/Money";
 
-type CaseData = {
-  txn: { txnId: string; date: string; description: string; amountCents: number; memo: string } | null;
-  decision: {
-    txnId: string;
-    grantId: string | null;
-    budgetLine: string | null;
-    splits?: unknown;
-    status: string;
-    rationale: string;
-    modelRationale?: string;
-    checks?: { ruleId: string | null; label: string; message: string; tick: string }[];
-    evidence?: unknown;
-    ruleHits: string[];
-  } | null;
-  gl: { class: string | null; budgetLine: string | null } | null;
+type Txn = {
+  txnId: string;
+  date: string;
+  description: string;
+  amountCents: number;
+  memo: string;
+  vendor?: string;
+  account?: string;
+  department?: string;
+  docRef?: string;
+  enteredBy?: string;
+  programApprovedBy?: string | null;
+};
+type Decision = {
+  txnId: string;
+  grantId: string | null;
+  budgetLine: string | null;
+  splits?: unknown;
+  status: string;
+  rationale: string;
+  modelRationale?: string;
+  checks?: { ruleId: string | null; label: string; message: string }[];
+  evidence?: unknown;
+  ruleHits: string[];
+};
+export type CaseData = {
+  txn: Txn | null;
+  decision: Decision | null;
+  gl: { class: string | null; budgetLine: string | null; enteredBy?: string; account?: string } | null;
   entry: { id: string; lines: unknown } | null;
-  grantTerms: { fileName: string; terms: unknown }[];
 };
 
-type CaseDataLoaded = Omit<CaseData, "txn" | "decision"> & {
-  txn: NonNullable<CaseData["txn"]>;
-  decision: NonNullable<CaseData["decision"]>;
-};
+/** Red-pen strike draws once per case per session. */
+const seenStrikes = new Set<string>();
 
-/** Red-pen strike animates once per case across remounts. */
-const seenStrikeKeys = new Set<string>();
+export function vendorName(t: { vendor?: string; description: string }) {
+  const raw = t.vendor || t.description;
+  return /[a-z]/.test(raw) ? raw : displayVendor(raw);
+}
 
-type CaseFileProps = {
+export function CaseFile({
+  data,
+  grantTerms,
+  resolved,
+  onResolved,
+  onRestored,
+  onWhy,
+  onBack,
+  cmdOpen,
+  helpOpen,
+  panelOpen,
+}: {
   data: CaseData | null | undefined;
-  actingAsSteward: boolean;
-  actorLabel: string;
-  passcode?: string;
-  canWrite: boolean;
-  onStatusLine: (m: string | null) => void;
-  onWhy: () => void;
-  onResolved?: () => void;
-  onRollback?: (txnId: string) => void;
-  onActionFailed?: (message: string) => void;
-  onActionDone?: (
-    info: { kind: "approve"; entryId: string; txnId: string } | { kind: "ack" | "reject"; txnId: string },
-  ) => void;
-  spentByLine?: Record<string, number>;
-  strikeKey: string;
-  cmdOpen?: boolean;
-  helpOpen?: boolean;
-  panelOpen?: boolean;
-};
-
-export function CaseFile(props: CaseFileProps) {
-  if (!props.data?.txn || !props.data.decision) {
+  grantTerms: GrantTerms[];
+  resolved: boolean;
+  onResolved: (txnId: string) => void;
+  onRestored: (txnId: string) => void;
+  onWhy: (txnId: string) => void;
+  onBack?: () => void;
+  cmdOpen: boolean;
+  helpOpen: boolean;
+  panelOpen: boolean;
+}) {
+  if (data === undefined) return <CaseSkeleton />;
+  if (!data?.txn || !data.decision) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-[14px] text-ink-2">
-        Pick an item on the left to see what happened and what to do.
+      <div className="flex min-h-[320px] items-center justify-center p-8 text-center text-base text-ink-2">
+        Pick a line on the left to see what Steward found and what to do.
       </div>
     );
   }
-  const data: CaseDataLoaded = {
-    ...props.data,
-    txn: props.data.txn,
-    decision: props.data.decision,
-  };
-  return <CaseFileInner key={data.txn.txnId} {...props} data={data} />;
-}
-
-function grantTermsList(rows: CaseData["grantTerms"]): GrantTerms[] {
-  return rows.map((g) => g.terms as GrantTerms).filter(Boolean);
-}
-
-function lineName(grantTerms: CaseData["grantTerms"], grantId: string | null, code: string | null) {
-  if (!grantId || !code) return undefined;
-  for (const g of grantTerms) {
-    const t = g.terms as { grantId?: string; budgetLines?: { code: string; name: string }[] } | null;
-    if (t?.grantId === grantId) return t.budgetLines?.find((l) => l.code === code)?.name;
-  }
-  return undefined;
-}
-
-function CaseFileInner({
-  data,
-  actingAsSteward,
-  actorLabel,
-  passcode,
-  canWrite,
-  onStatusLine,
-  onWhy,
-  onResolved,
-  onRollback,
-  onActionFailed,
-  onActionDone,
-  spentByLine = {},
-  strikeKey,
-  cmdOpen = false,
-  helpOpen = false,
-  panelOpen = false,
-}: CaseFileProps & { data: CaseDataLoaded }) {
-  const [evidenceOpen, setEvidenceOpen] = useState(
-    () => data.decision.status === "blocked" || data.decision.status === "needs_review",
+  return (
+    <CaseInner
+      key={data.txn.txnId}
+      txn={data.txn}
+      decision={data.decision}
+      gl={data.gl}
+      entry={data.entry}
+      grantTerms={grantTerms}
+      resolved={resolved}
+      onResolved={onResolved}
+      onRestored={onRestored}
+      onWhy={onWhy}
+      onBack={onBack}
+      cmdOpen={cmdOpen}
+      helpOpen={helpOpen}
+      panelOpen={panelOpen}
+    />
   );
-  type EvidenceFocus = "bank" | "gl" | "contract" | "time_record" | "precedent";
-  const [evidenceFocus, setEvidenceFocus] = useState<EvidenceFocus | null>(null);
+}
 
-  function focusEvidence(source: EvidenceFocus) {
-    setEvidenceOpen(true);
-    setEvidenceFocus((prev) => (prev === source ? null : source));
-    requestAnimationFrame(() => {
-      document.getElementById(`evidence-${source}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    });
-  }
-
-  function evidenceChipClass(source: EvidenceFocus) {
-    return `chip-button rounded-[6px] border px-2 py-1 text-[13px] ${
-      evidenceFocus === source ? "border-ink bg-sheet font-semibold text-ink" : "border-rule text-ink-2 hover:border-ink-2"
-    }`;
-  }
+function CaseInner({
+  txn,
+  decision,
+  gl,
+  entry,
+  grantTerms,
+  resolved,
+  onResolved,
+  onRestored,
+  onWhy,
+  onBack,
+  cmdOpen,
+  helpOpen,
+  panelOpen,
+}: {
+  txn: Txn;
+  decision: Decision;
+  gl: CaseData["gl"];
+  entry: CaseData["entry"];
+  grantTerms: GrantTerms[];
+  resolved: boolean;
+  onResolved: (txnId: string) => void;
+  onRestored: (txnId: string) => void;
+  onWhy: (txnId: string) => void;
+  onBack?: () => void;
+  cmdOpen: boolean;
+  helpOpen: boolean;
+  panelOpen: boolean;
+}) {
+  const app = useApp();
+  const receipts = useQuery(api.ui.caseReceipts, { txnId: txn.txnId });
   const approve = useMutation(api.approvals.approveEntry);
   const reject = useMutation(api.approvals.rejectEntry);
   const acknowledge = useMutation(api.approvals.acknowledgeDecision);
   const overrideDecision = useMutation(api.approvals.overrideDecision);
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [rejectNote, setRejectNote] = useState("");
-  const [ackOpen, setAckOpen] = useState(false);
-  const [ackNote, setAckNote] = useState("");
+  const undoApprove = useMutation(api.approvals.undoApproveEntry);
+  const undoResolution = useMutation(api.approvals.undoInboxResolution);
+  const linkReceipt = useMutation(api.receipts.link);
+  const uploadUrl = useMutation(api.receipts.generateUploadUrl);
+  const registerReceipt = useMutation(api.receipts.register);
+
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
-  const [overrideNote, setOverrideNote] = useState("");
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [precedentScope, setPrecedentScope] = useState<"txn" | "vendor">("txn");
-  const [rulingType, setRulingType] = useState<RulingType>("allow");
-  const [entryStamp, setEntryStamp] = useState<"approved" | "returned" | null>(null);
-  const [stampAnimate] = useState(
-    () => typeof window === "undefined" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-  const stampDate = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const stampBy = actorLabel.replace(/\s*\(.*\)$/, "");
+  const [note, setNote] = useState("");
+  const [scope, setScope] = useState<"txn" | "vendor">("txn");
+  const [approvalRef, setApprovalRef] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  function defaultRuling(ruleId: string | null | undefined): RulingType {
-    if (ruleId === "R-PRIOR-APPROVAL") return "prior_approval_granted";
-    if (ruleId === "R-DUPLICATE") return "not_duplicate";
-    if (ruleId?.startsWith("R-UNALLOWABLE")) return "disallow";
-    return "allow";
-  }
-
+  const ruleId = decision.ruleHits[0] ?? null;
+  const fix = fixTypeOf(ruleId, decision.status);
+  const blocked = decision.status === "blocked";
+  const clean = decision.status === "auto";
+  const lineName = (gid: string | null, code: string | null) =>
+    grantTerms.find((g) => g.grantId === gid)?.budgetLines.find((l) => l.code === code)?.name;
+  const label = (gid: string | null, line: string | null, splits?: unknown) =>
+    stewardCodingLabel({
+      amountCents: txn.amountCents,
+      grantId: gid,
+      budgetLine: line,
+      splits: splits as { grantId: string | null; budgetLine: string | null; amount: number }[] | undefined,
+      lineName,
+      grants: grantTerms,
+      description: txn.description,
+      memo: txn.memo,
+    });
+  const booksLabel = gl?.class !== undefined && gl ? label(gl.class, gl.budgetLine) : null;
+  const stewardLabel = label(decision.grantId, decision.budgetLine, decision.splits);
+  const disagrees = !!booksLabel && booksLabel !== stewardLabel;
+  const strikeKey = txn.txnId;
+  const strikeAnimate = !seenStrikes.has(strikeKey);
   useEffect(() => {
-    onStatusLine(null);
-  }, [data.txn.txnId, onStatusLine]);
-
-  const { txn, decision, gl, entry, grantTerms } = data;
-  const grantScope = decision.grantId ?? "ALL";
-  const strikeAnimate = !seenStrikeKeys.has(strikeKey);
-  useEffect(() => {
-    seenStrikeKeys.add(strikeKey);
+    seenStrikes.add(strikeKey);
   }, [strikeKey]);
 
-  const vendorLabel = vendorKey(txn.description);
-  const terms = grantTermsList(grantTerms);
-  const ln = (gid: string | null, code: string | null) => lineName(grantTerms, gid, code);
-
-  const bkLabel = gl?.class
-    ? stewardCodingLabel({
-        amountCents: txn.amountCents,
-        grantId: gl.class,
-        budgetLine: gl.budgetLine,
-        lineName: ln,
-        grants: terms,
-        description: txn.description,
-        memo: txn.memo,
-      })
-    : null;
-
-  const stewardLabel = stewardCodingLabel({
-    amountCents: txn.amountCents,
-    grantId: decision.grantId,
-    budgetLine: decision.budgetLine,
-    splits: decision.splits as { grantId: string | null; budgetLine: string | null; amount: number }[] | undefined,
-    lineName: ln,
-    grants: terms,
-    description: txn.description,
-    memo: txn.memo,
-  });
-
   const evidence = (decision.evidence ?? []) as { source: string; ref: string; note: string }[];
-  const clauses = contractClausesFromDecision(terms, evidence);
+  const clauses = contractClausesFromDecision(grantTerms, evidence);
+  const found = issueLabel(ruleId, decision.status);
+  const why = (decision.modelRationale ?? decision.rationale ?? "").trim();
+  const checks = decision.checks ?? [];
+  const matched = receipts?.find((r) => r.matched);
+  const candidates = (receipts ?? []).filter((r) => !r.matched);
+  const fundTitle = getFundLabel(decision.grantId, grantTerms).title;
+  const movesFund = (gl?.class ?? null) !== decision.grantId;
 
-  const lines = (entry?.lines ?? []) as {
-    account: string;
-    class: string | null;
-    budgetLine: string | null;
-    debit: number;
-    credit: number;
-  }[];
-  const dr = lines.reduce((a, l) => a + l.debit, 0);
-  const cr = lines.reduce((a, l) => a + l.credit, 0);
-  const balanced = dr === cr && lines.length > 0;
+  const entryLines = (entry?.lines ?? []) as { account: string; class: string | null; budgetLine: string | null; debit: number; credit: number }[];
 
-  async function onApprove() {
-    if (!canWrite) return;
-    setActionError(null);
-    if (entry) {
-      const txnId = txn.txnId;
-      onResolved?.();
-      try {
-        await approve({
-          entryId: entry.id,
-          by: actorLabel,
-          note: "Approved in inbox review",
-          passcode,
-        });
-        if (!mountedRef.current) return;
-        setEntryStamp("approved");
-        onActionDone?.({ kind: "approve", entryId: entry.id, txnId });
-      } catch (e) {
-        const msg = messageFromConvexError(e);
-        if (!mountedRef.current) return;
-        onRollback?.(txnId);
-        onActionFailed?.(msg);
-        setActionError(msg);
-      }
-      return;
-    }
-    if (!ackNote.trim() && !ackOpen) {
-      setAckOpen(true);
-      return;
-    }
-    if (!ackNote.trim()) return;
-    const txnId = txn.txnId;
-    onResolved?.();
+  // One primary action per case, worded as what it does.
+  let primaryLabel: string;
+  let todo: string;
+  const debits = entryLines.filter((l) => l.debit > 0);
+  const moved = debits.reduce((a, l) => a + l.debit, 0) || Math.abs(txn.amountCents);
+  const partial = moved < Math.abs(txn.amountCents);
+  const moveLabel = partial ? `Move ${fmtUsd(moved)} off the grant` : "Move to general funds";
+  if (fix === "approval") {
+    // Can't be billed until the funder approves. Way out: record the approval (a human resolution that keeps the
+    // bookkeeper's coding), or approve Steward's entry that moves the blocked portion off the grant.
+    primaryLabel = "Record funder approval";
+    todo = blocked
+      ? `This can't be billed until the funder approves it in writing. Record the approval reference to bill it as booked${entry ? `, or move ${partial ? `the ${fmtUsd(moved)} over the limit` : "it"} to general funds` : ""}.`
+      : "The contract needs the funder's written OK for this. Record the approval reference, or override with a note.";
+  } else if (entry) {
+    primaryLabel = blocked && !decision.grantId ? moveLabel : "Approve the correction";
+    const dest = debits.length ? [...new Set(debits.map((l) => grantLineText(l.class, l.budgetLine, grantTerms)))].join(" and ") : stewardLabel;
+    todo = `Steward drafted a journal entry that moves ${fmtUsd(moved)} to ${dest}. Approve it, or override with a note to keep the bookkeeper's coding.`;
+  } else if (fix === "not_allowed") {
+    primaryLabel = decision.grantId ? `Move to ${fundTitle}` : "Move to general funds";
+    todo = `This can't be billed to the grant. Move it to ${decision.grantId ? fundTitle : "general funds"}, or override with a documented reason.`;
+  } else if (fix === "receipt") {
+    primaryLabel =
+      candidates.length === 1
+        ? `Link ${candidates[0]!.fileName}`
+        : matched
+          ? ruleId === "R-NEEDS-DOCS"
+            ? "Confirm it's documented"
+            : "Accept the receipt on file"
+          : "Attach receipt";
+    todo =
+      candidates.length > 1
+        ? "Several receipts could belong to this line. Link the right one, or attach a new file."
+        : candidates.length === 1
+          ? "One receipt looks like it belongs here. Link it, or attach a different file."
+          : matched
+            ? ruleId === "R-NEEDS-DOCS"
+              ? "A receipt is on file, but Steward wants the support behind it (who received what). Confirm it's documented, or override with a note."
+              : "A receipt is on file; confirm it covers this charge."
+            : `Charges at or above the receipt threshold need a receipt before the funder will pay.`;
+  } else if (fix === "payroll") {
+    primaryLabel = "Accept Steward's split";
+    todo = "Pay charged to the grant doesn't match the time sheet. Accept Steward's split, or override with a note.";
+  } else if (fix === "amount") {
+    primaryLabel = ruleId === "R-DUPLICATE" ? "Confirm it's a duplicate" : "Agree with Steward";
+    todo = "The amounts don't line up across the books, bank or receipt. Agree with Steward's reading, or override with a note.";
+  } else {
+    primaryLabel = disagrees || movesFund ? `Move to ${decision.grantId ? fundTitle : "general funds"}` : "Keep this coding";
+    todo = disagrees
+      ? `Steward would code this to ${stewardLabel} instead of the bookkeeper's ${booksLabel}.`
+      : "Steward isn't sure which fund this belongs to. Confirm its coding, or override with a note.";
+  }
+
+  const blockedReason = !app.canWrite
+    ? "View-only demo: decisions need the demo key in the link."
+    : !app.canResolve
+      ? `Exception decisions are made by a reviewer. Switch “Acting as” to ${app.people.find((p) => p.roles.includes("reviewer"))?.name ?? "a reviewer"}.`
+      : null;
+
+  async function run(name: string, fn: () => Promise<void>) {
+    setBusy(name);
+    setError(null);
     try {
-      await acknowledge({
-        txnId: txnId,
-        by: actorLabel,
-        note: ackNote.trim(),
-        passcode,
-        precedentScope,
-        rulingType,
-        grantScope,
-      });
-      if (!mountedRef.current) return;
-      setAckOpen(false);
-      setAckNote("");
-      onActionDone?.({ kind: "ack", txnId });
+      await fn();
     } catch (e) {
-      const msg = messageFromConvexError(e);
-      if (!mountedRef.current) return;
-      onRollback?.(txnId);
-      onActionFailed?.(msg);
-      setActionError(msg);
+      setError(messageFromConvexError(e));
+    } finally {
+      setBusy(null);
     }
   }
 
-  async function onRejectSubmit() {
-    if (!canWrite || !rejectNote.trim()) return;
-    setActionError(null);
-    if (entry) {
-      try {
-        await reject({
-          entryId: entry.id,
-          by: actorLabel,
-          note: rejectNote.trim(),
-          passcode,
-          precedentScope,
-          rulingType,
-          grantScope,
-        });
-        setRejectOpen(false);
-        setRejectNote("");
-        setEntryStamp("returned");
-        onStatusLine("Entry rejected");
-        onResolved?.();
-      } catch (e) {
-        const msg = messageFromConvexError(e);
-        setActionError(msg);
-        onStatusLine(msg);
-      }
-      return;
-    }
-    try {
-      await overrideDecision({
-        txnId: txn.txnId,
-        by: actorLabel,
-        note: rejectNote.trim(),
-        passcode,
-        precedentScope,
-        rulingType,
-        grantScope,
-      });
-      setRejectOpen(false);
-      setRejectNote("");
-      onStatusLine("Override recorded");
-    } catch (e) {
-      const msg = messageFromConvexError(e);
-      setActionError(msg);
-      onStatusLine(msg);
-    }
+  const precedentFor = (): RulingType =>
+    ruleId === "R-PRIOR-APPROVAL" ? "prior_approval_granted" : ruleId === "R-DUPLICATE" ? "not_duplicate" : blocked ? "disallow" : "allow";
+
+  async function ack(noteText: string, rulingType?: RulingType) {
+    await acknowledge({
+      txnId: txn.txnId,
+      by: app.actor,
+      note: noteText,
+      passcode: app.passcode,
+      precedentScope: "txn",
+      rulingType,
+      grantScope: decision.grantId ?? "ALL",
+    });
+    onResolved(txn.txnId);
+    app.toast(`${vendorName(txn)} resolved by ${shortName(app.actor)}`, () => {
+      void undoResolution({ txnId: txn.txnId, by: app.actor, passcode: app.passcode })
+        .then(() => onRestored(txn.txnId))
+        .catch((e) => app.fail(messageFromConvexError(e)));
+    });
   }
 
-  async function onOverrideSubmit() {
-    if (!canWrite || !overrideNote.trim()) return;
-    setActionError(null);
-    try {
-      await overrideDecision({
-        txnId: txn.txnId,
-        by: actorLabel,
-        note: overrideNote.trim(),
-        passcode,
-        precedentScope,
-        rulingType,
-        grantScope,
-      });
-      setOverrideOpen(false);
-      setOverrideNote("");
-      onStatusLine("Override recorded");
-    } catch (e) {
-      const msg = messageFromConvexError(e);
-      setActionError(msg);
-      onStatusLine(msg);
-    }
+  async function attachFile(file: File) {
+    const url = await uploadUrl({ passcode: app.passcode });
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+    if (!res.ok) throw new Error(`Upload failed: ${file.name}`);
+    const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+    const receiptId = await registerReceipt({ storageId, fileName: file.name, contentType: file.type || undefined, passcode: app.passcode });
+    await linkReceipt({ receiptId, txnId: txn.txnId, by: app.actor, note: `Attached in review: ${file.name}`, passcode: app.passcode });
+    await ack(`Receipt attached: ${file.name}`, "allow");
   }
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const popoverOpen = rejectOpen || ackOpen || overrideOpen;
-      if (
-        shouldIgnoreAppShortcut(e, {
-          cmdOpen,
-          panelOpen,
-          helpOpen,
-          popoverOpen,
-        })
-      ) {
+  function approveEntryNow(name: string) {
+    if (!entry) return;
+    void run(name, async () => {
+      await approve({ entryId: entry.id, by: app.actor, note: "Approved in review", passcode: app.passcode });
+      onResolved(txn.txnId);
+      app.toast(`Correction approved by ${shortName(app.actor)}`, () => {
+        void undoApprove({ entryId: entry.id, by: app.actor, passcode: app.passcode })
+          .then(() => onRestored(txn.txnId))
+          .catch((e) => app.fail(messageFromConvexError(e)));
+      });
+    });
+  }
+
+  function onPrimary() {
+    if (blockedReason || busy) return;
+    if (fix === "approval") {
+      if (!approvalRef.trim()) {
+        document.getElementById(`approval-ref-${txn.txnId}`)?.focus();
+        setError("Add the funder's approval reference first.");
         return;
       }
-      if (!canWrite) return;
-      if (e.key === "a" || e.key === "A") {
-        e.preventDefault();
-        void onApprove();
+      // The approval keeps the bookkeeper's coding (an override with the approval as its note) and is
+      // recorded as a ruling for this line, so the next run no longer flags it.
+      void run("primary", async () => {
+        await overrideDecision({ txnId: txn.txnId, by: app.actor, note: `Funder approval on file: ${approvalRef.trim()}`, passcode: app.passcode,
+          precedentScope: "txn", rulingType: "prior_approval_granted", grantScope: gl?.class ?? decision.grantId ?? "ALL" });
+        onResolved(txn.txnId);
+        app.toast(`Funder approval recorded by ${shortName(app.actor)}`, () => {
+          void undoResolution({ txnId: txn.txnId, by: app.actor, passcode: app.passcode })
+            .then(() => onRestored(txn.txnId))
+            .catch((e) => app.fail(messageFromConvexError(e)));
+        });
+      });
+      return;
+    }
+    if (entry) {
+      approveEntryNow("primary");
+      return;
+    }
+    if (fix === "receipt") {
+      if (candidates.length === 1) {
+        const r = candidates[0]!;
+        void run("primary", async () => {
+          await linkReceipt({ receiptId: r._id as Id<"receipts">, txnId: txn.txnId, by: app.actor, passcode: app.passcode });
+          await ack(`Receipt linked: ${r.fileName}`, "allow");
+        });
+      } else if (matched) {
+        void run("primary", () => ack(`Receipt on file covers this charge: ${matched.fileName}`, "allow"));
+      } else {
+        fileRef.current?.click();
       }
-      if (e.key === "r" || e.key === "R") {
-        e.preventDefault();
-        if (entry) setRejectOpen(true);
-        else setOverrideOpen(true);
+      return;
+    }
+    void run("primary", () => ack(`${primaryLabel}. ${found}.`, precedentFor()));
+  }
+
+  function onOverrideSubmit() {
+    if (!note.trim() || blockedReason) return;
+    void run("override", async () => {
+      if (entry) {
+        await reject({ entryId: entry.id, by: app.actor, note: note.trim(), passcode: app.passcode, precedentScope: scope, rulingType: "allow", grantScope: decision.grantId ?? "ALL" });
+      } else {
+        await overrideDecision({ txnId: txn.txnId, by: app.actor, note: note.trim(), passcode: app.passcode, precedentScope: scope, rulingType: "allow", grantScope: decision.grantId ?? "ALL" });
       }
-      if (e.key === "e" || e.key === "E") {
+      onResolved(txn.txnId);
+      app.toast(`Override recorded by ${shortName(app.actor)} — the bookkeeper's coding stands`, entry ? undefined : () => {
+        void undoResolution({ txnId: txn.txnId, by: app.actor, passcode: app.passcode })
+          .then(() => onRestored(txn.txnId))
+          .catch((e) => app.fail(messageFromConvexError(e)));
+      });
+    });
+  }
+
+  // Keyboard: A = primary, O = override, E = evidence.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (shouldIgnoreAppShortcut(e, { cmdOpen, helpOpen, panelOpen, popoverOpen: overrideOpen })) return;
+      if (resolved || clean) return;
+      const k = e.key.toLowerCase();
+      if (k === "a") {
+        e.preventDefault();
+        onPrimary();
+      } else if (k === "o") {
+        e.preventDefault();
+        setOverrideOpen(true);
+      } else if (k === "e") {
         e.preventDefault();
         setEvidenceOpen((o) => !o);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canWrite, rejectOpen, ackOpen, overrideOpen, entry, cmdOpen, helpOpen, panelOpen]);
-
-  const bankEv = evidence.find((e) => e.source === "bank");
-  const glEv = evidence.find((e) => e.source === "gl");
-  const timeEv = evidence.find((e) => e.source === "time_record");
-  const whyText = decision.modelRationale ?? decision.rationale;
-  const checks = decision.checks ?? [];
-  const narrative = caseNarrative({
-    bankNote: bankEv?.note,
-    glNote: glEv?.note,
-    bkLabel,
-    stewardLabel,
-    status: decision.status,
-    actionHint: entry
-      ? "Approve or reject the proposed journal entry."
-      : "Acknowledge Steward's call or override with a note.",
   });
-  const forbidReason = actingAsSteward
-    ? "Switch acting user to an approver to take action."
-    : !canWrite
-      ? "View-only demo — add ?key= to the URL for write access."
-      : null;
 
-  const budgetImpacts = lines
-    .filter((l) => l.class && l.budgetLine && (l.debit || l.credit))
-    .map((l) => {
-      const key = `${l.class}:${l.budgetLine}`;
-      const before = spentByLine[key] ?? 0;
-      const delta = l.debit - l.credit;
-      const after = before + delta;
-      const grant = terms.find((g) => g.grantId === l.class);
-      const bl = grant?.budgetLines.find((b) => b.code === l.budgetLine);
-      const cap = bl ? bl.amount * 100 : 0;
-      const fund = getFundLabel(l.class, terms);
-      return {
-        key,
-        label: `${fund.title} · ${bl?.name ?? l.budgetLine}`,
-        meta: l.budgetLine,
-        before,
-        after,
-        cap,
-      };
-    });
+  const statusTone = clean ? "green" : blocked ? "red" : "amber";
+  const statusText = resolved ? "Resolved" : clean ? "Clean" : blocked ? (fix === "approval" ? "Can't bill yet" : "Not allowed") : "Needs you";
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-rule pb-4">
-          <div className="min-w-0 flex-1">
-            <h1 className="break-words text-[17px] font-semibold text-ink">{displayVendor(txn.description)}</h1>
-            <p className="mt-1 text-[13px] text-ink-2">
-              {fmtDate(txn.date)} · Bank: {txn.description}
-            </p>
-            <div className="mt-2">
-              <StatusPill status={decision.status} />
-            </div>
-          </div>
-          <p className="font-display shrink-0 tabular text-[40px] font-semibold leading-none text-ink">
-            {fmtSentenceAmount(txn.amountCents)}
-          </p>
+    <article className="flex min-h-full flex-col" aria-labelledby={`case-${txn.txnId}`}>
+      {onBack && (
+        <div className="sticky top-0 z-10 border-b border-rule bg-sheet px-4 py-1 lg:hidden">
+          <button type="button" onClick={onBack} className="min-h-11 text-base text-ink-2 hover:text-ink">
+            ← Back to the list
+          </button>
         </div>
-
-        <div className="mt-6 max-w-[75ch] space-y-2 text-[14px] text-ink">
-          <p>
-            <span className="text-ink-2">What happened: </span>
-            {narrative.happened}
-          </p>
-          <p>
-            <span className="text-ink-2">What Steward did: </span>
-            {narrative.stewardDid}
-          </p>
-          <p>
-            <span className="text-ink-2">What you need to do: </span>
-            {decision.status === "blocked" ? (
-              <>
-                Confirm moving this off <GlossaryTerm term="restricted funds">grant funds</GlossaryTerm> to{" "}
-                <GlossaryTerm term="general funds">general funds</GlossaryTerm>, or override with a documented
-                reason.
-              </>
-            ) : entry ? (
-              <>
-                Approve or reject the proposed <GlossaryTerm term="journal entry">journal entry</GlossaryTerm>.
-              </>
-            ) : (
-              narrative.youNeed
-            )}
-          </p>
-        </div>
-
-        <div className="mt-6 text-[14px] text-ink">
-          <span className="text-ink-2">Books say: </span>
-          {bkLabel ? (
-            <RedPenStrike text={bkLabel} className="inline text-[14px]" animate={strikeAnimate} />
-          ) : (
-            <span className="text-ink-2">not coded yet</span>
-          )}
-          <span className="text-ink-2"> → Steward says: </span>
-          <span className="font-semibold text-money">{stewardLabel}</span>
-        </div>
-
-        <div className="mt-8">
+      )}
+      <header className="grid gap-x-6 gap-y-3 px-5 pb-5 pt-6 sm:grid-cols-[1fr_auto] sm:px-8">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[13px] font-medium text-ink-2">Evidence</span>
-            {bankEv && (
-              <button
-                type="button"
-                className={evidenceChipClass("bank")}
-                onClick={() => focusEvidence("bank")}
-                title={bankEv.note}
-              >
-                Bank
-              </button>
-            )}
-            {glEv && (
-              <button
-                type="button"
-                className={evidenceChipClass("gl")}
-                onClick={() => focusEvidence("gl")}
-                title={glEv.note}
-              >
-                Ledger
-              </button>
-            )}
-            {clauses.length > 0 && (
-              <button
-                type="button"
-                className={evidenceChipClass("contract")}
-                onClick={() => focusEvidence("contract")}
-                title={clauses[0]?.rule}
-              >
-                Contract
-              </button>
-            )}
-            {timeEv && (
-              <button
-                type="button"
-                className={evidenceChipClass("time_record")}
-                onClick={() => focusEvidence("time_record")}
-              >
-                Time sheet
-              </button>
-            )}
-            {evidence
-              .filter((e) => e.source === "precedent")
-              .map((e, eIdx) => (
-                <button
-                  key={`${e.ref}-${eIdx}`}
-                  type="button"
-                  className={evidenceChipClass("precedent")}
-                  onClick={() => focusEvidence("precedent")}
-                >
-                  Past ruling
-                </button>
-              ))}
+            <Badge tone={resolved ? "neutral" : statusTone}>{statusText}</Badge>
+            <span className="text-sm text-ink-2">
+              {shortDate(txn.date, true)} · {txn.txnId}
+              {txn.docRef ? ` · ${txn.docRef}` : ""}
+            </span>
           </div>
-          {evidenceOpen && (
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-          {bankEv && (
-            <EvidenceChip
-              id="evidence-bank"
-              highlighted={evidenceFocus === "bank"}
-              source="bank"
-              label="Bank record"
-              body={bankEv.note}
-            />
-          )}
-          {glEv && (
-            <EvidenceChip
-              id="evidence-gl"
-              highlighted={evidenceFocus === "gl"}
-              source="gl"
-              label="Bookkeeper's entry"
-              body={
-                <>
-                  {glEv.note}
-                  {stewardLabel !== bkLabel && bkLabel && (
-                    <p className="mt-2 border-b-2 border-redpen text-ink-2">Disagrees with bookkeeper</p>
-                  )}
-                </>
-              }
-            />
-          )}
-          {clauses.length > 0 && (
-            <EvidenceChip
-              id="evidence-contract"
-              highlighted={evidenceFocus === "contract"}
-              source="contract"
-              label="Grant agreement"
-              body={
-                <div className="space-y-3">
-                  {clauses.map((c, cIdx) => (
-                    <div key={`${c.ref}-${cIdx}`}>
-                      <p className="font-serif text-[16px] text-ink">{c.rule}</p>
-                      <p className="mt-1 text-[13px] text-ink-2">{c.ref}</p>
-                    </div>
-                  ))}
-                </div>
-              }
-            />
-          )}
-          {timeEv && (
-            <EvidenceChip
-              id="evidence-time_record"
-              highlighted={evidenceFocus === "time_record"}
-              source="time_record"
-              label="Time sheet"
-              body={timeEv.note}
-            />
-          )}
-          {evidence
-            .filter((e) => e.source === "precedent")
-            .map((e, eIdx) => (
-              <EvidenceChip
-                key={`${e.ref}-${eIdx}`}
-                id={eIdx === 0 ? "evidence-precedent" : undefined}
-                highlighted={evidenceFocus === "precedent"}
-                source="precedent"
-                label="Past ruling"
-                body={e.note}
-              />
-            ))}
+          <h2 id={`case-${txn.txnId}`} className="mt-3 break-words text-lg font-medium text-ink">
+            {vendorName(txn)}
+          </h2>
+          {txn.memo && <p className="mt-1 text-sm text-ink-2">“{txn.memo}”</p>}
         </div>
-          )}
-        </div>
+        <Money cents={Math.abs(txn.amountCents)} focal className="text-2xl font-medium tracking-[-0.02em] sm:text-right" />
+      </header>
 
-        {checks.length > 0 && (
-          <ul className="mt-6 max-w-[75ch] space-y-1 text-[13px] text-ink-2">
+      {/* What we found */}
+      <section className="border-t border-rule px-5 py-5 sm:px-8" aria-labelledby={`found-${txn.txnId}`}>
+        <h3 id={`found-${txn.txnId}`} className="text-xs font-medium text-ink-2">
+          What we found
+        </h3>
+        <p className={`mt-2 font-serif text-lg ${blocked ? "text-redpen-ink" : "text-ink"}`}>{clean ? "Nothing wrong with this line." : found}</p>
+        {why && !clean && <p className="mt-2 max-w-[68ch] text-base text-ink">{why}</p>}
+        {checks.length > 0 && !clean && (
+          <ul className="mt-2 max-w-[68ch] space-y-1 text-sm text-ink-2">
             {checks.map((c, i) => (
-              <li key={`${c.ruleId ?? "check"}-${i}`} title={c.ruleId ?? undefined}>
-                {c.label}: {c.message}
-              </li>
+              <li key={`${c.ruleId ?? "c"}-${i}`}>{c.message}</li>
             ))}
           </ul>
         )}
-
-        {entry && lines.length > 0 && (
-          <div className="relative mt-8">
-            {entryStamp && (
-              <RubberStamp
-                kind={entryStamp}
-                by={stampBy}
-                dateLabel={stampDate}
-                animate={stampAnimate}
-              />
+        {booksLabel && (
+          <div className="mt-4 grid gap-1 text-base sm:grid-cols-[auto_1fr] sm:gap-x-4">
+            <span className="text-ink-2">Books say</span>
+            <span className="min-w-0">
+              {disagrees ? <RedPenStrike text={booksLabel} animate={strikeAnimate} /> : <span className="text-ink">{booksLabel}</span>}
+            </span>
+            {disagrees && (
+              <>
+                <span className="text-ink-2">Steward says</span>
+                <span className="font-medium text-green-ink">{stewardLabel}</span>
+              </>
             )}
-            <h3 className="text-[17px] font-semibold text-ink">
-              <GlossaryTerm term="journal entry">Journal entry</GlossaryTerm>
-            </h3>
-            <table className="mt-3 w-full border-collapse text-[13px]">
+          </div>
+        )}
+      </section>
+
+      {/* Why: evidence side by side, collapsed by default */}
+      <section className="border-t border-rule px-5 py-4 sm:px-8">
+        <button
+          type="button"
+          aria-expanded={evidenceOpen}
+          onClick={() => setEvidenceOpen((o) => !o)}
+          className="flex min-h-11 w-full items-center justify-between gap-3 text-left text-base text-ink"
+        >
+          <span>
+            Why <span className="text-ink-2">· {[clauses.length ? "contract" : null, receipts?.length ? "receipt" : null, "ledger"].filter(Boolean).join(", ")}</span>
+          </span>
+          <span className="flex items-center gap-2 text-sm text-ink-2">
+            <kbd className="hidden rounded-[4px] border border-rule px-1.5 text-2xs sm:inline">E</kbd>
+            <span aria-hidden className={`transition-transform duration-150 ${evidenceOpen ? "rotate-90" : ""}`}>›</span>
+          </span>
+        </button>
+        {evidenceOpen && (
+          <div className="mt-3 grid gap-4 md:grid-cols-3">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-ink-2">Contract</p>
+              {clauses.length ? (
+                clauses.map((c, i) => (
+                  <blockquote key={`${c.ref}-${i}`} className="mt-2">
+                    <p className="font-serif text-md leading-snug text-ink">“{c.rule}”</p>
+                    <footer className="mt-1 text-xs text-ink-2">{c.ref}</footer>
+                  </blockquote>
+                ))
+              ) : (
+                <p className="mt-2 text-sm text-ink-2">No clause cited for this line.</p>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-ink-2">Receipt</p>
+              {receipts === undefined ? (
+                <div className="mt-2 h-32 animate-pulse rounded-sm bg-paper-2" />
+              ) : receipts.length === 0 ? (
+                <p className="mt-2 text-sm text-ink-2">No receipt on file.</p>
+              ) : (
+                receipts.map((r) => <ReceiptPreview key={r._id} r={r} />)
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-ink-2">Ledger line</p>
+              <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                <dt className="text-ink-2">Coded to</dt>
+                <dd className="min-w-0 break-words text-ink">{gl ? grantLineText(gl.class, gl.budgetLine, grantTerms) : "—"}</dd>
+                {txn.account && (
+                  <>
+                    <dt className="text-ink-2">Account</dt>
+                    <dd className="min-w-0 break-words">{txn.account}</dd>
+                  </>
+                )}
+                {txn.department && (
+                  <>
+                    <dt className="text-ink-2">Department</dt>
+                    <dd>{txn.department}</dd>
+                  </>
+                )}
+                <dt className="text-ink-2">Entered by</dt>
+                <dd>{(gl?.enteredBy ?? txn.enteredBy ?? "—").replace(/^bookkeeper:/, "")}</dd>
+                <dt className="text-ink-2">Amount</dt>
+                <dd className="tabular">{fmtUsd(txn.amountCents)}</dd>
+              </dl>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* What to do */}
+      {!clean && !resolved && (
+        <section className="border-t border-rule bg-paper/50 px-5 py-5 sm:px-8" aria-labelledby={`todo-${txn.txnId}`}>
+          <h3 id={`todo-${txn.txnId}`} className="text-xs font-medium text-ink-2">
+            What to do
+          </h3>
+          <p className="mt-2 max-w-[68ch] text-base text-ink">
+            {todo}
+            {fix === "not_allowed" && (
+              <>
+                {" "}
+                <GlossaryTerm term="restricted funds">Why?</GlossaryTerm>
+              </>
+            )}
+          </p>
+
+          {entry && entryLines.length > 0 && (
+            <table className="mt-3 w-full max-w-[560px] border-collapse text-sm">
+              <caption className="sr-only">Proposed journal entry</caption>
               <thead>
-                <tr className="border-b border-rule text-left text-ink-2">
-                  <th className="py-2 pr-2 font-medium">Account</th>
-                  <th className="py-2 pr-2 font-medium">Fund/Grant</th>
-                  <th className="py-2 pr-2 font-medium">Line</th>
-                  <th className="py-2 pr-2 text-right font-medium">Debit</th>
-                  <th className="py-2 text-right font-medium">Credit</th>
+                <tr className="text-left text-xs text-ink-2">
+                  <th scope="col" className="border-b border-rule py-1.5 font-medium">
+                    <GlossaryTerm term="journal entry">Journal entry</GlossaryTerm>
+                  </th>
+                  <th scope="col" className="border-b border-rule py-1.5 text-right font-medium">Debit</th>
+                  <th scope="col" className="border-b border-rule py-1.5 text-right font-medium">Credit</th>
                 </tr>
               </thead>
               <tbody>
-                {lines.map((l, i) => (
-                  <tr key={i} className="border-b border-rule">
-                    <td className="py-2 pr-2">{l.account}</td>
-                    <td className="py-2 pr-2">
-                      <FundLabelDisplay grantId={l.class} grants={terms} showCode="meta" />
-                    </td>
-                    <td className="py-2 pr-2">
-                      <BudgetLineDisplay grantId={l.class} code={l.budgetLine} grants={terms} />
-                    </td>
-                    <td className="tabular py-2 pr-2 text-right">{l.debit ? fmtTableAmount(l.debit) : ""}</td>
-                    <td className="tabular py-2 text-right">{l.credit ? fmtTableAmount(l.credit) : ""}</td>
+                {entryLines.map((l, i) => (
+                  <tr key={i}>
+                    <td className="border-b border-rule py-1.5 pr-3">{grantLineText(l.class, l.budgetLine, grantTerms)}</td>
+                    <td className="tabular border-b border-rule py-1.5 text-right">{l.debit ? fmtUsd(l.debit) : ""}</td>
+                    <td className="tabular border-b border-rule py-1.5 text-right">{l.credit ? fmtUsd(l.credit) : ""}</td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-double border-ink">
-                  <td colSpan={3} className="py-2" />
-                  <td className="tabular py-2 pr-2 text-right font-medium">{fmtTableAmount(dr)}</td>
-                  <td className="tabular py-2 text-right font-medium">{fmtTableAmount(cr)}</td>
-                </tr>
-              </tfoot>
             </table>
-            {balanced && <p className="mt-2 text-[13px] font-medium text-money">Balanced</p>}
-            {budgetImpacts.length > 0 && (
-              <div className="mt-4 space-y-2">
-                <p className="text-[13px] font-medium text-ink-2">Budget impact</p>
-                {budgetImpacts.map((b) => (
-                  <p key={b.key} className="text-[13px] text-ink">
-                    {b.label.trim()}
-                    {"meta" in b && b.meta ? <span className="text-ink-2"> · {b.meta}</span> : null}:{" "}
-                    {fmtTableAmount(b.before)} → {fmtTableAmount(b.after)}
-                    {b.cap ? ` of ${fmtTableAmount(b.cap)}` : ""}
-                  </p>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="sticky bottom-0 border-t border-rule bg-sheet px-6 py-4">
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={onWhy}
-            className="mr-auto rounded-[6px] border border-transparent px-3 py-2 text-[14px] text-ink-2 hover:border-rule hover:bg-paper"
-          >
-            Ask Steward why
-          </button>
-          {entry ? (
-            <>
-              <button
-                type="button"
-                disabled={!canWrite}
-                onClick={() => setRejectOpen(true)}
-                className="rounded-[4px] border border-rule px-4 py-2 text-[15px] font-medium text-ink disabled:opacity-40"
-              >
-                Send back…
-              </button>
-              <button
-                type="button"
-                disabled={!canWrite}
-                onClick={() => void onApprove()}
-                className="rounded-[6px] bg-money px-4 py-2 text-[14px] font-semibold text-white hover:brightness-95 disabled:opacity-50"
-              >
-                Approve correction
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                disabled={!canWrite}
-                onClick={() => setOverrideOpen(true)}
-                className="rounded-[4px] border border-rule px-4 py-2 text-[15px] font-medium text-ink disabled:opacity-40"
-              >
-                Override…
-              </button>
-              <button
-                type="button"
-                disabled={!canWrite}
-                onClick={() => (ackOpen ? void onApprove() : setAckOpen(true))}
-                className="rounded-[6px] bg-money px-4 py-2 text-[14px] font-semibold text-white hover:brightness-95 disabled:opacity-50"
-              >
-                Agree
-              </button>
-            </>
           )}
-        </div>
-        {(forbidReason || actionError) && (
-          <p className="mt-2 text-[13px] text-redpen" role="alert">
-            {actionError ?? forbidReason}
+
+          {fix === "receipt" && candidates.length > 1 && !entry && (
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {candidates.map((r) => (
+                <li key={r._id}>
+                  <Button
+                    size="sm"
+                    disabled={!!blockedReason}
+                    busy={busy === `link-${r._id}`}
+                    onClick={() =>
+                      void run(`link-${r._id}`, async () => {
+                        await linkReceipt({ receiptId: r._id as Id<"receipts">, txnId: txn.txnId, by: app.actor, passcode: app.passcode });
+                        await ack(`Receipt linked: ${r.fileName}`, "allow");
+                      })
+                    }
+                  >
+                    Link {r.fileName}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {fix === "approval" && (
+            <label className="mt-3 block max-w-[420px] text-sm text-ink-2">
+              Funder approval reference (email, letter, date)
+              <input
+                id={`approval-ref-${txn.txnId}`}
+                value={approvalRef}
+                onChange={(e) => setApprovalRef(e.target.value)}
+                placeholder="e.g. Program officer email, Sep 3"
+                className="mt-1 block min-h-11 w-full rounded-sm border border-rule-strong bg-sheet px-3 text-base text-ink placeholder:text-ink-2 sm:min-h-10"
+              />
+            </label>
+          )}
+
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf,image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void run("primary", () => attachFile(f));
+            }}
+          />
+
+          {!overrideOpen ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button variant="primary" disabled={!!blockedReason} busy={busy === "primary"} onClick={onPrimary}>
+                {primaryLabel}
+                <kbd className="ml-1 hidden rounded-[4px] border border-sheet/30 px-1 text-2xs font-normal sm:inline">A</kbd>
+              </Button>
+              {fix === "approval" && entry && (
+                <Button disabled={!!blockedReason} busy={busy === "move"} onClick={() => approveEntryNow("move")}>
+                  {moveLabel}
+                </Button>
+              )}
+              <Button variant="ghost" disabled={!!blockedReason} onClick={() => setOverrideOpen(true)}>
+                Override with a note
+                <kbd className="ml-1 hidden rounded-[4px] border border-rule px-1 text-2xs font-normal sm:inline">O</kbd>
+              </Button>
+              <Button variant="ghost" className="sm:ml-auto" onClick={() => onWhy(txn.txnId)}>
+                Ask Steward why
+              </Button>
+            </div>
+          ) : (
+            <form
+              className="mt-4 max-w-[560px] space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                onOverrideSubmit();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setOverrideOpen(false);
+              }}
+            >
+              <label className="block text-sm text-ink-2">
+                Why the bookkeeper&apos;s coding should stand (kept in the audit trail)
+                <textarea
+                  autoFocus
+                  rows={3}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  className="mt-1 block w-full rounded-sm border border-rule-strong bg-sheet p-3 text-base text-ink"
+                />
+              </label>
+              <fieldset className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+                <legend className="sr-only">Apply to</legend>
+                <label className="flex min-h-11 items-center gap-2 sm:min-h-0">
+                  <input type="radio" checked={scope === "txn"} onChange={() => setScope("txn")} /> This line only
+                </label>
+                <label className="flex min-h-11 items-center gap-2 sm:min-h-0">
+                  <input type="radio" checked={scope === "vendor"} onChange={() => setScope("vendor")} /> Every charge from{" "}
+                  {vendorKey(txn.description) || "this vendor"}
+                </label>
+              </fieldset>
+              <div className="flex gap-3">
+                <Button type="submit" variant="primary" disabled={!note.trim()} busy={busy === "override"}>
+                  Record override
+                </Button>
+                <Button variant="ghost" onClick={() => setOverrideOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
+          {(blockedReason || error) && (
+            <p role={error ? "alert" : undefined} className={`mt-3 text-sm ${error ? "text-redpen-ink" : "text-ink-2"}`}>
+              {error ?? blockedReason}
+            </p>
+          )}
+          <p className="mt-4 text-xs text-ink-2">
+            Steward flagged this{ruleId ? ` (${ruleId})` : ""}. Your decision is logged under {shortName(app.actor) || "your name"}.
           </p>
-        )}
-      </div>
-
-      {ackOpen && !entry && (
-        <div className="absolute bottom-20 right-8 z-10 w-72 rounded-[6px] border border-rule bg-sheet p-4 shadow-none">
-          <PrecedentFields
-            ruleId={decision.ruleHits[0]}
-            vendorLabel={vendorLabel}
-            precedentScope={precedentScope}
-            setPrecedentScope={setPrecedentScope}
-            rulingType={rulingType}
-            setRulingType={setRulingType}
-            onOpen={() => setRulingType(defaultRuling(decision.ruleHits[0]))}
-          />
-          <label className="text-[13px] text-ink-2">Note (accept Steward&apos;s call)</label>
-          <textarea
-            className="mt-2 w-full rounded-[4px] border border-rule p-2 text-[15px]"
-            rows={3}
-            value={ackNote}
-            onChange={(e) => setAckNote(e.target.value)}
-          />
-          <div className="mt-3 flex justify-end gap-2">
-            <button type="button" className="text-[13px] text-ink-2" onClick={() => setAckOpen(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!ackNote.trim()}
-              onClick={() => void onApprove()}
-              className="rounded-[4px] bg-ledger px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-40"
-            >
-              Acknowledge
-            </button>
-          </div>
-        </div>
+        </section>
       )}
-
-      {overrideOpen && !entry && (
-        <div className="absolute bottom-20 right-8 z-10 w-72 rounded-[6px] border border-rule bg-sheet p-4 shadow-none">
-          <label className="text-[13px] text-ink-2">Override note (keep original coding)</label>
-          <textarea
-            className="mt-2 w-full rounded-[4px] border border-rule p-2 text-[15px]"
-            rows={3}
-            value={overrideNote}
-            onChange={(e) => setOverrideNote(e.target.value)}
-          />
-          <div className="mt-3 flex justify-end gap-2">
-            <button type="button" className="text-[13px] text-ink-2" onClick={() => setOverrideOpen(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!overrideNote.trim()}
-              onClick={() => void onOverrideSubmit()}
-              className="rounded-[4px] bg-pencil px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-40"
-            >
-              Override
-            </button>
-          </div>
-        </div>
+      {resolved && (
+        <p className="border-t border-rule px-5 py-5 text-base text-ink-2 sm:px-8">A person already decided this line.</p>
       )}
-
-      {rejectOpen && (
-        <div className="absolute bottom-20 right-8 z-10 w-72 rounded-[6px] border border-rule bg-sheet p-4 shadow-none">
-          <PrecedentFields
-            ruleId={decision.ruleHits[0]}
-            vendorLabel={vendorLabel}
-            precedentScope={precedentScope}
-            setPrecedentScope={setPrecedentScope}
-            rulingType={rulingType}
-            setRulingType={setRulingType}
-            onOpen={() => setRulingType(defaultRuling(decision.ruleHits[0]))}
-          />
-          <label className="text-[13px] text-ink-2">Required note</label>
-          <textarea
-            className="mt-2 w-full rounded-[4px] border border-rule p-2 text-[15px]"
-            rows={3}
-            value={rejectNote}
-            onChange={(e) => setRejectNote(e.target.value)}
-          />
-          <div className="mt-3 flex justify-end gap-2">
-            <button type="button" className="text-[13px] text-ink-2" onClick={() => setRejectOpen(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!rejectNote.trim()}
-              onClick={() => void onRejectSubmit()}
-              className="rounded-[4px] bg-pencil px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-40"
-            >
-              Reject and record precedent
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+    </article>
   );
 }
 
-function PrecedentFields({
-  ruleId,
-  vendorLabel,
-  precedentScope,
-  setPrecedentScope,
-  rulingType,
-  setRulingType,
-  onOpen,
+function ReceiptPreview({
+  r,
 }: {
-  ruleId?: string | null;
-  vendorLabel: string;
-  precedentScope: "txn" | "vendor";
-  setPrecedentScope: (v: "txn" | "vendor") => void;
-  rulingType: RulingType;
-  setRulingType: (v: RulingType) => void;
-  onOpen?: () => void;
+  r: { _id: string; fileName: string; contentType: string | null; url: string | null; matched: boolean; coversGroup?: boolean; extracted: { vendor: string | null; totalCents: number | null; date: string | null } | null };
 }) {
-  useEffect(() => {
-    onOpen?.();
-  }, [ruleId]);
+  const isPdf = r.contentType === "application/pdf" || r.fileName.toLowerCase().endsWith(".pdf");
   return (
-    <div className="mb-3 space-y-2 text-[13px]">
-      <p className="text-ink-2">Apply to:</p>
-      <label className="flex gap-2">
-        <input
-          type="radio"
-          checked={precedentScope === "txn"}
-          onChange={() => setPrecedentScope("txn")}
-        />
-        This transaction only
-      </label>
-      <label className="flex gap-2">
-        <input
-          type="radio"
-          checked={precedentScope === "vendor"}
-          onChange={() => setPrecedentScope("vendor")}
-        />
-        All future charges from {vendorLabel || "this vendor"}
-      </label>
-      <label className="block">
-        Ruling
-        <select
-          className="mt-1 w-full rounded border border-rule px-2 py-1"
-          value={rulingType}
-          onChange={(e) => setRulingType(e.target.value as RulingType)}
-        >
-          <option value="allow">Allow (accept coding)</option>
-          <option value="disallow">Disallow (move off grant)</option>
-          <option value="prior_approval_granted">Prior approval granted</option>
-          <option value="not_duplicate">Not a duplicate</option>
-        </select>
-      </label>
-    </div>
+    <figure className="mt-2">
+      {r.url ? (
+        isPdf ? (
+          <object data={`${r.url}#toolbar=0&view=FitH`} type="application/pdf" className="h-56 w-full rounded-sm border border-rule bg-paper" aria-label={r.fileName}>
+            <a href={r.url} target="_blank" rel="noreferrer" className="block p-3 text-sm underline">
+              Open {r.fileName}
+            </a>
+          </object>
+        ) : (
+          // Receipt images come from Convex storage; next/image would need a remote pattern for little gain here.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={r.url} alt={`Receipt ${r.fileName}`} className="max-h-56 w-full rounded-sm border border-rule bg-paper object-contain" />
+        )
+      ) : null}
+      <figcaption className="mt-1 flex flex-wrap justify-between gap-x-2 text-xs text-ink-2">
+        <span className="min-w-0 truncate">
+          {r.coversGroup ? "Covers this split purchase · " : r.matched ? "Matched · " : "Possible match · "}
+          {r.fileName}
+        </span>
+        {r.extracted?.totalCents != null && <span className="tabular">{fmtUsd(r.extracted.totalCents)}</span>}
+      </figcaption>
+      {r.url && (
+        <a href={r.url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-ink underline underline-offset-2">
+          Open full size
+        </a>
+      )}
+    </figure>
   );
 }
 
+function CaseSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4 p-8" aria-busy aria-label="Loading case">
+      <div className="h-5 w-40 rounded-sm bg-paper-2" />
+      <div className="h-7 w-64 rounded-sm bg-paper-2" />
+      <div className="h-24 rounded-sm bg-paper-2" />
+      <div className="h-40 rounded-sm bg-paper-2" />
+    </div>
+  );
+}

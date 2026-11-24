@@ -1,167 +1,161 @@
 @import "tailwindcss";
 
+/*
+ * Steward app tokens. Documented in DESIGN.md.
+ * Paper and ink carry everything; colour is reserved for state:
+ *   redpen = not allowed / caught, amber = needs you, green = passes / ready.
+ */
 :root {
-  --navy: #0e1b2c;
-  --navy-2: #1c2e45;
-  --paper: #eef2f6;
-  --sheet: #ffffff;
-  --ink: #14202e;
-  --ink-2: #5a6878;
-  --rule: #dce3ea;
-  --money: #0e7c5a;
-  --money-tint: #ddf3ea;
-  --attention: #f2a93b;
-  --attention-tint: #fdf1dc;
+  /* Surfaces */
+  --paper: #efece6; /* warm bone ground */
+  --paper-2: #e6e2da; /* second neutral layer: hover, selected rows, wells */
+  --sheet: #ffffff; /* the working sheet */
+  /* Ink */
+  --ink: #17150f;
+  --ink-2: #5c574e; /* secondary text, 6.1:1 on sheet, 5.4:1 on paper */
+  --ink-3: #8a847a; /* non-text only: icons, disabled strokes */
+  /* Rules */
+  --rule: #ddd8cf;
+  --rule-strong: #c4bdb1;
+  /* State: green = passes / ready */
+  --green: #0e7c5a;
+  --green-ink: #0b6649;
+  --green-tint: #e2f0e8;
+  /* State: amber = needs you */
+  --amber: #c98a1b;
+  --amber-ink: #85520a;
+  --amber-tint: #f8ecd6;
+  /* State: redpen = not allowed / caught */
   --redpen: #e0433a;
-  --redpen-tint: #fce4e2;
-  --sky: #4c8df6;
-  --slate: #64748b;
-  /* legacy aliases */
-  --ledger: var(--money);
-  --pencil: var(--attention);
-  --ledger-wash: var(--money-tint);
-  --redpen-wash: var(--redpen-tint);
-  --pencil-wash: var(--attention-tint);
-  --font-sans: var(--font-public-sans), system-ui, sans-serif;
+  --redpen-ink: #b0281f;
+  --redpen-tint: #fbe6e3;
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-newsreader), Georgia, serif;
-  --font-display: var(--font-bricolage), var(--font-public-sans), system-ui, sans-serif;
 }
 
 @theme inline {
-  --color-navy: var(--navy);
-  --color-navy-2: var(--navy-2);
   --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
   --color-sheet: var(--sheet);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
   --color-rule: var(--rule);
-  --color-money: var(--money);
-  --color-money-tint: var(--money-tint);
-  --color-attention: var(--attention);
-  --color-attention-tint: var(--attention-tint);
+  --color-rule-strong: var(--rule-strong);
+  --color-green: var(--green);
+  --color-green-ink: var(--green-ink);
+  --color-green-tint: var(--green-tint);
+  --color-amber: var(--amber);
+  --color-amber-ink: var(--amber-ink);
+  --color-amber-tint: var(--amber-tint);
   --color-redpen: var(--redpen);
+  --color-redpen-ink: var(--redpen-ink);
   --color-redpen-tint: var(--redpen-tint);
-  --color-sky: var(--sky);
-  --color-slate: var(--slate);
-  --color-ledger: var(--money);
-  --color-pencil: var(--attention);
-  --color-ledger-wash: var(--money-tint);
+
+  /* Legacy names still used by kept components (palette, panels). */
+  --color-navy: var(--ink);
+  --color-navy-2: var(--ink);
+  --color-money: var(--green);
+  --color-money-tint: var(--green-tint);
+  --color-attention: var(--amber);
+  --color-attention-tint: var(--amber-tint);
+  --color-sky: var(--ink);
+  --color-slate: var(--ink-2);
+  --color-ledger: var(--green);
+  --color-pencil: var(--amber-ink);
+  --color-ledger-wash: var(--green-tint);
   --color-redpen-wash: var(--redpen-tint);
-  --color-pencil-wash: var(--attention-tint);
-  --font-sans: var(--font-public-sans), system-ui, sans-serif;
+  --color-pencil-wash: var(--amber-tint);
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-newsreader), Georgia, serif;
-  --font-display: var(--font-display);
+}
+
+@theme {
+  /* Spacing: 4px base (1 = 4px). Rhythm steps used: 1 2 3 4 6 8 12 16. */
+  --spacing: 4px;
+
+  /* Radius: three steps. */
+  --radius-sm: 6px; /* inputs, chips, table wells */
+  --radius-md: 10px; /* sheets and cards */
+  --radius-pill: 999px; /* buttons, badges */
+
+  /* Shadow: two steps. */
+  --shadow-sheet: 0 1px 2px rgb(23 21 15 / 0.05), 0 0 0 1px rgb(23 21 15 / 0.02);
+  --shadow-float: 0 16px 40px -12px rgb(23 21 15 / 0.22), 0 2px 6px rgb(23 21 15 / 0.06);
+
+  /* Type scale (UI, Geist). Ratio ~1.15 for UI; display steps are Newsreader. */
+  --text-2xs: 11px;
+  --text-2xs--line-height: 14px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 18px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+  --text-md: 16px;
+  --text-md--line-height: 24px;
+  --text-lg: 20px;
+  --text-lg--line-height: 26px;
+  --text-xl: 28px;
+  --text-xl--line-height: 32px;
+  --text-2xl: 40px;
+  --text-2xl--line-height: 44px;
+  --text-3xl: 56px;
+  --text-3xl--line-height: 58px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html {
   font-size: 16px;
-  line-height: 1.45;
-  color-scheme: light only;
+  color-scheme: light;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
-button:not(:disabled) {
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    filter 120ms ease,
-    transform 100ms ease,
-    box-shadow 120ms ease;
+::selection {
+  background: color-mix(in srgb, var(--amber) 35%, transparent);
+  color: var(--ink);
 }
 
-button:not(:disabled):hover {
-  filter: brightness(1.06);
-  transform: scale(1.03);
-  box-shadow: 0 2px 10px rgba(14, 27, 44, 0.1);
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
-button.chip-button:not(:disabled):hover,
-button.chip-button:not(:disabled):active {
-  transform: none;
-  box-shadow: none;
-  filter: brightness(1.04);
+input,
+textarea,
+select {
+  caret-color: var(--ink);
+  accent-color: var(--ink);
 }
 
-@keyframes bento-send-pop {
-  0% {
-    transform: scale(1);
-  }
-  40% {
-    transform: scale(1.06);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-.bento-send-pop {
-  animation: bento-send-pop 400ms ease-out;
-}
-
-@keyframes bento-approve-shake {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  20%,
-  60% {
-    transform: translateX(-3px);
-  }
-  40%,
-  80% {
-    transform: translateX(3px);
-  }
-}
-
-.bento-approve-shake {
-  animation: bento-approve-shake 400ms ease-in-out;
-}
-
-button.bg-money:not(:disabled):hover {
-  filter: brightness(0.95);
-}
-
-button:not(:disabled):active {
-  filter: brightness(0.97);
-  transform: scale(0.98);
-  box-shadow: none;
-}
-
-button.border:not(:disabled):hover,
-button[class*="border"]:not(:disabled):hover {
-  background-color: color-mix(in srgb, var(--ink) 5%, transparent);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  button:not(:disabled):hover,
-  button:not(:disabled):active {
-    transform: none;
-  }
+* {
+  scrollbar-color: var(--rule-strong) transparent;
+  scrollbar-width: thin;
 }
 
 .font-serif {
   font-family: var(--font-serif);
 }
 
-.font-display {
-  font-family: var(--font-display);
-}
-
 .tabular {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-:focus-visible {
-  outline: 2px solid var(--sky);
-  outline-offset: 2px;
-}
-
+/* Red-pen strike: drawn once through the wrong coding. */
 @keyframes strike-draw {
   from {
     stroke-dashoffset: 120;
@@ -174,51 +168,45 @@ button[class*="border"]:not(:disabled):hover {
 .redpen-strike-animate {
   stroke-dasharray: 120;
   stroke-dashoffset: 120;
-  animation: strike-draw 450ms ease-out forwards;
+  animation: strike-draw 420ms var(--ease-out) 120ms forwards;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .redpen-strike-animate {
-    animation: none;
-    stroke-dashoffset: 0;
-  }
-}
-
-.hero-mini-case .hero-strike-delay .redpen-strike-animate {
-  animation-delay: 400ms;
-}
-
-@keyframes hero-fade-in {
+@keyframes strike-sweep {
   from {
-    opacity: 0;
+    background-size: 0% 0.55em;
   }
   to {
-    opacity: 1;
+    background-size: 100% 0.55em;
   }
 }
 
-.hero-mini-case .hero-reclass {
-  opacity: 0;
-  animation: hero-fade-in 500ms ease 1100ms forwards;
+.redpen-strike-draw {
+  animation: strike-sweep 460ms var(--ease-out) 160ms both;
 }
 
-.hero-mini-case .hero-clause {
-  opacity: 0;
-  animation: hero-fade-in 500ms ease 1700ms forwards;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hero-mini-case .hero-reclass,
-  .hero-mini-case .hero-clause {
-    animation: none;
-    opacity: 1;
+/* Rubber stamp: lands once when a package is signed. */
+@keyframes stamp-drop {
+  from {
+    opacity: 0;
+    transform: rotate(-7deg) scale(1.35);
   }
+  60% {
+    opacity: 0.92;
+  }
+  to {
+    opacity: 0.88;
+    transform: rotate(-7deg) scale(1);
+  }
+}
+
+.stamp-animate {
+  animation: stamp-drop 260ms var(--ease-out) forwards;
 }
 
 @keyframes status-toast-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -227,119 +215,105 @@ button[class*="border"]:not(:disabled):hover {
 }
 
 .status-toast-enter {
-  animation: status-toast-in 200ms cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
-}
-
-@keyframes inbox-row-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.inbox-row-enter {
-  animation: inbox-row-in 200ms ease-out both;
-}
-
-.nav-tab-underline {
-  transition: transform 180ms ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .status-toast-enter,
-  .inbox-row-enter {
-    animation: none;
-  }
+  animation: status-toast-in 200ms var(--ease-out) forwards;
 }
 
 @keyframes presence-pulse {
   0%,
   100% {
     opacity: 1;
-    transform: scale(1);
   }
   50% {
-    opacity: 0.55;
-    transform: scale(1.35);
+    opacity: 0.35;
   }
 }
 
 .presence-dot-running {
-  animation: presence-pulse 1.2s ease-in-out infinite;
+  animation: presence-pulse 1.4s ease-in-out infinite;
 }
 
-@keyframes stamp-drop {
+@keyframes panel-in {
   from {
     opacity: 0;
-    transform: rotate(-6deg) scale(1.4);
+    transform: translateX(16px);
   }
   to {
-    opacity: 0.7;
-    transform: rotate(-6deg) scale(1);
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
-.stamp-animate {
-  animation: stamp-drop 220ms ease-out forwards;
-}
-
-@keyframes queue-exit {
-  to {
-    opacity: 0;
-    transform: translateX(-8px);
-  }
-}
-
-.queue-exit {
-  animation: queue-exit 220ms ease-out forwards;
+.panel-in {
+  animation: panel-in 220ms var(--ease-out) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .presence-dot-running,
+  .redpen-strike-animate {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .redpen-strike-draw {
+    animation: none;
+  }
   .stamp-animate,
-  .queue-exit {
+  .status-toast-enter,
+  .presence-dot-running,
+  .panel-in {
     animation: none;
   }
   .stamp-animate {
-    opacity: 0.7;
-    transform: rotate(-6deg) scale(1);
+    opacity: 0.88;
+    transform: rotate(-7deg);
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
   }
 }
 
-@keyframes fund-bar-grow {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-.fund-bar-grow {
-  transform-origin: left center;
-  animation: fund-bar-grow 500ms ease-out forwards;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fund-bar-grow {
-    animation: none;
-    transform: none;
-  }
+/* Print: the package prints as the funder's document. */
+@page {
+  size: letter;
+  margin: 0.6in 0.55in;
 }
 
 @media print {
-  header,
-  nav,
+  html,
+  body {
+    background: #fff;
+    font-size: 11px;
+  }
   .no-print,
-  aside {
+  header,
+  nav {
     display: none !important;
   }
-  body {
-    background: white;
+  .print-sheet {
+    box-shadow: none !important;
+    border: 0 !important;
+    padding: 0 !important;
   }
-  .report-print {
-    padding: 0;
+  .print-break {
+    break-before: page;
   }
+  .print-avoid {
+    break-inside: avoid;
+  }
+  .print-only {
+    display: block !important;
+  }
+  table {
+    font-size: 10px;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tr {
+    break-inside: avoid;
+  }
+}
+
+.print-only {
+  display: none;
 }

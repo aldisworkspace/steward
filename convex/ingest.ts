@@ -1,7 +1,9 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { assertDemoPasscode } from "./passcode";
+import { reconcileGlToBank } from "../lib/matchLedger";
+import { rematchAll } from "./receipts";
 
 const txn = v.object({
   txnId: v.string(),
@@ -9,6 +11,24 @@ const txn = v.object({
   description: v.string(),
   amountCents: v.number(),
   memo: v.string(),
+});
+
+/** A GL detail line (see lib/parseGlDetail.ts). Stored in `transactions` with source "gl". */
+const glLine = v.object({
+  txnId: v.string(),
+  date: v.string(),
+  description: v.string(),
+  amountCents: v.number(),
+  memo: v.string(),
+  source: v.literal("gl"),
+  vendor: v.string(),
+  account: v.string(),
+  department: v.string(),
+  docRef: v.string(),
+  txnType: v.string(),
+  glClass: v.union(v.string(), v.null()),
+  glBudgetLine: v.union(v.string(), v.null()),
+  enteredBy: v.string(),
 });
 
 const glRow = v.object({
@@ -20,6 +40,14 @@ const glRow = v.object({
   class: v.union(v.string(), v.null()),
   budgetLine: v.union(v.string(), v.null()),
   enteredBy: v.string(),
+});
+
+const bankLine = v.object({
+  lineId: v.string(),
+  date: v.string(),
+  description: v.string(),
+  amountCents: v.number(),
+  memo: v.string(),
 });
 
 const staffAllocation = v.object({
@@ -36,7 +64,7 @@ const precedent = v.object({
   scope: v.string(),
 });
 
-type DemoTable = "transactions" | "glRows" | "staffAllocations" | "precedents";
+type DemoTable = "transactions" | "glRows" | "staffAllocations" | "precedents" | "bankLines";
 
 async function clearTable(ctx: MutationCtx, table: DemoTable) {
   const rows = await ctx.db.query(table).collect();
@@ -56,7 +84,8 @@ async function allGrantsReadyForPipeline(ctx: MutationCtx) {
 export const tryAutoRunPipeline = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const txn = await ctx.db.query("transactions").first();
+    // GL-first workspaces store GL lines in `transactions`; legacy ones store bank rows there.
+    const txn = (await ctx.db.query("transactions").first()) ?? (await ctx.db.query("glRows").first());
     if (!txn) return;
     const extracting = await ctx.db
       .query("grants")
@@ -90,6 +119,9 @@ export const loadDemo = mutation({
     await clearTable(ctx, "glRows");
     await clearTable(ctx, "staffAllocations");
     await clearTable(ctx, "precedents");
+    await clearTable(ctx, "bankLines");
+    // The legacy demo is bank-first and carries no receipts.
+    for (const row of await ctx.db.query("receipts").collect()) await ctx.db.delete(row._id);
 
     for (const row of args.transactions) {
       await ctx.db.insert("transactions", row);
@@ -201,6 +233,7 @@ export const startCustomWorkspace = mutation({
     for (const row of await ctx.db.query("transactions").collect()) await ctx.db.delete(row._id);
     for (const row of await ctx.db.query("glRows").collect()) await ctx.db.delete(row._id);
     for (const row of await ctx.db.query("staffAllocations").collect()) await ctx.db.delete(row._id);
+    for (const row of await ctx.db.query("bankLines").collect()) await ctx.db.delete(row._id);
     for (const row of await ctx.db.query("decisions").collect()) await ctx.db.delete(row._id);
     for (const row of await ctx.db.query("proposedEntries").collect()) await ctx.db.delete(row._id);
     for (const row of await ctx.db.query("inboxResolutions").collect()) await ctx.db.delete(row._id);
@@ -237,6 +270,137 @@ export const startCustomWorkspace = mutation({
       evidence: [`${args.transactions.length} bank txns`, `${args.grantDocIds.length} grants`],
     });
     await ctx.runMutation(internal.autonomy.enqueueAgentRun, {});
+  },
+});
+
+async function setDataSource(ctx: MutationCtx, dataSource: "demo" | "custom") {
+  const settings = await ctx.db
+    .query("workspaceSettings")
+    .withIndex("by_key", (q) => q.eq("key", "default"))
+    .first();
+  if (settings) await ctx.db.patch(settings._id, { dataSource });
+  else {
+    await ctx.db.insert("workspaceSettings", {
+      key: "default",
+      organizationName: "Valencia Youth Collective",
+      approverName: "A. Okafor",
+      approverTitle: "Executive Director",
+      dataSource,
+    });
+  }
+}
+
+/**
+ * Demo seeds switch between sample sets. Each set's confirmed contracts (by file name) are parked with their
+ * extracted terms when another set loads, and restored when their own set loads again, so a reseed never
+ * re-extracts a contract it already read.
+ */
+async function parkAndRestoreGrants(ctx: MutationCtx, parkFileNames: string[], keepFileNames: string[]) {
+  const park = new Set(parkFileNames.filter((f) => !keepFileNames.includes(f)));
+  const at = new Date().toISOString();
+  for (const g of await ctx.db.query("grants").collect()) {
+    if (!park.has(g.fileName) || g.status !== "ready" || !g.terms) continue;
+    const prior = await ctx.db.query("parkedGrants").withIndex("by_fileName", (q) => q.eq("fileName", g.fileName)).collect();
+    for (const p of prior) await ctx.db.delete(p._id);
+    await ctx.db.insert("parkedGrants", { storageId: g.storageId, fileName: g.fileName, grantId: g.grantId, terms: g.terms, source: g.source, parkedAt: at });
+    await ctx.db.delete(g._id);
+  }
+  for (const fileName of keepFileNames) {
+    const parked = await ctx.db.query("parkedGrants").withIndex("by_fileName", (q) => q.eq("fileName", fileName)).first();
+    if (!parked) continue;
+    const live = await ctx.db.query("grants").withIndex("by_fileName", (q) => q.eq("fileName", fileName)).first();
+    if (live?.status === "ready" && live.terms) {
+      await ctx.db.delete(parked._id);
+      continue;
+    }
+    const fields = { storageId: parked.storageId, fileName, grantId: parked.grantId, terms: parked.terms, source: parked.source, status: "ready" as const, error: undefined };
+    if (live) await ctx.db.patch(live._id, fields);
+    else await ctx.db.insert("grants", fields);
+    await ctx.db.delete(parked._id);
+  }
+}
+
+async function clearRunState(ctx: MutationCtx) {
+  for (const table of ["decisions", "proposedEntries", "inboxResolutions", "runs"] as const) {
+    for (const row of await ctx.db.query(table).collect()) await ctx.db.delete(row._id);
+  }
+}
+
+/**
+ * GL-first workspace: the GL detail is the primary record (required); a bank statement and
+ * receipts are optional evidence. Replaces the workspace's transactions, GL rows and staff.
+ */
+export const startGlWorkspace = mutation({
+  args: {
+    passcode: v.optional(v.string()),
+    lines: v.array(glLine),
+    /** Optional bank statement (ids B0001…), for reconciliation only. */
+    bankLines: v.optional(v.array(bankLine)),
+    staffAllocations: v.array(staffAllocation),
+    grantDocIds: v.array(v.id("grants")),
+    dataSource: v.optional(v.union(v.literal("demo"), v.literal("custom"))),
+    precedents: v.optional(v.array(precedent)),
+    /** Drop previously uploaded receipts (demo reseed). Default keeps them. */
+    clearReceipts: v.optional(v.boolean()),
+    /** Demo seeds: this set's contract file names. Confirmed contracts parked earlier are restored and kept. */
+    keepGrantFileNames: v.optional(v.array(v.string())),
+    /** Demo seeds: other sets' contract file names. Their confirmed contracts are parked instead of deleted. */
+    parkGrantFileNames: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    assertDemoPasscode(args.passcode);
+    if (args.clearReceipts) {
+      for (const row of await ctx.db.query("receipts").collect()) await ctx.db.delete(row._id);
+    }
+    if (!args.lines.length) throw new ConvexError("Upload a GL detail file with at least one expense line.");
+    await parkAndRestoreGrants(ctx, args.parkGrantFileNames ?? [], args.keepGrantFileNames ?? []);
+    const keepNames = new Set(args.keepGrantFileNames ?? []);
+    const keep = new Set(args.grantDocIds.map(String));
+    for (const g of await ctx.db.query("grants").collect()) if (keepNames.has(g.fileName)) keep.add(String(g._id));
+    for (const table of ["transactions", "glRows", "staffAllocations", "bankLines"] as const) {
+      for (const row of await ctx.db.query(table).collect()) await ctx.db.delete(row._id);
+    }
+    await clearRunState(ctx);
+    for (const g of await ctx.db.query("grants").collect()) {
+      if (!keep.has(String(g._id))) await ctx.db.delete(g._id);
+    }
+    if (args.precedents) {
+      for (const row of await ctx.db.query("precedents").collect()) await ctx.db.delete(row._id);
+      for (const row of args.precedents) await ctx.db.insert("precedents", row);
+    }
+    for (const line of args.lines) {
+      await ctx.db.insert("transactions", line);
+      // The bookkeeper's coding claim lives in glRows (bankRef = line id) so existing rules,
+      // approverGuard and UI keep working unchanged.
+      await ctx.db.insert("glRows", {
+        bankRef: line.txnId, date: line.date, description: line.description, amountCents: line.amountCents,
+        account: line.account, class: line.glClass, budgetLine: line.glBudgetLine, enteredBy: line.enteredBy,
+      });
+    }
+    const bank = args.bankLines ?? [];
+    for (const row of bank) await ctx.db.insert("bankLines", row);
+    // A bank outflow the GL never recorded still needs a queue row: keep it as a placeholder
+    // record (source "bank", id = bank line id). The pipeline does not code it; a rule flags it.
+    const { unrecorded } = reconcileGlToBank(args.lines, bank);
+    for (const b of unrecorded) {
+      await ctx.db.insert("transactions", {
+        txnId: b.lineId, date: b.date, description: b.description, amountCents: b.amountCents, memo: b.memo,
+        source: "bank",
+      });
+    }
+    for (const row of args.staffAllocations) await ctx.db.insert("staffAllocations", row);
+    // Receipts uploaded before the run are kept; line ids changed, so match them again.
+    await rematchAll(ctx);
+    await setDataSource(ctx, args.dataSource ?? "custom");
+    await ctx.db.insert("auditLog", {
+      at: new Date().toISOString(),
+      actor: "user",
+      action: "new_workspace",
+      targetId: "workspace",
+      why: "Started GL-first workspace",
+      evidence: [`${args.lines.length} GL lines`, `${bank.length} bank lines`, `${args.grantDocIds.length} grants`],
+    });
+    await ctx.runMutation(internal.ingest.tryAutoRunPipeline, {});
   },
 });
 

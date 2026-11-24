@@ -1,3 +1,4 @@
+import { isSoftRule } from "./softRules";
 import type { Decision, Finding, GlRow, GrantTerms, StaffAllocation, Txn } from "./types";
 
 /** Grant-charge amount at risk for one non-auto outflow (see demo brief). */
@@ -13,14 +14,35 @@ export function atRiskCentsForTxn(
 
   const abs = Math.abs(t.amountCents);
   const chargedGrant = gl?.class ?? d.grantId;
-  const onGrant = !!(chargedGrant || (d.grantId && !d.splits));
+  // Blocked findings only fire on a line someone charged (or proposed to charge) to a grant, even when the
+  // proposed correction has already moved the decision off it.
+  const blockedOnGrant = fs.some((f) => f.status === "blocked");
+  const onGrant = !!(chargedGrant || (d.grantId && !d.splits) || blockedOnGrant);
   if (!onGrant && !fs.some((f) => f.suggestion?.some((s) => s.grantId))) return 0;
 
-  if (fs.some((f) => f.ruleId.startsWith("R-UNALLOWABLE") || f.ruleId === "R-PERIOD")) {
-    if (chargedGrant || d.grantId) return abs;
+  // Only reconciliation / documentation gaps: the exposure each finding states (e.g. just the
+  // difference for an amount mismatch, the full grant charge for a missing receipt).
+  if (fs.length && fs.every((f) => isSoftRule(f.ruleId)) && d.status !== "blocked") {
+    return Math.min(abs, Math.max(0, ...fs.map((f) => f.exposureCents ?? abs)));
   }
 
+  // "Can't be billed as booked" exposure follows the verified decision status, not just the rule id. A blocked
+  // finding that sizes its own blocked portion (alcohol share of a meal, the part over a line cap, indirect above
+  // the computed amount, a purchase awaiting prior approval) puts only that portion at risk, unless another
+  // blocked finding rules out the whole line (a prohibition seen in the memo, out of period).
+  if (d.status === "blocked") {
+    const blocking = fs.filter((f) => f.status === "blocked");
+    const whole = blocking.some((f) => f.exposureCents == null && (f.ruleId.startsWith("R-UNALLOWABLE") || f.ruleId === "R-PERIOD"));
+    if (whole) return abs;
+    const sized = blocking.filter((f) => f.exposureCents != null);
+    if (sized.length) return Math.min(abs, Math.max(...sized.map((f) => f.exposureCents!)));
+  }
+
+  const indirect = fs.find((f) => f.ruleId === "R-INDIRECT-RATE");
+  if (indirect?.exposureCents != null) return Math.min(abs, indirect.exposureCents);
+
   const effort = fs.find((f) => f.ruleId === "R-EFFORT");
+  if (effort?.exposureCents != null) return Math.min(abs, effort.exposureCents);
   if (effort) {
     const person = staff.find((s) => t.memo.includes(`(${s.employee})`));
     const grantKey = gl?.class && gl.budgetLine ? `${gl.class}:${gl.budgetLine}` : d.grantId && d.budgetLine ? `${d.grantId}:${d.budgetLine}` : null;

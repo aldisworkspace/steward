@@ -1,41 +1,37 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Newsreader, Public_Sans } from "next/font/google";
+import { Geist, Newsreader } from "next/font/google";
 import "./globals.css";
 
-const publicSans = Public_Sans({
-  variable: "--font-public-sans",
+// App UI: Geist (shared with the landing) for interface and tabular money.
+const geist = Geist({
+  variable: "--font-geist",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
   display: "swap",
 });
 
+// Display moments and verbatim contract quotes; italic carries the accent word.
 const newsreader = Newsreader({
   variable: "--font-newsreader",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
-});
-
-const bricolage = Bricolage_Grotesque({
-  variable: "--font-bricolage",
-  subsets: ["latin"],
-  weight: ["600", "700"],
+  weight: ["400", "500"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Steward — the grants accountant that reads the contract",
+  title: "Steward — pre-submission review for grant invoices",
   description:
-    "Steward checks bank transactions against grant agreements, catches clawback risk, and proposes corrections for human approval.",
+    "Steward checks every GL line against the grant contract, matches receipts, and ties the invoice package to the cent. A human reviewer signs.",
   openGraph: {
-    title: "Steward — the grants accountant that reads the contract",
+    title: "Steward — pre-submission review for grant invoices",
     description:
-      "Autonomous grants accountant for small nonprofits. Synthetic demo · Real Claude · Cal Hacks 13.0",
+      "Pre-submission review for nonprofit grant invoices. Synthetic demo · Real Claude · Built at Cal Hacks 13.0",
   },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${publicSans.variable} ${newsreader.variable} ${bricolage.variable} h-full`}>
+    <html lang="en" className={`${geist.variable} ${newsreader.variable} h-full`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
