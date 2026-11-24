@@ -191,5 +191,18 @@ check("one receipt documents its whole split group (RECEIPTS passes for every ro
   assert.match(single.detail, /L9/);
 });
 
+check("held lines leave the invoice, stay listed as excluded, and the package still ties", () => {
+  const i = base();
+  i.decisions = i.decisions.map((d) => d.txnId === "L4" ? { ...d, status: "needs_review", ruleHits: ["R-RECEIPT-MISMATCH"] } : d);
+  const open = buildPackage(i);
+  assert.equal(get(open, "NO_OPEN_EXCEPTIONS").pass, false);
+  const p = buildPackage({ ...i, heldTxnIds: ["L4"] });
+  assert.equal(get(p, "NO_OPEN_EXCEPTIONS").pass, true);
+  assert.equal(get(p, "SUM_TIES").pass, true, get(p, "SUM_TIES").detail);
+  assert.equal(p.invoiceTotalCents, open.invoiceTotalCents - 8000);
+  assert.ok(p.excluded.some((e) => e.txnId === "L4" && e.amountCents === 8000 && /Held/.test(e.reason)));
+  assert.ok(!p.lines.some((l) => l.txnId === "L4"));
+});
+
 if (failures) { console.log(`\n${failures} tie-out check(s) failed`); process.exit(1); }
 console.log("\nAll tie-out checks passed");

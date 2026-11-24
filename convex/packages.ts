@@ -31,11 +31,12 @@ async function loadInputs(ctx: QueryCtx) {
 }
 type Inputs = Awaited<ReturnType<typeof loadInputs>>;
 
-function build(inp: Inputs, grant: GrantTerms, periodStart: string, periodEnd: string): BillingPackage {
+function build(inp: Inputs, grant: GrantTerms, periodStart: string, periodEnd: string, heldTxnIds?: string[]): BillingPackage {
   const priorPackages: PriorPackage[] = inp.packages
     .filter((p) => p.grantId === grant.grantId && p.snapshot && p.periodStart !== periodStart)
     .map((p) => ({ periodStart: p.periodStart, periodEnd: p.periodEnd, status: p.status, totalsByBudgetLine: (p.snapshot as BillingPackage).totalsByBudgetLine }));
   return buildPackage({
+    heldTxnIds,
     grant, periodStart, periodEnd, lines: inp.txns,
     decisions: inp.decisions.map((d) => ({
       txnId: d.txnId, grantId: d.grantId, budgetLine: d.budgetLine, splits: d.splits as TieOutDecision["splits"],
@@ -259,18 +260,24 @@ export const seedDemoHistory = mutation({
         for (const t of inp.txns) {
           if (t.date >= periodStart && t.date <= periodEnd && (t.glClass ?? null) === grant.grantId) ids.add(t.txnId);
         }
+        // Real practice: a charge with an open question is held out of the invoice and billed later once
+        // resolved. Hold it (it stays open in Review) instead of acknowledging it on the reviewer's behalf.
         const resolved = new Set(inp.resolutions.map((r) => r.txnId));
         const at = new Date().toISOString();
+        const held = new Set<string>();
         for (const d of inp.decisions) {
-          if (!ids.has(d.txnId) || d.status === "auto" || resolved.has(d.txnId)) continue;
-          await ctx.db.insert("inboxResolutions", { txnId: d.txnId, resolution: "acknowledged", by: reviewer, at, note: why });
+          if (ids.has(d.txnId) && d.status !== "auto" && !resolved.has(d.txnId)) held.add(d.txnId);
+        }
+        for (const c of pkgBefore.checks) {
+          if (c.id !== "RECEIPTS" || c.pass) continue;
+          for (const id of ids) if (c.detail.includes(id)) held.add(id);
         }
         for (const id of ids) {
           const t = await ctx.db.query("transactions").withIndex("by_txnId", (q) => q.eq("txnId", id)).first();
           if (t && t.source === "gl" && !t.programApprovedBy) await ctx.db.patch(t._id, { programApprovedBy: approver, programApprovedAt: at });
         }
         inp = await loadInputs(ctx);
-        const pkg = build(inp, grant, periodStart, periodEnd);
+        const pkg = build(inp, grant, periodStart, periodEnd, [...held]);
         const [y, m, dd] = periodEnd.split("-").map(Number);
         const signedAt = new Date(Date.UTC(y!, m! - 1, dd! + 18, 17)).toISOString();
         const invoiceNo = defaultInvoiceNo(grant.grantId, periodStart);

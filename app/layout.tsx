@@ -19,13 +19,13 @@ const newsreader = Newsreader({
 });
 
 export const metadata: Metadata = {
-  title: "Steward — the grants accountant that reads the contract",
+  title: "Steward — pre-submission review for grant invoices",
   description:
-    "Steward checks bank transactions against grant agreements, catches clawback risk, and proposes corrections for human approval.",
+    "Steward checks every GL line against the grant contract, matches receipts, and ties the invoice package to the cent. A human reviewer signs.",
   openGraph: {
-    title: "Steward — the grants accountant that reads the contract",
+    title: "Steward — pre-submission review for grant invoices",
     description:
-      "Autonomous grants accountant for small nonprofits. Synthetic demo · Real Claude · Cal Hacks 13.0",
+      "Pre-submission review for nonprofit grant invoices. Synthetic demo · Real Claude · Built at Cal Hacks 13.0",
   },
 };
 

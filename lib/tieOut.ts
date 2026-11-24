@@ -75,6 +75,8 @@ export interface BuildPackageInput {
   resolutions: TieOutResolution[];
   priorPackages: PriorPackage[];
   receiptThresholdCents?: number;
+  /** Lines held out of this invoice until resolved (billed later); listed as excluded, never silently dropped. */
+  heldTxnIds?: string[];
 }
 
 type Portion = { grantId: string | null; budgetLine: string | null; amount: number };
@@ -135,6 +137,7 @@ export function buildPackage(input: BuildPackageInput): BillingPackage {
   const splitErrors: string[] = [];
   const open: string[] = [];
   const selected: Txn[] = [];
+  const held = new Set(input.heldTxnIds ?? []);
 
   for (const t of input.lines) {
     if (glFirst && t.source === "bank") continue; // not in the books yet
@@ -145,6 +148,15 @@ export function buildPackage(input: BuildPackageInput): BillingPackage {
     const claimed = (t.glClass ?? null) === gid;
     const mine = portions.filter((p) => p.grantId === gid);
     if (!claimed && !mine.length) continue;
+    if (held.has(t.txnId)) {
+      if (claimed) {
+        glTotal -= t.amountCents;
+        excludedTotal -= t.amountCents;
+        excluded.push({ txnId: t.txnId, date: t.date, vendor: t.vendor ?? t.description, description: t.memo || t.description,
+          claimedBudgetLine: t.glBudgetLine ?? null, amountCents: -t.amountCents, reason: "Held from this invoice until the open question is resolved" });
+      }
+      continue;
+    }
     selected.push(t);
     if (portions.reduce((a, p) => a + p.amount, 0) !== t.amountCents) splitErrors.push(t.txnId);
 
