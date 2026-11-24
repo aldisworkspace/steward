@@ -171,6 +171,19 @@ select {
   animation: strike-draw 420ms var(--ease-out) 120ms forwards;
 }
 
+@keyframes strike-sweep {
+  from {
+    background-size: 0% 0.55em;
+  }
+  to {
+    background-size: 100% 0.55em;
+  }
+}
+
+.redpen-strike-draw {
+  animation: strike-sweep 460ms var(--ease-out) 160ms both;
+}
+
 /* Rubber stamp: lands once when a package is signed. */
 @keyframes stamp-drop {
   from {
@@ -238,6 +251,9 @@ select {
   .redpen-strike-animate {
     animation: none;
     stroke-dashoffset: 0;
+  }
+  .redpen-strike-draw {
+    animation: none;
   }
   .stamp-animate,
   .status-toast-enter,
