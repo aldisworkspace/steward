@@ -178,6 +178,22 @@ async function main() {
     assert.equal(none.filter((f) => /RECEIPT/.test(f.ruleId)).length, 0);
     assert.ok(findings.filter((f) => /RECEIPT|PURPOSE/.test(f.ruleId)).every((f) => f.status === "needs_review"));
   });
+  await check("receipt threshold: the contract's own threshold beats the workspace setting, which beats the default", () => {
+    const hard = gl("L0120", "2026-10-14", "Harrow Hardware", -6211, "HLF-26-031", "B2");
+    const glr: GlRow[] = [{ bankRef: hard.txnId, date: hard.date, description: hard.description, amountCents: hard.amountCents, account: hard.account!, class: hard.glClass ?? null, budgetLine: hard.glBudgetLine ?? null, enteredBy: "bk" }];
+    const cands = new Map<string, Candidate>([[hard.txnId, { txnId: hard.txnId, grantId: "HLF-26-031", budgetLine: "B2", origin: "gl" }]]);
+    const withGrants = (grants: GrantTerms[], ws?: number) => runRules({ txns: [hard], gl: glr, staff: [], grants, precedents: [], candidates: cands, receipts: [], receiptThresholdCents: ws })
+      .filter((f) => f.ruleId === "R-RECEIPT-MISSING");
+    const own50 = FIXTURE_GRANTS.map((x) => x.grantId === "HLF-26-031" ? { ...x, receiptThresholdUsd: 50 } : x);
+    const [f] = withGrants(own50, 7500);
+    assert.ok(f, "$62.11 ≥ the contract's $50 even though the workspace says $75");
+    assert.match(f!.message, /\$50\.00 by the contract/);
+    assert.ok(f!.evidence.some((e) => e.source === "contract" && /receipt threshold/.test(e.ref)));
+    assert.deepEqual(withGrants(FIXTURE_GRANTS, 7500), [], "no contract threshold → workspace $75 applies");
+    assert.equal(withGrants(FIXTURE_GRANTS, 6000).length, 1, "workspace $60");
+    assert.deepEqual(withGrants(FIXTURE_GRANTS), [], "default $75");
+    assert.deepEqual(withGrants(FIXTURE_GRANTS.map((x) => ({ ...x, receiptThresholdUsd: null }))), [], "null → fallback");
+  });
   await check("labels", () => {
     assert.equal(issueLabel("R-RECEIPT-MISSING", "needs_review"), "Missing receipt");
     assert.equal(issueLabel("R-PURPOSE-UNCLEAR", "needs_review"), "Which program was this for?");

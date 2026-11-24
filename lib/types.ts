@@ -28,6 +28,8 @@ export const GrantTermsZ = z.object({
   }).nullable().optional(),
   /** What indirectCapPct is a rate on: C1-style salaries, all direct costs, or modified total direct costs. */
   indirectBase: z.enum(["salaries", "direct", "mtdc"]).nullable().optional(),
+  /** Contract's own receipt threshold in dollars ("receipts for every non-payroll charge of $50 or more"); null if not stated. */
+  receiptThresholdUsd: z.number().nonnegative().nullable().optional(),
 });
 export type GrantTerms = z.infer<typeof GrantTermsZ>;
 

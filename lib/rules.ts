@@ -7,7 +7,7 @@
 import { NON_CASH_TYPE, reconcileGlToBank } from "./matchLedger";
 import { daysApart, RECEIPT_DATE_WINDOW_DAYS, receiptCoverage, receiptExempt } from "./matchReceipts";
 import { isPayrollTxn, matchStaffForTxn } from "./payrollMatch";
-import { applyRate, baseLineCodes, indirectLineCode } from "./tieOut";
+import { applyRate, baseLineCodes, indirectLineCode, receiptThresholdFor } from "./tieOut";
 import { vendorKey } from "./vendorKey";
 import type { BankLine, Candidate, Evidence, Finding, GlRow, GrantTerms, Precedent, ReceiptRecord, StaffAllocation, Txn } from "./types";
 
@@ -22,7 +22,10 @@ export interface RuleInput {
   bankLines?: BankLine[];
   /** Receipts uploaded for this workspace. Receipt rules run only when this is provided. */
   receipts?: ReceiptRecord[];
-  /** Grant-charged lines at or above this need a receipt (workspaceSettings.receiptThresholdCents). */
+  /**
+   * Grant-charged lines at or above this need a receipt (workspaceSettings.receiptThresholdCents). A grant whose
+   * terms state their own receiptThresholdUsd uses that instead.
+   */
   receiptThresholdCents?: number;
 }
 
@@ -254,7 +257,8 @@ export function receiptFindings(input: RuleInput): Finding[] {
   const out: Finding[] = [];
   const glFirst = input.txns.some((t) => t.source === "gl");
   const receipts = input.receipts;
-  const threshold = input.receiptThresholdCents ?? DEFAULT_RECEIPT_THRESHOLD_CENTS;
+  const grantById = new Map(input.grants.map((g) => [g.grantId, g]));
+  const thresholdOf = (grantId: string) => receiptThresholdFor(grantById.get(grantId), input.receiptThresholdCents ?? DEFAULT_RECEIPT_THRESHOLD_CENTS);
   const chargedGrant = (t: Txn) => t.glClass ?? input.candidates.get(t.txnId)?.grantId ?? null;
   const lines = input.txns.filter((t) => t.amountCents < 0 && !(glFirst && t.source === "bank"));
   // A receipt documents its matched line, or the whole split group it was matched to.
@@ -270,6 +274,7 @@ export function receiptFindings(input: RuleInput): Finding[] {
     const abs = -t.amountCents;
     const cov = coverage.get(t.txnId);
     const r = cov?.receipt;
+    const threshold = grant ? thresholdOf(grant) : 0;
     if (receipts && !r && grant && abs >= threshold && !receiptExempt(t)) {
       const tie = ambiguous.get(t.txnId);
       if (tie?.length) {
@@ -280,8 +285,10 @@ export function receiptFindings(input: RuleInput): Finding[] {
           exposureCents: abs });
       } else {
         out.push({ ruleId: "R-RECEIPT-MISSING", txnId: t.txnId, status: "needs_review",
-          message: `${usd(t.amountCents)} charged to ${grant} has no receipt (required at or above ${usd(threshold)}). Attach the receipt or invoice before billing.`,
-          evidence: [{ source: "gl", ref: t.txnId, note: `${t.date} ${t.vendor ?? t.description} ${usd(t.amountCents)}` }],
+          message: `${usd(t.amountCents)} charged to ${grant} has no receipt (required at or above ${usd(threshold)}${grantById.get(grant)?.receiptThresholdUsd != null ? " by the contract" : ""}). Attach the receipt or invoice before billing.`,
+          evidence: [{ source: "gl", ref: t.txnId, note: `${t.date} ${t.vendor ?? t.description} ${usd(t.amountCents)}` },
+                     ...(grantById.get(grant)?.receiptThresholdUsd != null
+                       ? [{ source: "contract" as const, ref: `${grant} receipt threshold`, note: `receipts required at or above ${usd(threshold)}` }] : [])],
           exposureCents: abs });
       }
     }

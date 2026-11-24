@@ -148,6 +148,20 @@ check("receipts: non-payroll charge ≥ $75 without a matched receipt fails", ()
   assert.doesNotMatch(c.detail, /L1|L3|L5/, "payroll, JE and under-threshold are exempt");
 });
 
+check("receipts: the contract's own threshold (§ documentation clause) overrides the workspace setting", () => {
+  const i = base();
+  i.receipts = [{ receiptId: "R1", matchedTxnId: "L4" }];
+  i.lines = i.lines.map((t) => t.txnId === "L5" ? { ...t, amountCents: -6211 } : t);
+  i.decisions = i.lines.map(auto);
+  assert.equal(get(buildPackage({ ...i, receiptThresholdCents: 7500 }), "RECEIPTS").pass, true, "$62.11 under the workspace $75");
+  const own = buildPackage({ ...i, grant: { ...CITY, receiptThresholdUsd: 50 }, receiptThresholdCents: 7500 });
+  const c = get(own, "RECEIPTS");
+  assert.equal(c.pass, false);
+  assert.match(c.detail, /L5/);
+  assert.match(c.label, /\$50\.00/);
+  assert.equal(c.numbers.thresholdCents, 5000);
+});
+
 check("CSV export ties to the snapshot; a tampered snapshot is refused", () => {
   const p = buildPackage(base());
   const meta = { organization: "SYNTHETIC Org", invoiceNo: "FS-27-0412-2026-07", funder: CITY.funder, program: CITY.program, preparedBy: "J. Rivera (Staff Accountant)", reviewedBy: "A. Okafor (Executive Director)", signedAt: "2026-08-05" };

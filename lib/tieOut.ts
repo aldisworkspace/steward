@@ -12,6 +12,16 @@ import type { GrantTerms, ReceiptExtract, Txn } from "./types";
 
 export const DEFAULT_RECEIPT_THRESHOLD = 75_00;
 
+/**
+ * Receipt threshold for a grant, in cents: the contract's own documentation clause when the terms state one,
+ * else the workspace setting, else the default.
+ */
+export function receiptThresholdFor(grant: Pick<GrantTerms, "receiptThresholdUsd"> | undefined, workspaceCents?: number): number {
+  const own = grant?.receiptThresholdUsd;
+  if (own != null && Number.isFinite(own) && own >= 0) return Math.round(own * 100);
+  return workspaceCents ?? DEFAULT_RECEIPT_THRESHOLD;
+}
+
 export type Resolution = "acknowledged" | "overridden" | "approved_entry" | "rejected_entry";
 
 export interface TieOutDecision {
@@ -121,7 +131,7 @@ const receiptExempt = (t: Txn) => isPayrollTxn(t) || /journal|allocation|depreci
 
 export function buildPackage(input: BuildPackageInput): BillingPackage {
   const { grant, periodStart, periodEnd } = input;
-  const threshold = input.receiptThresholdCents ?? DEFAULT_RECEIPT_THRESHOLD;
+  const threshold = receiptThresholdFor(grant, input.receiptThresholdCents);
   const gid = grant.grantId;
   const dById = new Map(input.decisions.map((d) => [d.txnId, d]));
   const rById = new Map(input.resolutions.map((r) => [r.txnId, r]));

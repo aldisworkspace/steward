@@ -819,6 +819,18 @@ function TermsEditor({ terms, onChange }: { terms: GrantTerms; onChange: (t: Gra
             <option value="mtdc">Modified total direct costs</option>
           </select>
         </label>
+        <label className="text-ink-2">
+          Receipt needed at or above ($)
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            className={field}
+            placeholder="Workspace setting"
+            value={terms.receiptThresholdUsd ?? ""}
+            onChange={(e) => onChange({ ...terms, receiptThresholdUsd: e.target.value ? Number(e.target.value) : null })}
+          />
+        </label>
       </div>
       {!sumOk && (
         <p className="text-amber-ink">
@@ -959,7 +971,7 @@ function RolesStep() {
       </div>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <label className="text-sm text-ink-2">
-          Receipt needed at or above ($)
+          Receipt needed at or above ($) <span className="text-xs">· unless the contract states its own</span>
           <input
             type="number"
             min={0}
