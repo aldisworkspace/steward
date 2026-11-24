@@ -99,8 +99,14 @@ export function StewardApp() {
 
   const openCount = inboxBadge?.open ?? 0;
   useEffect(() => {
-    document.title = openCount > 0 ? `(${openCount}) Steward` : "Steward";
-  }, [openCount]);
+    const page = ({ packages: "Packages", package: "Package", review: "Review", data: "Data" } as Record<string, string>)[tab] ?? "";
+    const prefix = openCount > 0 ? `(${openCount}) ` : "";
+    const title = `${prefix}${page ? `${page} · ` : ""}Steward`;
+    document.title = title;
+    // Next applies the route's metadata title after client navigations; set ours again once it has.
+    const t = window.setTimeout(() => { document.title = title; }, 400);
+    return () => window.clearTimeout(t);
+  }, [openCount, tab]);
 
   useEffect(() => {
     if (!statusToast) return;

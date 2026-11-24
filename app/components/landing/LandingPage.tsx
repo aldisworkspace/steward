@@ -152,7 +152,7 @@ export function LandingPage() {
                 Your browser can&rsquo;t play this video. <a href="/demo/steward-demo.mp4">Download it (MP4, 5 MB)</a>.
               </video>
               <figcaption id="film-caption" className="ld-micro">
-                62 seconds, with sound. A staff dinner is caught against the contract, then the October invoice ties
+                62 seconds. Every word is on screen; the sound is music. A staff dinner is caught against the contract, then the October invoice ties
                 out to the cent. Synthetic demo data, fictional organization.
               </figcaption>
             </figure>

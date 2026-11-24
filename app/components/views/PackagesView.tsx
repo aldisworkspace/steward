@@ -195,13 +195,13 @@ function PackageCard({ p, nowMs }: { p: PackageSummary; nowMs: number }) {
               <span className="text-ink-2"> · {p.program}</span>
             </Link>
           </h3>
-          <p className="mt-1 truncate text-sm text-ink-2">
+          <p className="mt-1 text-sm text-ink-2 sm:truncate">
             {p.funder.replace(/\s*\(fictional[^)]*\)/i, "")} · {docWord(p)} {p.invoiceNo}
             {p.scheduleAssumed ? " · quarterly (no schedule in the terms)" : ""}
           </p>
         </div>
         <div className="sm:row-span-2 sm:text-right">
-          <p className="text-xs text-ink-2">{p.documentKind === "report" ? (done ? "Reported" : "Spent this period") : done ? "Billed" : "Claimable"}</p>
+          <p className="text-xs text-ink-2">{p.documentKind === "report" ? (done ? "Reported" : "Spent this period") : done ? "Billed" : allPass ? "Claimable" : "Claimable once checks pass"}</p>
           <Money cents={p.invoiceTotalCents} focal className="text-xl font-medium tracking-[-0.02em] text-ink sm:text-2xl" />
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">

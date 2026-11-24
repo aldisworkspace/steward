@@ -4,11 +4,12 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
 import { detectAndParseBank } from "@/lib/parseFlexible";
 import { parseGl } from "@/lib/parse";
+import { sameSecret } from "@/convex/passcode";
 
 function assertPasscode(passcode: string | undefined) {
   const expected = process.env.DEMO_PASSCODE;
   if (!expected) return;
-  if (passcode !== expected) throw new Error("Invalid or missing demo passcode.");
+  if (!passcode || !sameSecret(passcode, expected)) throw new Error("Invalid or missing demo passcode.");
 }
 
 export async function POST(req: Request) {

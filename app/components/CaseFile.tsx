@@ -677,7 +677,7 @@ function CaseInner({
             </p>
           )}
           <p className="mt-4 text-xs text-ink-2">
-            Steward flagged this{ruleId ? ` (${ruleId})` : ""}. Your decision is logged under {shortName(app.actor) || "your name"}.
+            Flagged by Steward. Your decision is logged under {shortName(app.actor) || "your name"}.
           </p>
         </section>
       )}

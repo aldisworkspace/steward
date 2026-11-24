@@ -13,11 +13,16 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: "Invalid request." }, { status: 400 });
   }
   const str = (k: string) => (typeof body[k] === "string" ? (body[k] as string) : "");
+  // Rate limiting key: a one-way hash of the caller's address (the address itself is never stored).
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0]!.trim() || req.headers.get("x-real-ip") || "";
+  const clientHash = ip
+    ? Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`steward-pilot:${ip}`))).toString("hex").slice(0, 32)
+    : undefined;
   try {
     const client = new ConvexHttpClient(url);
     await client.mutation(api.pilot.request, {
       name: str("name"), organization: str("organization"), email: str("email"),
-      system: str("system"), note: str("note"), website: str("website"),
+      system: str("system"), note: str("note"), website: str("website"), clientHash,
     });
     return Response.json({ ok: true });
   } catch (e) {

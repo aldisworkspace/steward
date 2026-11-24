@@ -70,8 +70,8 @@ export function useAppUrlState() {
   const { tab, legacyView } = useMemo((): { tab: AppTab; legacyView: DataView | null } => {
     if (rawTab && VALID_TABS.has(rawTab as AppTab)) return { tab: rawTab as AppTab, legacyView: null };
     if (rawTab && LEGACY_TABS[rawTab]) return { tab: LEGACY_TABS[rawTab]!.tab, legacyView: LEGACY_TABS[rawTab]!.view ?? null };
-    // A bare ?case= deep link opens Review.
-    if (!rawTab && caseParam) return { tab: "review", legacyView: null };
+    // A ?case= deep link without a valid tab opens Review.
+    if (caseParam) return { tab: "review", legacyView: null };
     return { tab: "packages", legacyView: null };
   }, [rawTab, caseParam]);
 
@@ -139,13 +139,17 @@ export function useAppUrlState() {
 
   const setCaseId = useCallback(
     (txnId: string | null) => {
+      // Phones show a case full-screen over the list: opening one from the list is a history step, so the
+      // browser's Back returns to the list. Moving between cases (J/K, desktop) replaces instead.
+      const narrow = typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches;
+      const mode = narrow && txnId && !searchParams.get("case") ? "push" : "replace";
       replaceParams((p) => {
         p.set("tab", "review");
         if (txnId) p.set("case", txnId);
         else p.delete("case");
-      });
+      }, mode);
     },
-    [replaceParams],
+    [replaceParams, searchParams],
   );
 
   const setReviewFilter = useCallback(

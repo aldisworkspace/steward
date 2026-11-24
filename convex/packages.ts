@@ -141,8 +141,8 @@ export const getSigned = query({
   },
 });
 
-async function audit(ctx: MutationCtx, actor: string, action: string, targetId: string, why: string, evidence: string[] = []) {
-  await ctx.db.insert("auditLog", { at: new Date().toISOString(), actor, action, targetId, why, evidence });
+async function audit(ctx: MutationCtx, actor: string, action: string, targetId: string, why: string, evidence: string[] = [], at?: string) {
+  await ctx.db.insert("auditLog", { at: at ?? new Date().toISOString(), actor, action, targetId, why, evidence });
 }
 
 /** Preparer submits the package for review. Creates the row on first use. */
@@ -306,7 +306,9 @@ export const seedDemoHistory = mutation({
         } else {
           id = await ctx.db.insert("packages", { grantId: grant.grantId, periodStart, periodEnd, createdAt: at, ...fields });
         }
-        await audit(ctx, reviewer, "package_signed", String(id), `${invoiceNo} signed at ${pkg.invoiceTotalCents} cents (${why})`, [`prepared by ${preparer}`]);
+        // Seeded demo history: the trail shows the package's own (synthetic) signing date, so the header and the
+        // trail agree; `why` says it was seeded.
+        await audit(ctx, reviewer, "package_signed", String(id), `${invoiceNo} signed at ${pkg.invoiceTotalCents} cents (${why})`, [`prepared by ${preparer}`], signedAt);
         filed.push(invoiceNo);
       }
     }

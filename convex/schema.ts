@@ -36,7 +36,11 @@ export default defineSchema({
     system: v.string(),
     note: v.string(),
     createdAt: v.string(),
-  }).index("by_email", ["email"]),
+    /** One-way hash of the sender's network address (rate limiting only; the address itself is never stored). */
+    clientHash: v.optional(v.string()),
+  })
+    .index("by_email", ["email"])
+    .index("by_client", ["clientHash"]),
 
   parkedGrants: defineTable({
     storageId: v.id("_storage"),

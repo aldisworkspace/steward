@@ -85,7 +85,11 @@ export function TermsSheets() {
                 </dd>
               </div>
             </dl>
-            <ul className="mt-6 divide-y divide-rule border-y border-rule">
+            <p className="mt-6 text-xs text-ink-2">
+              Cleared so far: lines Steward passed or a person approved. A package&rsquo;s cumulative column also
+              counts lines still in review, so it can be higher.
+            </p>
+            <ul className="mt-2 divide-y divide-rule border-y border-rule">
               {t.budgetLines.map((bl) => {
                 const spent = g.spentByLine[`${t.grantId}:${bl.code}`] ?? 0;
                 const budget = Math.round(bl.amount * 100);

@@ -52,12 +52,12 @@ export function HeroCard() {
 
       <div className="ld-progress">
         <p className="ld-progress__label">
-          <span>7 of 9 checks passed</span>
+          <span>5 of 7 checks pass</span>
           <span className="ld-progress__left">2 left for review</span>
         </p>
         <div className="ld-progress__bar" aria-hidden>
-          {Array.from({ length: 9 }, (_, i) => (
-            <span key={i} className={i < 7 ? "is-ok" : "is-no"} />
+          {Array.from({ length: 7 }, (_, i) => (
+            <span key={i} className={i < 5 ? "is-ok" : "is-no"} />
           ))}
         </div>
       </div>
@@ -167,21 +167,20 @@ export function MatchPanel() {
 }
 
 const TIE_OUT: { label: string; value: string; ok: boolean }[] = [
-  { label: "GL lines coded to the contract", value: "42 lines", ok: true },
-  { label: "Dates inside the billing period", value: "Oct 1–31", ok: true },
-  { label: "Costs allowable under the contract", value: "42 of 42", ok: true },
-  { label: "Budget lines under their caps", value: "6 of 6", ok: true },
-  { label: "Indirect rate at the contract rate", value: "10.00%", ok: true },
-  { label: "No line billed in a prior month", value: "0 found", ok: true },
-  { label: "Report total equals invoice total", value: "$17,872.21", ok: true },
-  { label: "Receipts match the ledger to the cent", value: "+$0.01", ok: false },
-  { label: "Every line has a receipt", value: "41 of 42", ok: false },
+  // The same seven tie-out checks the app runs (lib/tieOut.ts), in its own words.
+  { label: "Invoice, expenditure report and ledger agree", value: "$17,872.21", ok: true },
+  { label: "Indirect computed once, to the cent", value: "10.00%", ok: true },
+  { label: "Every budget line within its cap", value: "6 of 6", ok: true },
+  { label: "Every charge in the billing period", value: "Oct 1–31", ok: true },
+  { label: "Lines approved for the program", value: "42 of 42", ok: true },
+  { label: "A receipt for every charge over $75", value: "41 of 42", ok: false },
+  { label: "No open exceptions", value: "2 open", ok: false },
 ];
 
 export function TieOutPanel() {
   return (
     <div className="ld-card ld-panel">
-      <PanelHead kicker="Tie out · expenditure report" title="7 of 9 checks passed" />
+      <PanelHead kicker="Tie out · expenditure report" title="5 of 7 checks pass" />
       <ul className="ld-checklist">
         {TIE_OUT.map((row) => (
           <li key={row.label} className={row.ok ? "" : "is-no"}>
@@ -203,7 +202,7 @@ export function SignPanel() {
         <Mark ok />
         <div>
           <p className="ld-ready__title">Ready to submit</p>
-          <p className="ld-ready__meta">9 of 9 checks passed · 2 exceptions cleared by the reviewer</p>
+          <p className="ld-ready__meta">7 of 7 checks pass · 2 exceptions cleared by the reviewer</p>
         </div>
       </div>
       <div className="ld-sign">

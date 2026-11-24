@@ -2,7 +2,7 @@
 
 import { getFundLabel } from "@/lib/fundLabels";
 import type { GrantTerms } from "@/lib/types";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type Command = {
   id: string;
@@ -33,6 +33,14 @@ export function CommandPalette({
 }) {
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Focus returns to whatever was focused before the palette opened.
+  const returnFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    returnFocus.current = document.activeElement as HTMLElement | null;
+    return () => returnFocus.current?.focus?.();
+  }, [open]);
 
   const dismiss = useCallback(() => {
     setQ("");
@@ -79,6 +87,11 @@ export function CommandPalette({
         e.preventDefault();
         dismiss();
       }
+      // Modal: Tab never leaves the palette (arrows move through the list).
+      if (e.key === "Tab") {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
       if (e.key === "ArrowDown") {
         e.preventDefault();
         setIdx((i) => Math.min(i + 1, filtered.length - 1));
@@ -102,9 +115,15 @@ export function CommandPalette({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-navy/40 pt-[15vh]">
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={dismiss} />
-      <div className="relative w-full max-w-lg rounded-[10px] border border-rule bg-sheet p-2 shadow-none">
+      <div role="dialog" aria-modal="true" aria-label="Command palette" className="relative w-full max-w-lg rounded-[10px] border border-rule bg-sheet p-2 shadow-none">
         <input
+          ref={inputRef}
           autoFocus
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="palette-list"
+          aria-activedescendant={filtered[idx] ? `palette-opt-${idx}` : undefined}
+          aria-label="Type a command"
           className="w-full rounded-[6px] border border-rule px-3 py-2 text-[15px] outline-none focus:border-sky"
           placeholder="Type a command…"
           value={q}
@@ -113,11 +132,12 @@ export function CommandPalette({
             setIdx(0);
           }}
         />
-        <ul className="mt-2 max-h-64 overflow-y-auto">
+        <ul id="palette-list" role="listbox" className="mt-2 max-h-64 overflow-y-auto">
           {filtered.map((c, i) => (
-            <li key={c.id}>
+            <li key={c.id} id={`palette-opt-${i}`} role="option" aria-selected={i === idx}>
               <button
                 type="button"
+                tabIndex={-1}
                 className={`w-full rounded-[6px] px-3 py-2 text-left text-[15px] ${
                   i === idx ? "bg-money-tint text-ink" : "text-ink hover:bg-paper"
                 }`}

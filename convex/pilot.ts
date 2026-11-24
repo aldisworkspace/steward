@@ -7,7 +7,7 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalQuery, mutation } from "./_generated/server";
 
-export const PILOT_LIMITS = { name: 120, organization: 160, email: 254, system: 60, note: 1000, perDay: 200 } as const;
+export const PILOT_LIMITS = { name: 120, organization: 160, email: 254, system: 60, note: 1000, perDay: 50, perClientPerDay: 3 } as const;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const DAY_MS = 86_400_000;
 
@@ -20,6 +20,8 @@ export const request = mutation({
     note: v.string(),
     /** Honeypot: a hidden field people never fill. */
     website: v.optional(v.string()),
+    /** Set by /api/pilot from the request's network address (hashed); absent for direct calls. */
+    clientHash: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Bots fill every field: accept silently, store nothing.
@@ -34,16 +36,24 @@ export const request = mutation({
     if (!clean.name || !clean.organization || !clean.email) throw new ConvexError("Name, organization and work email are required.");
     if (!EMAIL.test(clean.email)) throw new ConvexError("That email address doesn't look right.");
     for (const k of ["name", "organization", "email", "system", "note"] as const) {
+      // Strip control characters (newlines are kept only in the note).
+      if (k !== "note" && /[\u0000-\u001f\u007f]/.test(clean[k])) throw new ConvexError(`The ${k} field contains invalid characters.`);
       if (clean[k].length > PILOT_LIMITS[k]) throw new ConvexError(`The ${k} field is too long.`);
     }
     const since = new Date(Date.now() - DAY_MS).toISOString();
     const same = await ctx.db.query("pilotRequests").withIndex("by_email", (q) => q.eq("email", clean.email)).collect();
     if (same.some((r) => r.createdAt >= since)) return { ok: true, duplicate: true };
+    if (args.clientHash) {
+      const fromClient = await ctx.db.query("pilotRequests").withIndex("by_client", (q) => q.eq("clientHash", args.clientHash)).collect();
+      if (fromClient.filter((r) => r.createdAt >= since).length >= PILOT_LIMITS.perClientPerDay) {
+        throw new ConvexError("Too many requests from this connection today. Please try again tomorrow.");
+      }
+    }
     const recent = await ctx.db.query("pilotRequests").order("desc").take(PILOT_LIMITS.perDay);
     if (recent.length >= PILOT_LIMITS.perDay && recent[recent.length - 1]!.createdAt >= since) {
       throw new ConvexError("We're getting a lot of requests right now. Please try again tomorrow.");
     }
-    const requestId = await ctx.db.insert("pilotRequests", { ...clean, createdAt: new Date().toISOString() });
+    const requestId = await ctx.db.insert("pilotRequests", { ...clean, createdAt: new Date().toISOString(), clientHash: args.clientHash });
     // Email the owner (no-op until RESEND_API_KEY and PILOT_NOTIFY_TO are set); the request is stored either way.
     await ctx.scheduler.runAfter(0, internal.pilotNotify.notify, { requestId });
     return { ok: true };

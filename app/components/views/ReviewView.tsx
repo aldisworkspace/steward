@@ -95,6 +95,12 @@ export function ReviewView({
     if (!wide || caseId || filter === "done") return;
     if (orderedIds[0]) url.setCaseId(orderedIds[0]);
   }, [wide, caseId, orderedIds, filter, url]);
+  // A deep link can name an open case outside the current filter/fund: show one that matches instead.
+  useEffect(() => {
+    if (!queue || !caseId || filter === "done" || hidden.has(caseId)) return;
+    const isOpen = queue.some((r) => r.txnId === caseId);
+    if (isOpen && !orderedIds.includes(caseId)) url.setCaseId(wide ? orderedIds[0] ?? null : null);
+  }, [queue, caseId, filter, hidden, orderedIds, wide, url]);
 
   const select = useCallback((txnId: string | null) => url.setCaseId(txnId), [url]);
 
@@ -179,11 +185,12 @@ export function ReviewView({
             <>
               <span className="tabular">{totalOpen}</span> {totalOpen === 1 ? "exception" : "exceptions"}{" "}
               <em className="italic text-ink-2">need a decision</em>
+              <span className="mt-1 block font-sans text-sm font-normal not-italic tracking-normal text-ink-2">Across every package and month.</span>
             </>
           )}
         </h1>
         <button type="button" onClick={onHelp} className="hidden text-xs text-ink-2 hover:text-ink lg:inline">
-          Shortcuts: J K A O
+          Keys: J/K next · A primary action · O override
         </button>
       </div>
       {fund && (

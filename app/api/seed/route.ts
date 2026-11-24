@@ -6,6 +6,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { parseBank, parseGl, parseStaff } from "@/lib/parse";
 import { parseGlDetail } from "@/lib/parseGlDetail";
 import type { Precedent } from "@/lib/types";
+import { sameSecret } from "@/convex/passcode";
 
 export const maxDuration = 300;
 
@@ -123,7 +124,7 @@ const DEMO_GRANTS = [
 function assertPasscode(passcode: string | undefined) {
   const expected = process.env.DEMO_PASSCODE;
   if (!expected) return;
-  if (passcode !== expected) {
+  if (!passcode || !sameSecret(passcode, expected)) {
     throw new Error("Invalid or missing demo passcode.");
   }
 }

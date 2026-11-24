@@ -199,7 +199,8 @@ html:has(.ld) {
 
 @media (max-width: 479px) {
   .ld-nav .ld-nav__cta {
-    display: none;
+    padding: 0 14px;
+    font-size: 13px;
   }
 }
 

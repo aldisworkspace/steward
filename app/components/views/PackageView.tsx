@@ -90,7 +90,7 @@ function PackageSheet({ d, url, grantTerms }: { d: Detail; url: AppUrl; grantTer
               {d.funder.replace(/\s*\(fictional[^)]*\)/i, "")} · {d.grantId}
             </p>
             <h1 className="mt-2 font-serif text-xl leading-tight text-ink text-balance sm:text-2xl">
-              {periodLabel(d.periodStart, d.periodEnd)} <em className="italic text-ink-2">{d.program}</em>
+              {periodLabel(d.periodStart, d.periodEnd)} <span className="text-ink-2">{d.program}</span>
             </h1>
             <p className="mt-2 text-sm text-ink-2">
               {docWord(d)} <span className="tabular text-ink">{d.invoiceNo}</span> · {pkg.lines.length} lines
@@ -99,7 +99,7 @@ function PackageSheet({ d, url, grantTerms }: { d: Detail; url: AppUrl; grantTer
             </p>
           </div>
           <div className="relative sm:text-right">
-            <p className="text-xs text-ink-2">{d.documentKind === "report" ? (done ? "Reported" : "Spent this period") : done ? "Billed" : "Claimable this period"}</p>
+            <p className="text-xs text-ink-2">{d.documentKind === "report" ? (done ? "Reported" : "Spent this period") : done ? "Billed" : failing.length ? "Claimable once checks pass" : "Claimable this period"}</p>
             <Money cents={pkg.invoiceTotalCents} focal className="block text-2xl font-medium tracking-[-0.025em] sm:text-3xl" />
             {done && d.reviewedBy && d.signedAt && (
               <RubberStamp
@@ -165,10 +165,10 @@ function PackageSheet({ d, url, grantTerms }: { d: Detail; url: AppUrl; grantTer
               Expenditure report
             </SectionTitle>
             <div className="no-print flex gap-4 text-sm">
-              <Link href="/app?tab=data&view=ledger" className="text-ink-2 underline underline-offset-4 hover:text-ink">
+              <Link href="/app?tab=data&view=ledger" className="inline-flex min-h-11 items-center text-ink-2 underline underline-offset-4 hover:text-ink lg:min-h-0">
                 Ledger
               </Link>
-              <Link href="/app?tab=data&view=terms" className="text-ink-2 underline underline-offset-4 hover:text-ink">
+              <Link href="/app?tab=data&view=terms" className="inline-flex min-h-11 items-center text-ink-2 underline underline-offset-4 hover:text-ink lg:min-h-0">
                 Contract terms
               </Link>
             </div>

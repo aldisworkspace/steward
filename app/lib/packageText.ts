@@ -109,7 +109,7 @@ export function checkTitle(id: string, pass: boolean, numbers: Record<string, nu
     case "RECEIPTS":
       return pass ? "Every charge over the threshold has a receipt" : `${n("missing")} ${n("missing") === 1 ? "charge needs" : "charges need"} a receipt`;
     case "NO_OPEN_EXCEPTIONS":
-      return pass ? "No open exceptions" : `${n("open")} ${n("open") === 1 ? "exception is" : "exceptions are"} still open`;
+      return pass ? "No open exceptions in this package" : `${n("open")} ${n("open") === 1 ? "line in this package is" : "lines in this package are"} still open`;
     case "PROGRAM_APPROVAL":
       return pass ? "Program staff approved every line" : `${n("unapproved")} ${n("unapproved") === 1 ? "line needs" : "lines need"} program approval`;
     default:

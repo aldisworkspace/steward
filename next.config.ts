@@ -1,7 +1,43 @@
 import type { NextConfig } from "next";
 
+/**
+ * Security headers. The CSP allows only this origin plus Convex (API, live websocket and file storage for
+ * receipts/contracts). Next's hydration needs inline scripts and styles; `next dev` additionally needs eval,
+ * so the CSP is applied to production builds only.
+ */
+const CONVEX = "https://*.convex.cloud";
+const csp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  `img-src 'self' data: blob: ${CONVEX}`,
+  "font-src 'self' data:",
+  `connect-src 'self' ${CONVEX} wss://*.convex.cloud`,
+  `media-src 'self' ${CONVEX}`,
+  `object-src ${CONVEX}`,
+  `frame-src 'self' ${CONVEX}`,
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "upgrade-insecure-requests",
+].join("; ");
+
+const securityHeaders = [
+  ...(process.env.NODE_ENV === "production" ? [{ key: "Content-Security-Policy", value: csp }] : []),
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  // The demo key can arrive in `?key=`; never send full URLs to other sites.
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+];
+
 const nextConfig: NextConfig = {
   devIndicators: false,
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
   cacheComponents: false,
   async redirects() {
     return [{ source: "/demo", destination: "/app?tab=overview", permanent: false }];
