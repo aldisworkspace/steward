@@ -4,7 +4,8 @@
  * Never accepts files or financial data.
  */
 import { ConvexError, v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { internalQuery, mutation } from "./_generated/server";
 
 export const PILOT_LIMITS = { name: 120, organization: 160, email: 254, system: 60, note: 1000, perDay: 200 } as const;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -42,7 +43,17 @@ export const request = mutation({
     if (recent.length >= PILOT_LIMITS.perDay && recent[recent.length - 1]!.createdAt >= since) {
       throw new ConvexError("We're getting a lot of requests right now. Please try again tomorrow.");
     }
-    await ctx.db.insert("pilotRequests", { ...clean, createdAt: new Date().toISOString() });
+    const requestId = await ctx.db.insert("pilotRequests", { ...clean, createdAt: new Date().toISOString() });
+    // Email the owner (no-op until RESEND_API_KEY and PILOT_NOTIFY_TO are set); the request is stored either way.
+    await ctx.scheduler.runAfter(0, internal.pilotNotify.notify, { requestId });
     return { ok: true };
+  },
+});
+
+export const get = internalQuery({
+  args: { requestId: v.id("pilotRequests") },
+  handler: async (ctx, { requestId }) => {
+    const r = await ctx.db.get(requestId);
+    return r && { name: r.name, organization: r.organization, email: r.email, system: r.system, note: r.note, createdAt: r.createdAt };
   },
 });

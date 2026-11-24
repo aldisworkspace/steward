@@ -25,6 +25,7 @@ import type * as packages from "../packages.js";
 import type * as passcode from "../passcode.js";
 import type * as pdfText from "../pdfText.js";
 import type * as pilot from "../pilot.js";
+import type * as pilotNotify from "../pilotNotify.js";
 import type * as precedentUtil from "../precedentUtil.js";
 import type * as programApprovals from "../programApprovals.js";
 import type * as receipts from "../receipts.js";
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   passcode: typeof passcode;
   pdfText: typeof pdfText;
   pilot: typeof pilot;
+  pilotNotify: typeof pilotNotify;
   precedentUtil: typeof precedentUtil;
   programApprovals: typeof programApprovals;
   receipts: typeof receipts;
