@@ -138,7 +138,7 @@ function codePayroll(t: Txn, staff: StaffAllocation[]): (Coding & { splits?: Dec
   };
 }
 
-export async function codeTransactions(model: ModelClient, input: PipelineInput, onProgress?: (done: number, total: number) => void) {
+export async function codeTransactions(model: ModelClient, input: PipelineInput, onProgress?: (done: number, total: number) => void | Promise<void>) {
   const codings = new Map<string, Coding & { splits?: Decision["splits"] }>();
   const errors: string[] = [];
   let usage = { input: 0, output: 0 };
@@ -258,7 +258,9 @@ export async function codeTransactions(model: ModelClient, input: PipelineInput,
       }
     }
     done += batch.length;
-    onProgress?.(Math.min(done, forModel.length), forModel.length);
+    // Awaited: in a Convex action the callback runs a mutation, and an un-awaited call is still outstanding
+    // when the action returns ("outstanding mutation call" warning, progress writes lost).
+    await onProgress?.(Math.min(done, forModel.length), forModel.length);
   }
   return { codings, usage, errors };
 }
@@ -578,7 +580,7 @@ function proposeEntries(input: PipelineInput, decisions: Decision[], findings: F
   return entries;
 }
 
-export async function runPipeline(model: ModelClient, input: PipelineInput, onProgress?: (done: number, total: number) => void): Promise<PipelineResult> {
+export async function runPipeline(model: ModelClient, input: PipelineInput, onProgress?: (done: number, total: number) => void | Promise<void>): Promise<PipelineResult> {
   const { codings, usage, errors } = await codeTransactions(model, input, onProgress);
   return { ...verify(input, codings), usage, errors };
 }

@@ -88,6 +88,15 @@ async function main() {
     }
   });
 
+  await check("progress callback is awaited (no outstanding mutation when the run returns)", async () => {
+    let inFlight = 0, calls = 0;
+    const few = parsed.lines.filter((l) => l.txnType !== "Paycheck").slice(0, 30);
+    await runPipeline(fake, { txns: few, gl: parsed.glRows.filter((g) => few.some((l) => l.txnId === g.bankRef)), staff, grants: FIXTURE_GRANTS_V2, precedents },
+      async () => { inFlight++; calls++; await new Promise((r) => setTimeout(r, 20)); inFlight--; });
+    assert.ok(calls >= 2, `calls ${calls}`);
+    assert.equal(inFlight, 0, "a progress write was still running when runPipeline resolved");
+  });
+
   const counts = new Map<string, number>();
   for (const x of res.decisions) for (const h of x.ruleHits) counts.set(h, (counts.get(h) ?? 0) + 1);
   console.log(`\n${res.decisions.filter((x) => x.status !== "auto").length} open of ${res.decisions.length}; hits: ${[...counts].map(([k, v]) => `${k}×${v}`).join(", ")}`);
