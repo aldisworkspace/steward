@@ -1,0 +1,515 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-24T00:32:47+00:00",
+  "title": "Design System: Steward",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "Bone Paper",
+        "canonical": "#efece6",
+        "tonalRamp": [
+          "#484745",
+          "#787673",
+          "#a7a5a1",
+          "#d2d0ca",
+          "#efece6",
+          "#f5f3ef",
+          "#f9f8f6",
+          "#fdfdfc"
+        ]
+      },
+      "paper-2": {
+        "role": "neutral",
+        "displayName": "Worn Paper",
+        "canonical": "#e6e2da",
+        "tonalRamp": [
+          "#454441",
+          "#73716d",
+          "#a19e99",
+          "#cac7c0",
+          "#e6e2da",
+          "#efece7",
+          "#f6f5f2",
+          "#fcfcfb"
+        ]
+      },
+      "sheet": {
+        "role": "neutral",
+        "displayName": "Working Sheet",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#4c4c4c",
+          "#808080",
+          "#b2b2b2",
+          "#e0e0e0",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Desk Ink",
+        "canonical": "#17150f",
+        "tonalRamp": [
+          "#070604",
+          "#0c0a08",
+          "#100f0a",
+          "#14120d",
+          "#17150f",
+          "#686763",
+          "#aeadab",
+          "#e3e3e2"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Faded Ink",
+        "canonical": "#5c574e",
+        "tonalRamp": [
+          "#1c1a17",
+          "#2e2c27",
+          "#403d37",
+          "#514d45",
+          "#5c574e",
+          "#95928c",
+          "#c6c4c1",
+          "#ebebea"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Pencil Grey",
+        "canonical": "#8a847a",
+        "tonalRamp": [
+          "#292825",
+          "#45423d",
+          "#615c55",
+          "#79746b",
+          "#8a847a",
+          "#b3afa9",
+          "#d6d4d0",
+          "#f1f0ef"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#ddd8cf",
+        "tonalRamp": [
+          "#42413e",
+          "#6e6c68",
+          "#9b9791",
+          "#c2beb6",
+          "#ddd8cf",
+          "#e9e6e0",
+          "#f3f1ee",
+          "#fbfaf9"
+        ]
+      },
+      "rule-strong": {
+        "role": "neutral",
+        "displayName": "Firm Hairline",
+        "canonical": "#c4bdb1",
+        "tonalRamp": [
+          "#3b3935",
+          "#625e58",
+          "#89847c",
+          "#aca69c",
+          "#c4bdb1",
+          "#d9d4cc",
+          "#eae8e4",
+          "#f8f7f6"
+        ]
+      },
+      "green": {
+        "role": "state",
+        "displayName": "Ledger Green",
+        "canonical": "#0e7c5a",
+        "tonalRamp": [
+          "#04251b",
+          "#073e2d",
+          "#0a573f",
+          "#0c6d4f",
+          "#0e7c5a",
+          "#62aa94",
+          "#abd1c5",
+          "#e2efeb"
+        ]
+      },
+      "green-ink": {
+        "role": "state",
+        "displayName": "Ledger Green Ink",
+        "canonical": "#0b6649",
+        "tonalRamp": [
+          "#031f16",
+          "#063324",
+          "#084733",
+          "#0a5a40",
+          "#0b6649",
+          "#609c89",
+          "#aac9bf",
+          "#e2ede9"
+        ]
+      },
+      "green-tint": {
+        "role": "state",
+        "displayName": "Ledger Green Tint",
+        "canonical": "#e2f0e8",
+        "tonalRamp": [
+          "#444846",
+          "#717874",
+          "#9ea8a2",
+          "#c7d3cc",
+          "#e2f0e8",
+          "#ecf5f0",
+          "#f5faf7",
+          "#fcfdfc"
+        ]
+      },
+      "amber": {
+        "role": "state",
+        "displayName": "Needs-You Amber",
+        "canonical": "#c98a1b",
+        "tonalRamp": [
+          "#3c2908",
+          "#64450e",
+          "#8d6113",
+          "#b17918",
+          "#c98a1b",
+          "#dcb36b",
+          "#ecd6af",
+          "#f9f1e4"
+        ]
+      },
+      "amber-ink": {
+        "role": "state",
+        "displayName": "Needs-You Amber Ink",
+        "canonical": "#85520a",
+        "tonalRamp": [
+          "#281903",
+          "#422905",
+          "#5d3907",
+          "#754809",
+          "#85520a",
+          "#b08f60",
+          "#d4c2a9",
+          "#f0eae2"
+        ]
+      },
+      "amber-tint": {
+        "role": "state",
+        "displayName": "Needs-You Amber Tint",
+        "canonical": "#f8ecd6",
+        "tonalRamp": [
+          "#4a4740",
+          "#7c766b",
+          "#aea596",
+          "#dad0bc",
+          "#f8ecd6",
+          "#faf3e4",
+          "#fdf8f1",
+          "#fefdfa"
+        ]
+      },
+      "redpen": {
+        "role": "state",
+        "displayName": "Red Pen",
+        "canonical": "#e0433a",
+        "tonalRamp": [
+          "#431411",
+          "#70221d",
+          "#9d2f29",
+          "#c53b33",
+          "#e0433a",
+          "#eb857f",
+          "#f4bdba",
+          "#fbe8e7"
+        ]
+      },
+      "redpen-ink": {
+        "role": "state",
+        "displayName": "Red Pen Ink",
+        "canonical": "#b0281f",
+        "tonalRamp": [
+          "#350c09",
+          "#581410",
+          "#7b1c16",
+          "#9b231b",
+          "#b0281f",
+          "#cc736d",
+          "#e3b4b1",
+          "#f6e5e4"
+        ]
+      },
+      "redpen-tint": {
+        "role": "state",
+        "displayName": "Red Pen Tint",
+        "canonical": "#fbe6e3",
+        "tonalRamp": [
+          "#4b4544",
+          "#7e7372",
+          "#b0a19f",
+          "#ddcac8",
+          "#fbe6e3",
+          "#fcefed",
+          "#fef6f5",
+          "#fffcfc"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The one Newsreader sentence opening a screen; 28px mobile, 40px from sm; one italic accent in ink-2."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Mobile display step and data-view titles."
+      },
+      "section-title": {
+        "displayName": "Section Title",
+        "purpose": "Newsreader section heads inside a sheet, optional italic accent."
+      },
+      "quote": {
+        "displayName": "Contract Quote",
+        "purpose": "Verbatim contract clauses only."
+      },
+      "money-focal": {
+        "displayName": "Focal Money",
+        "purpose": "The single claimable amount per screen; 40px to 56px; cents at 0.55em raised in ink-2."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Package names and row titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default UI text; prose capped at 64-68ch."
+      },
+      "body-sm": {
+        "displayName": "Body Small",
+        "purpose": "Table cells and meta lines."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Sentence-case field and section labels in ink-2."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Data-source pills, counts, keyboard hints."
+      }
+    },
+    "shadows": [
+      {
+        "name": "sheet",
+        "value": "0 1px 2px rgb(23 21 15 / 0.05), 0 0 0 1px rgb(23 21 15 / 0.02)",
+        "purpose": "Every resting card."
+      },
+      {
+        "name": "float",
+        "value": "0 16px 40px -12px rgb(23 21 15 / 0.22), 0 2px 6px rgb(23 21 15 / 0.06)",
+        "purpose": "Hovered package cards, palettes, popovers."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Default easing for every state transition and entrance."
+      },
+      {
+        "name": "state",
+        "value": "150ms",
+        "purpose": "Button, border, colour and tab transitions."
+      },
+      {
+        "name": "panel-in",
+        "value": "220ms, translateX(16px) to 0",
+        "purpose": "Drawers and the full-screen mobile case."
+      },
+      {
+        "name": "toast-in",
+        "value": "200ms, translateY(6px) to 0",
+        "purpose": "Status toasts."
+      },
+      {
+        "name": "strike-draw",
+        "value": "460ms, 160ms delay, once",
+        "purpose": "Red-pen strike sweep."
+      },
+      {
+        "name": "stamp-drop",
+        "value": "260ms, scale 1.35 to 1, rotate -7deg, once",
+        "purpose": "SIGNED stamp on signing."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animations none, transitions 0ms",
+        "purpose": "prefers-reduced-motion: reduce; strike and stamp render final."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "mobile-check",
+        "value": "375px"
+      },
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Black pill for the one main action (send for review, sign).",
+      "html": "<button class=\"ds-btn-primary\">Sign package</button>",
+      "css": ".ds-btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:40px; padding:0 20px; border-radius:999px; font-family:var(--font-sans, Geist, ui-sans-serif, system-ui, sans-serif); font-size:14px; line-height:20px; font-weight:500; cursor:pointer; transition:background-color 150ms cubic-bezier(0.22,1,0.36,1), border-color 150ms cubic-bezier(0.22,1,0.36,1), color 150ms cubic-bezier(0.22,1,0.36,1); border:0; background:#17150f; color:#ffffff; } .ds-btn-primary:focus-visible { outline:2px solid #17150f; outline-offset:2px; } .ds-btn-primary:hover { background:#2c2920; } .ds-btn-primary:active { background:#000; } .ds-btn-primary:disabled { background:#e6e2da; color:#5c574e; cursor:not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Quiet outline pill for everything else.",
+      "html": "<button class=\"ds-btn-secondary\">Export CSV</button>",
+      "css": ".ds-btn-secondary { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:40px; padding:0 20px; border-radius:999px; font-family:var(--font-sans, Geist, ui-sans-serif, system-ui, sans-serif); font-size:14px; line-height:20px; font-weight:500; cursor:pointer; transition:background-color 150ms cubic-bezier(0.22,1,0.36,1), border-color 150ms cubic-bezier(0.22,1,0.36,1), color 150ms cubic-bezier(0.22,1,0.36,1); border:1px solid #c4bdb1; background:#ffffff; color:#17150f; } .ds-btn-secondary:focus-visible { outline:2px solid #17150f; outline-offset:2px; } .ds-btn-secondary:hover { border-color:#5c574e; background:#efece6; } .ds-btn-secondary:active { background:#e6e2da; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Red-pen outline for irreversible steps (reopen, reject).",
+      "html": "<button class=\"ds-btn-danger\">Reopen package</button>",
+      "css": ".ds-btn-danger { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:40px; padding:0 20px; border-radius:999px; font-family:var(--font-sans, Geist, ui-sans-serif, system-ui, sans-serif); font-size:14px; line-height:20px; font-weight:500; cursor:pointer; transition:background-color 150ms cubic-bezier(0.22,1,0.36,1), border-color 150ms cubic-bezier(0.22,1,0.36,1), color 150ms cubic-bezier(0.22,1,0.36,1); border:1px solid #b0281f; background:#ffffff; color:#b0281f; } .ds-btn-danger:focus-visible { outline:2px solid #17150f; outline-offset:2px; } .ds-btn-danger:hover, .ds-btn-danger:active { background:#fbe6e3; }"
+    },
+    {
+      "name": "State Badges",
+      "kind": "chip",
+      "refersTo": "badge-green",
+      "description": "State word in a pill with a dot; colour is the state, the word says it too.",
+      "html": "<div class=\"ds-badges\"><span class=\"ds-badge ds-badge-green\"><i></i>Ready to sign</span><span class=\"ds-badge ds-badge-amber\"><i></i>Needs review</span><span class=\"ds-badge ds-badge-red\"><i></i>2 checks fail</span><span class=\"ds-badge ds-badge-neutral\"><i></i>Draft</span></div>",
+      "css": ".ds-badges { display:flex; flex-wrap:wrap; gap:8px; } .ds-badge { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; border-radius:999px; padding:2px 10px; font-family:var(--font-sans, Geist, sans-serif); font-size:12px; line-height:16px; font-weight:500; } .ds-badge i { width:6px; height:6px; border-radius:999px; } .ds-badge-green { background:#e2f0e8; color:#0b6649; } .ds-badge-green i { background:#0e7c5a; } .ds-badge-amber { background:#f8ecd6; color:#85520a; } .ds-badge-amber i { background:#c98a1b; } .ds-badge-red { background:#fbe6e3; color:#b0281f; } .ds-badge-red i { background:#e0433a; } .ds-badge-neutral { background:#e6e2da; color:#5c574e; } .ds-badge-neutral i { background:#8a847a; }"
+    },
+    {
+      "name": "Package Sheet",
+      "kind": "card",
+      "refersTo": "card-sheet",
+      "description": "White sheet on bone paper: title, focal amount, status, and checks bar on a ruled row.",
+      "html": "<article class=\"ds-sheet\"><div class=\"ds-sheet-top\"><div><h3>October 2026 <span>· Youth Programs</span></h3><p>City of Oakland · Invoice 1042</p></div><div class=\"ds-sheet-amt\"><p>Claimable</p><span>$48,210<small>.75</small></span></div></div><div class=\"ds-sheet-row\"><div class=\"ds-bar\"><div style=\"width:71%\"></div></div><span>5 of 7 checks pass</span></div></article>",
+      "css": ".ds-sheet { background:#ffffff; border:1px solid #ddd8cf; border-radius:10px; box-shadow:0 1px 2px rgb(23 21 15 / 0.05), 0 0 0 1px rgb(23 21 15 / 0.02); font-family:var(--font-sans, Geist, sans-serif); color:#17150f; transition:border-color 150ms, box-shadow 150ms; } .ds-sheet:hover { border-color:#c4bdb1; box-shadow:0 16px 40px -12px rgb(23 21 15 / 0.22), 0 2px 6px rgb(23 21 15 / 0.06); } .ds-sheet-top { display:flex; justify-content:space-between; gap:32px; padding:24px; } .ds-sheet h3 { margin:0; font-size:16px; line-height:24px; font-weight:500; } .ds-sheet h3 span, .ds-sheet p { color:#5c574e; } .ds-sheet p { margin:4px 0 0; font-size:13px; line-height:18px; } .ds-sheet-amt { text-align:right; } .ds-sheet-amt p { font-size:12px; line-height:16px; margin:0; } .ds-sheet-amt span { font-size:40px; line-height:44px; font-weight:500; letter-spacing:-0.02em; font-variant-numeric:tabular-nums lining-nums; } .ds-sheet-amt small { font-size:0.55em; vertical-align:0.62em; color:#5c574e; } .ds-sheet-row { display:flex; align-items:center; gap:12px; border-top:1px solid #ddd8cf; padding:12px 24px; font-size:13px; font-variant-numeric:tabular-nums; } .ds-bar { width:200px; height:4px; border-radius:999px; background:#e6e2da; overflow:hidden; } .ds-bar div { height:100%; background:#17150f; border-radius:999px; }"
+    },
+    {
+      "name": "Top Navigation",
+      "kind": "nav",
+      "refersTo": "nav",
+      "description": "Wordmark in Newsreader, three text tabs with an ink underline, amber count on Review.",
+      "html": "<nav class=\"ds-nav\"><span class=\"ds-nav-mark\">Steward</span><a aria-current=\"page\">Packages</a><a>Review <b>3</b></a><a>Data</a></nav>",
+      "css": ".ds-nav { display:flex; align-items:stretch; gap:8px; height:64px; padding:0 24px; background:rgb(239 236 230 / 0.95); border-bottom:1px solid #ddd8cf; font-family:var(--font-sans, Geist, sans-serif); } .ds-nav-mark { align-self:center; margin-right:24px; font-family:var(--font-serif, Newsreader, Georgia, serif); font-size:22px; letter-spacing:-0.02em; color:#17150f; } .ds-nav a { position:relative; display:flex; align-items:center; gap:8px; padding:0 12px; font-size:14px; color:#5c574e; cursor:pointer; } .ds-nav a:hover { color:#17150f; } .ds-nav a[aria-current] { color:#17150f; font-weight:500; } .ds-nav a[aria-current]::after { content:''; position:absolute; left:12px; right:12px; bottom:0; height:2px; border-radius:999px; background:#17150f; } .ds-nav b { border-radius:999px; background:#f8ecd6; color:#85520a; padding:0 6px; font-size:11px; line-height:18px; font-weight:500; }"
+    },
+    {
+      "name": "Red-Pen Strike",
+      "kind": "custom",
+      "refersTo": "redpen-strike",
+      "description": "Hand-drawn red stroke through the wrong coding; one stroke per wrapped line; draws once.",
+      "html": "<div class=\"ds-strike-demo\"><span class=\"ds-lbl\">Books say</span><span class=\"ds-strike\"><span>6100 Program supplies, Youth Programs</span></span><span class=\"ds-lbl\">Steward says</span><span class=\"ds-right\">7200 Admin, unallowable</span></div>",
+      "css": ".ds-strike-demo { display:grid; grid-template-columns:auto 1fr; gap:4px 16px; font-family:var(--font-sans, Geist, sans-serif); font-size:14px; line-height:20px; } .ds-lbl { color:#5c574e; } .ds-strike > span { color:#5c574e; background-image:url(\"data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%2010%22%20preserveAspectRatio%3D%22none%22%3E%3Cpath%20d%3D%22M1%206%20C%2014%203%2C%2032%208%2C%2052%205%20S%2084%207%2C%2099%205%22%20fill%3D%22none%22%20stroke%3D%22%23E0433A%22%20stroke-width%3D%222.2%22%20stroke-linecap%3D%22round%22%20vector-effect%3D%22non-scaling-stroke%22%2F%3E%3C%2Fsvg%3E\"); background-repeat:no-repeat; background-position:0 60%; background-size:100% 0.55em; -webkit-box-decoration-break:clone; box-decoration-break:clone; animation:ds-sweep 460ms cubic-bezier(0.22,1,0.36,1) 160ms both; } .ds-right { color:#0b6649; font-weight:500; } @keyframes ds-sweep { from { background-size:0% 0.55em; } to { background-size:100% 0.55em; } } @media (prefers-reduced-motion: reduce) { .ds-strike > span { animation:none; } }"
+    },
+    {
+      "name": "SIGNED Rubber Stamp",
+      "kind": "custom",
+      "refersTo": "rubber-stamp",
+      "description": "Lands once on the package header when the reviewer signs.",
+      "html": "<div class=\"ds-stamp\"><div class=\"ds-stamp-big\">SIGNED</div><div class=\"ds-stamp-small\">M. Okafor · Nov 28, 2026</div></div>",
+      "css": ".ds-stamp { display:inline-block; color:#0b6649; border:2.5px solid #0b6649; border-radius:4px; padding:8px 16px 6px; text-align:center; box-shadow:inset 0 0 0 2px #ffffff, inset 0 0 0 3px #0b6649; font-family:var(--font-sans, Geist, sans-serif); opacity:0.88; transform:rotate(-7deg); animation:ds-stamp 260ms cubic-bezier(0.22,1,0.36,1) both; } .ds-stamp-big { font-size:20px; line-height:1; font-weight:700; letter-spacing:0.22em; } .ds-stamp-small { margin-top:4px; white-space:nowrap; font-size:11px; line-height:14px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; } @keyframes ds-stamp { from { opacity:0; transform:rotate(-7deg) scale(1.35); } 60% { opacity:0.92; } to { opacity:0.88; transform:rotate(-7deg) scale(1); } } @media (prefers-reduced-motion: reduce) { .ds-stamp { animation:none; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Reviewer's Desk",
+    "overview": "One white sheet per billing package on a warm bone desk. Everything clean stays ink on paper; exceptions are marked the way a senior accountant marks them, in red pen. The reviewer should be able to look only at what needs them, and the surface earns that by staying quiet everywhere else.\n\nThe working surfaces (tables, the review queue, forms) are plain grotesk and standard controls. The paper-and-serif voice is held to display moments: one Newsreader sentence per screen, section titles, and verbatim contract quotes. Density is calm but not sparse: hairline rules separate sections inside a sheet instead of nested boxes.\n\nRejected: the KPI-tile dashboard with charts and coloured cards.",
+    "keyCharacteristics": [
+      "Bone ground, white sheets, near-black ink, warm hairline rules.",
+      "Colour appears only as state, never as decoration.",
+      "Geist for all UI and every number; Newsreader only for display lines and quotes.",
+      "One focal money figure per screen, dollars large, cents small.",
+      "Two signature moves: the red-pen strike and the SIGNED rubber stamp."
+    ],
+    "rules": [
+      {
+        "name": "The Colour Is State Rule",
+        "body": "Colour only ever means state: redpen = not allowed / caught, amber = needs you, green = passes / ready. Everything else is paper and ink. A coloured element with no state behind it is a bug.",
+        "section": "colors"
+      },
+      {
+        "name": "The Word Too Rule",
+        "body": "State is never carried by colour alone; every badge and dot sits beside a word that says the state.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ink-For-Text Rule",
+        "body": "On tints, text uses the -ink step (green-ink, amber-ink, redpen-ink); the bright stroke step is for dots, bars and the pen line.",
+        "section": "colors"
+      },
+      {
+        "name": "The Serif For Moments Rule",
+        "body": "Newsreader appears only in display lines, section titles, the wordmark, and verbatim contract quotes. Tables, queues, forms, buttons and money are always Geist.",
+        "section": "typography"
+      },
+      {
+        "name": "The Italic Accent Rule",
+        "body": "A display line carries at most one italic phrase, set in ink-2, and it is the qualifier (\"*and filed*\", \"*Nothing needs you.*\"), never the subject.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Money Rule",
+        "body": "Every amount renders from integer cents through the Money component with tabular, lining figures, right-aligned in tables. Negative uses a true minus or parentheses.",
+        "section": "typography"
+      },
+      {
+        "name": "The 375 Rule",
+        "body": "Nothing scrolls the page horizontally at 375px. Wide tables scroll inside their own frame (Table `minWidth`), never the page.",
+        "section": "layout"
+      },
+      {
+        "name": "The 44 Rule",
+        "body": "Every tap target is at least 44px tall below sm; desktop may drop to 32 to 40px.",
+        "section": "layout"
+      },
+      {
+        "name": "The Two Shadows Rule",
+        "body": "Only sheet and float exist. Print drops both.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** keep clean lines ink on paper and spend colour only on state (redpen, amber, green).",
+      "**Do** say every state in words next to its colour.",
+      "**Do** open each screen with one Newsreader sentence, at most one italic accent in ink-2.",
+      "**Do** render every amount through Money, tabular, from integer cents; one focal amount per screen.",
+      "**Do** keep tap targets at 44px below sm and let wide tables scroll inside their own frame at 375px.",
+      "**Do** play the strike and the stamp once, and respect reduced motion."
+    ],
+    "donts": [
+      "**Don't** use gradients.",
+      "**Don't** use emoji.",
+      "**Don't** use AI sparkle icons or \"magic\" decoration for Steward's work.",
+      "**Don't** put kicker or eyebrow labels (small uppercase tracked text) above headings; labels are sentence case.",
+      "**Don't** use coloured side borders to flag rows or cards.",
+      "**Don't** build KPI tiles, charts or coloured cards.",
+      "**Don't** set tables, forms, buttons or money in Newsreader.",
+      "**Don't** nest a sheet inside a sheet, or add shadows beyond sheet and float."
+    ]
+  }
+}
