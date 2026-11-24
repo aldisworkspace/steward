@@ -9,15 +9,22 @@ import type { Precedent } from "@/lib/types";
 
 export const maxDuration = 300;
 
-const V2_GRANTS = ["contract_city_FS-27-0412.pdf", "grant_foundation_RF-26-118.pdf"] as const;
+type GlSet = { dir: string; grants: readonly string[]; organizationName: string; fileHistory: boolean };
+/** GL-first sample sets. `holdout-v2` is the sealed evaluation set: every package stays live (no seeded history). */
+const GL_SETS: Record<string, GlSet> = {
+  v2: { dir: "steward-data-v2", grants: ["contract_city_FS-27-0412.pdf", "grant_foundation_RF-26-118.pdf"],
+    organizationName: "Calle Nueva Family Center", fileHistory: true },
+  "holdout-v2": { dir: "steward-holdout-v2", grants: ["agreement_county_YR-27-0093.pdf", "grant_foundation_QL-26-052.pdf"],
+    organizationName: "Northfen Youth Athletics League", fileHistory: false },
+};
 const RECEIPT_TYPES: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg" };
 
 /**
- * SYNTHETIC v2 demo (GL-first): GL detail is the primary record, bank statement and receipts are
- * evidence. Never reads expected_v2.json (answer key, eval scripts only).
+ * SYNTHETIC GL-first sample (v2 demo or hold-out): GL detail is the primary record, bank statement
+ * and receipts are evidence. Never reads expected_v2.json (answer key, eval scripts only).
  */
-async function seedV2(client: ConvexHttpClient, passcode: string | undefined) {
-  const dir = path.join(process.cwd(), "steward-data-v2");
+async function seedGlSet(client: ConvexHttpClient, passcode: string | undefined, set: GlSet) {
+  const dir = path.join(process.cwd(), set.dir);
   const [glText, bankText, staffText, precedentsText] = await Promise.all([
     readFile(path.join(dir, "gl_detail_qb.csv"), "utf-8"),
     readFile(path.join(dir, "bank_statement.csv"), "utf-8"),
@@ -31,21 +38,21 @@ async function seedV2(client: ConvexHttpClient, passcode: string | undefined) {
   }));
   const precedents = (JSON.parse(precedentsText) as Omit<Precedent, "id">[]).map((p) => ({ date: p.date, by: p.by, ruling: p.ruling, scope: p.scope }));
 
-  // Keep already-extracted v2 grants; everything else (e.g. the legacy demo grants) is dropped.
+  // Keep already-extracted grants of this set; everything else (e.g. the legacy demo grants) is dropped.
   const startedAt = Date.now();
   // A fresh sample starts from drafts: earlier signatures (e.g. from a walkthrough) are dropped.
   await client.mutation(api.packages.clearForDemoSeed, { passcode });
-  const existing = await Promise.all(V2_GRANTS.map((f) => client.query(api.grants.getByFileName, { fileName: f })));
+  const existing = await Promise.all(set.grants.map((f) => client.query(api.grants.getByFileName, { fileName: f })));
   const keepIds = existing.filter((g) => g?._id).map((g) => g!._id as Id<"grants">);
   await client.mutation(api.ingest.startGlWorkspace, {
     passcode, lines: gl.lines, bankLines, staffAllocations: parseStaff(staffText), grantDocIds: keepIds,
     dataSource: "demo", precedents, clearReceipts: true,
   });
-  // The v2 demo is a different (fictional) organization from the legacy demo.
-  await client.mutation(api.settings.update, { passcode, organizationName: "Calle Nueva Family Center" });
+  // Each GL-first set is a different (fictional) organization from the legacy demo.
+  await client.mutation(api.settings.update, { passcode, organizationName: set.organizationName });
 
   const grantResults = [];
-  for (const fileName of V2_GRANTS) grantResults.push(await ensureGrantPdf(client, dir, fileName, passcode));
+  for (const fileName of set.grants) grantResults.push(await ensureGrantPdf(client, dir, fileName, passcode));
 
   // Receipts: upload, then let Steward read them (a few at a time to stay inside the route timeout).
   const files = (await readdir(path.join(dir, "receipts"))).filter((f) => RECEIPT_TYPES[f.split(".").pop()!.toLowerCase()]).sort();
@@ -68,10 +75,12 @@ async function seedV2(client: ConvexHttpClient, passcode: string | undefined) {
     }))));
   }
   await client.mutation(api.ingest.maybeAutoRunPipeline, { passcode });
+  const summary = { glLines: gl.lines.length, glSkipped: gl.skipped.length, bankLines: bankLines.length, grantResults, receiptResults };
+  if (!set.fileHistory) return { ...summary, history: null };
   // Demo story: July-September are already filed, so the live package is October. Wait for Steward's
   // run (it decides which lines are exceptions) inside the route budget, then file the history.
   const history = await fileDemoHistory(client, passcode, startedAt);
-  return { glLines: gl.lines.length, glSkipped: gl.skipped.length, bankLines: bankLines.length, grantResults, receiptResults, history };
+  return { ...summary, history };
 }
 
 const HISTORY_THROUGH = "2026-09-30";
@@ -174,10 +183,12 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: message }, { status: 403 });
   }
 
-  if (new URL(req.url).searchParams.get("set") === "v2") {
+  const setName = new URL(req.url).searchParams.get("set") ?? "";
+  const glSet = Object.hasOwn(GL_SETS, setName) ? GL_SETS[setName] : undefined;
+  if (glSet) {
     try {
       const client = new ConvexHttpClient(url);
-      const result = await seedV2(client, passcode);
+      const result = await seedGlSet(client, passcode, glSet);
       const failed = result.grantResults.some((g) => g.error) || result.receiptResults.some((r) => !r.ok);
       return Response.json({ ok: !failed, ...result, counts: await client.query(api.ingest.counts, {}),
         error: failed ? "Some grant or receipt extractions failed (see grantResults / receiptResults)." : undefined });

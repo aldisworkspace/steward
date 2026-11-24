@@ -1,10 +1,11 @@
 /**
- * Score the v2 demo (steward-data-v2) as it currently stands on the Convex DEV deployment.
+ * Score a GL-first dataset (default steward-data-v2) as it currently stands on the Convex DEV deployment.
  * Eval only: this script may read the answer key (expected_v2.json); app code never does.
  *
  *   npx tsx scripts/eval-v2-dev.ts                 # dump dev via `npx convex run` and score
  *   npx tsx scripts/eval-v2-dev.ts --save out.json # also save the raw dump
  *   npx tsx scripts/eval-v2-dev.ts --from out.json # score a saved dump (offline)
+ *   npx tsx scripts/eval-v2-dev.ts --dir steward-holdout-v2 # score against that folder's expected_v2.json
  *
  * Reads through internal queries (evalDev:dump) and the public packages:list / packages:get with
  * `npx convex run` (the CLI handles auth and targets dev by default; never --prod).
@@ -32,6 +33,7 @@ type Dump = { transactions: Txn[]; decisions: Decision[]; receipts: { fileName: 
 
 const args = process.argv.slice(2);
 const opt = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
+const dataDir = (opt("--dir") ?? "steward-data-v2").replace(/\/+$/, "");
 const usd = (c: number) => `${c < 0 ? "-" : ""}$${(Math.abs(c) / 100).toFixed(2)}`;
 
 function convexRun(fn: string, fnArgs: object = {}): unknown {
@@ -70,12 +72,13 @@ function lineFor(ref: GlRef, txns: Txn[]): Txn | null {
 }
 
 function main() {
-  const exp = JSON.parse(readFileSync("steward-data-v2/expected_v2.json", "utf8")) as Expected;
+  const exp = JSON.parse(readFileSync(`${dataDir}/expected_v2.json`, "utf8")) as Expected;
   const dump = loadDump();
   const dById = new Map(dump.decisions.map((d) => [d.txnId, d]));
   const flagged = (id: string) => (dById.get(id)?.status ?? "missing") !== "auto";
   const pkgOf = (grant: string, period: string) => dump.packages.find((p) => p.grantId === grant && p.periodStart.slice(0, 7) === period);
 
+  console.log(`Dataset: ${dataDir}`);
   console.log(`Run: ${dump.lastRun?.status ?? "none"}${dump.lastRun?.errors.length ? ` errors=${dump.lastRun.errors.join(" | ")}` : ""}`);
   console.log(`Lines ${dump.transactions.length}, decisions ${dump.decisions.length}, open ${dump.decisions.filter((d) => d.status !== "auto").length}\n`);
 
@@ -132,7 +135,7 @@ function main() {
     const ind = got.checks?.find((c) => c.id === "INDIRECT_ROUNDING");
     if (ind && !ind.pass) console.log(`      INDIRECT_ROUNDING: ${ind.detail}`);
   }
-  console.log("  note: the key's convention lists D-a as needs_review (included at booked amount) but the 2026-08 package still excludes it; a D-a difference of $166.22 is that inconsistency. The key also restates indirect to the computed amount; the app reports the difference as a failing check instead.");
+  if (dataDir.endsWith("steward-data-v2")) console.log("  note: the key's convention lists D-a as needs_review (included at booked amount) but the 2026-08 package still excludes it; a D-a difference of $166.22 is that inconsistency. The key also restates indirect to the computed amount; the app reports the difference as a failing check instead.");
 }
 
 try { main(); } catch (e) { console.error(`eval-v2-dev: ${(e as Error).message}`); process.exit(1); }
