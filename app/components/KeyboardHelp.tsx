@@ -1,40 +1,50 @@
 "use client";
 
+import { useEffect } from "react";
+
+const KEYS: [string, string][] = [
+  ["J / K", "Next / previous exception"],
+  ["A", "Take the primary action on the open case"],
+  ["O", "Override with a note"],
+  ["E", "Show or hide the evidence"],
+  ["⌘K", "Command palette"],
+  ["?", "This list"],
+  ["Esc", "Close"],
+];
+
 export function KeyboardHelp({ open, onClose }: { open: boolean; onClose: () => void }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   if (!open) return null;
   return (
     <>
-      <button type="button" className="fixed inset-0 z-50 bg-navy/30" aria-label="Close" onClick={onClose} />
+      <button type="button" className="fixed inset-0 z-50 bg-ink/25" aria-label="Close shortcuts" onClick={onClose} />
       <div
-        className="fixed left-1/2 top-[20%] z-50 w-full max-w-md -translate-x-1/2 rounded-[8px] border border-rule bg-sheet p-6 shadow-[0_8px_32px_rgba(14,27,44,0.12)]"
+        className="fixed left-1/2 top-[18%] z-50 w-[calc(100%-32px)] max-w-md -translate-x-1/2 rounded-md border border-rule bg-sheet p-6 shadow-float"
         role="dialog"
-        aria-label="Keyboard shortcuts"
+        aria-modal="true"
+        aria-labelledby="kbd-title"
       >
-        <h2 className="text-[17px] font-semibold">Keyboard shortcuts</h2>
-        <ul className="mt-4 space-y-2 text-[14px] text-ink">
-          <li>
-            <kbd className="rounded border border-rule px-1">J</kbd> / <kbd className="rounded border border-rule px-1">K</kbd> — Next / previous in queue
-          </li>
-          <li>
-            <kbd className="rounded border border-rule px-1">A</kbd> — Approve / acknowledge
-          </li>
-          <li>
-            <kbd className="rounded border border-rule px-1">R</kbd> — Reject / override
-          </li>
-          <li>
-            <kbd className="rounded border border-rule px-1">E</kbd> — Toggle evidence
-          </li>
-          <li>
-            <kbd className="rounded border border-rule px-1">⌘K</kbd> — Command palette
-          </li>
-          <li>
-            <kbd className="rounded border border-rule px-1">?</kbd> — This help (in inbox, opens Ask why when a case is selected)
-          </li>
-          <li>
-            <kbd className="rounded border border-rule px-1">Esc</kbd> — Close panel
-          </li>
-        </ul>
-        <button type="button" className="mt-4 text-[14px] text-sky underline" onClick={onClose}>
+        <h2 id="kbd-title" className="font-serif text-lg">
+          Keyboard shortcuts
+        </h2>
+        <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-base">
+          {KEYS.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt>
+                <kbd className="tabular rounded-[4px] border border-rule-strong px-1.5 text-sm">{k}</kbd>
+              </dt>
+              <dd className="text-ink-2">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        <button type="button" autoFocus className="mt-6 min-h-10 rounded-pill border border-rule-strong px-4 text-base hover:bg-paper" onClick={onClose}>
           Close
         </button>
       </div>

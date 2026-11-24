@@ -2,41 +2,40 @@
 
 import { useCallback, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { InboxFilter } from "@/lib/inboxFilters";
+import { FIX_TYPES, type ReviewFilter } from "../lib/fixType";
 
-export type AppTab =
-  | "overview"
-  | "inbox"
-  | "transactions"
-  | "grants"
-  | "report"
-  | "proof"
-  | "yourdata";
+export type AppTab = "packages" | "review" | "package" | "data";
+export type DataView = "upload" | "ledger" | "terms";
 
-const VALID_TABS = new Set<AppTab>([
-  "overview",
-  "inbox",
-  "transactions",
-  "grants",
-  "report",
-  "proof",
-  "yourdata",
-]);
+const VALID_TABS = new Set<AppTab>(["packages", "review", "package", "data"]);
 
-const VALID_FILTERS = new Set<InboxFilter>([
-  "all",
-  "not_allowed",
-  "needs_you",
-  "approval",
-  "payroll",
-  "books",
-  "duplicate",
-  "other",
-  "done",
-]);
+/** Old tab names (bookmarks, the landing, shared links) land somewhere sensible. */
+const LEGACY_TABS: Record<string, { tab: AppTab; view?: DataView }> = {
+  overview: { tab: "packages" },
+  inbox: { tab: "review" },
+  report: { tab: "packages" },
+  yourdata: { tab: "data" },
+  transactions: { tab: "data", view: "ledger" },
+  grants: { tab: "data", view: "terms" },
+  proof: { tab: "packages" },
+};
 
+const VALID_FILTERS = new Set<string>(["all", "done", ...FIX_TYPES.map((f) => f.id)]);
+const LEGACY_FILTERS: Record<string, ReviewFilter> = {
+  disallowed: "not_allowed",
+  needs_you: "all",
+  prior_approval: "approval",
+  bookkeeper: "fund",
+  books: "fund",
+  duplicates: "amount",
+  duplicate: "amount",
+  resolved: "done",
+  other: "fund",
+};
+
+/** GL line (L0001), legacy bank txn (T0001) or unrecorded bank line (B0001). */
 export function isTxnId(value: string): boolean {
-  return /^T\d+$/i.test(value.trim());
+  return /^[TLB]\d+$/i.test(value.trim());
 }
 
 /** Atomic URL update: undefined leaves a param alone, null removes it. */
@@ -44,75 +43,96 @@ export type AppParamsUpdate = {
   tab?: AppTab;
   filter?: string | null;
   case?: string | null;
+  id?: string | null;
+  view?: DataView | null;
   fund?: string | null;
   vendor?: string | null;
 };
+
+/** A package is addressed by grant and period start: FS-27-0412_2026-10-01. */
+export function packageKey(grantId: string, periodStart: string) {
+  return `${grantId}_${periodStart}`;
+}
+export function parsePackageKey(key: string | null): { grantId: string; periodStart: string } | null {
+  if (!key) return null;
+  const m = key.match(/^(.+)_(\d{4}-\d{2}-\d{2})$/);
+  return m ? { grantId: m[1]!, periodStart: m[2]! } : null;
+}
 
 export function useAppUrlState() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const tab = useMemo((): AppTab => {
-    const t = searchParams.get("tab") ?? "overview";
-    return VALID_TABS.has(t as AppTab) ? (t as AppTab) : "overview";
-  }, [searchParams]);
-
+  const rawTab = searchParams.get("tab");
   const caseParam = searchParams.get("case");
-  /** Only a real txn id (e.g. T0034) selects a case; slugs like "black-cat" are deep links to resolve. */
-  const caseId = caseParam && isTxnId(caseParam) ? caseParam : null;
+
+  const { tab, legacyView } = useMemo((): { tab: AppTab; legacyView: DataView | null } => {
+    if (rawTab && VALID_TABS.has(rawTab as AppTab)) return { tab: rawTab as AppTab, legacyView: null };
+    if (rawTab && LEGACY_TABS[rawTab]) return { tab: LEGACY_TABS[rawTab]!.tab, legacyView: LEGACY_TABS[rawTab]!.view ?? null };
+    // A bare ?case= deep link opens Review.
+    if (!rawTab && caseParam) return { tab: "review", legacyView: null };
+    return { tab: "packages", legacyView: null };
+  }, [rawTab, caseParam]);
+
+  const needsRewrite = !!rawTab && !VALID_TABS.has(rawTab as AppTab);
+
+  /** Only a real line id selects a case; slugs like "black-cat" are deep links to resolve. */
+  const caseId = caseParam && isTxnId(caseParam) ? caseParam.toUpperCase() : null;
   const caseSlug = caseParam && !isTxnId(caseParam) ? caseParam : searchParams.get("vendor");
   const fundFilter = searchParams.get("fund");
-  const inboxFilter = useMemo((): InboxFilter => {
+  const packageId = searchParams.get("id");
+
+  const reviewFilter = useMemo((): ReviewFilter => {
     const f = searchParams.get("filter") ?? "all";
-    const legacy: Record<string, InboxFilter> = {
-      disallowed: "not_allowed",
-      needs_you: "all",
-      prior_approval: "approval",
-      bookkeeper: "books",
-      duplicates: "duplicate",
-      resolved: "done",
-    };
-    const mapped = legacy[f] ?? f;
-    return VALID_FILTERS.has(mapped as InboxFilter) ? (mapped as InboxFilter) : "all";
+    const mapped = LEGACY_FILTERS[f] ?? f;
+    return VALID_FILTERS.has(mapped) ? (mapped as ReviewFilter) : "all";
   }, [searchParams]);
 
-  const txnFilter = useMemo((): "all" | "clean" | "exceptions" | "blocked" => {
-    const f = searchParams.get("filter");
-    if (f === "clean" || f === "exceptions" || f === "blocked") return f;
-    return "all";
-  }, [searchParams]);
+  const dataView = useMemo((): DataView => {
+    const v = searchParams.get("view");
+    if (v === "ledger" || v === "terms" || v === "upload") return v;
+    return legacyView ?? "upload";
+  }, [searchParams, legacyView]);
 
   const replaceParams = useCallback(
-    (mutate: (p: URLSearchParams) => void) => {
+    (mutate: (p: URLSearchParams) => void, mode: "replace" | "push" = "replace") => {
       const p = new URLSearchParams(searchParams.toString());
       mutate(p);
       const q = p.toString();
-      router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+      const href = q ? `${pathname}?${q}` : pathname;
+      if (mode === "push") router.push(href, { scroll: false });
+      else router.replace(href, { scroll: false });
     },
     [pathname, router, searchParams],
   );
 
   const setParams = useCallback(
-    (update: AppParamsUpdate) => {
+    (update: AppParamsUpdate, mode: "replace" | "push" = "replace") => {
       replaceParams((p) => {
         for (const [key, value] of Object.entries(update)) {
           if (value === undefined) continue;
           if (value === null) p.delete(key);
           else p.set(key, value);
         }
-      });
+      }, mode);
     },
     [replaceParams],
   );
 
+  /** Switching views is navigation: it goes into history so Back works. */
   const setTab = useCallback(
     (next: AppTab) => {
       replaceParams((p) => {
         p.set("tab", next);
-        if (next !== "inbox") p.delete("case");
-        if (next !== "inbox" && next !== "transactions") p.delete("filter");
-      });
+        if (next !== "review") {
+          p.delete("case");
+          p.delete("filter");
+        }
+        if (next !== "package") p.delete("id");
+        if (next !== "data") p.delete("view");
+        p.delete("vendor");
+      }, "push");
     },
     [replaceParams],
   );
@@ -120,7 +140,7 @@ export function useAppUrlState() {
   const setCaseId = useCallback(
     (txnId: string | null) => {
       replaceParams((p) => {
-        p.set("tab", "inbox");
+        p.set("tab", "review");
         if (txnId) p.set("case", txnId);
         else p.delete("case");
       });
@@ -128,36 +148,52 @@ export function useAppUrlState() {
     [replaceParams],
   );
 
-  const setInboxFilter = useCallback(
-    (filter: InboxFilter, fund?: string | null) => {
+  const setReviewFilter = useCallback(
+    (filter: ReviewFilter, fund?: string | null) => {
       replaceParams((p) => {
-        p.set("tab", "inbox");
-        p.set("filter", filter);
-        if (fund) p.set("fund", fund);
-        else p.delete("fund");
-      });
-    },
-    [replaceParams],
-  );
-
-  const setTxnFilter = useCallback(
-    (filter: "all" | "clean" | "exceptions" | "blocked", fund?: string | null) => {
-      replaceParams((p) => {
-        p.set("tab", "transactions");
+        p.set("tab", "review");
         if (filter === "all") p.delete("filter");
         else p.set("filter", filter);
-        if (fund) p.set("fund", fund);
-        else p.delete("fund");
+        if (fund !== undefined) {
+          if (fund) p.set("fund", fund);
+          else p.delete("fund");
+        }
       });
     },
     [replaceParams],
   );
 
-  const setFundFilter = useCallback(
-    (fund: string | null) => {
+  const openPackage = useCallback(
+    (key: string) => {
       replaceParams((p) => {
-        if (fund) p.set("fund", fund);
-        else p.delete("fund");
+        p.set("tab", "package");
+        p.set("id", key);
+        p.delete("case");
+        p.delete("filter");
+      }, "push");
+    },
+    [replaceParams],
+  );
+
+  /** From a failing check: open that line in Review, remembering which package to return to. */
+  const openCase = useCallback(
+    (txnId: string, fromPackage?: string) => {
+      replaceParams((p) => {
+        p.set("tab", "review");
+        p.set("case", txnId);
+        p.delete("filter");
+        if (fromPackage) p.set("id", fromPackage);
+      }, "push");
+    },
+    [replaceParams],
+  );
+
+  const setDataView = useCallback(
+    (view: DataView) => {
+      replaceParams((p) => {
+        p.set("tab", "data");
+        if (view === "upload") p.delete("view");
+        else p.set("view", view);
       });
     },
     [replaceParams],
@@ -165,16 +201,21 @@ export function useAppUrlState() {
 
   return {
     tab,
+    needsRewrite,
+    legacyView,
     caseId,
     caseSlug,
-    inboxFilter,
-    txnFilter,
+    reviewFilter,
     fundFilter,
+    packageId,
+    dataView,
     setTab,
     setCaseId,
-    setInboxFilter,
-    setTxnFilter,
-    setFundFilter,
+    setReviewFilter,
+    openPackage,
+    openCase,
+    setDataView,
     setParams,
   };
 }
+export type AppUrl = ReturnType<typeof useAppUrlState>;

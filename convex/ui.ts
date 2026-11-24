@@ -325,3 +325,48 @@ export const auditFeed = query({
     return rows.filter((r) => !hide.has(r.action));
   },
 });
+
+/** Receipts relevant to one line: the one matched to it, plus any the matcher could not choose between. */
+export const caseReceipts = query({
+  args: { txnId: v.string() },
+  handler: async (ctx, { txnId }) => {
+    const rows = await ctx.db.query("receipts").collect();
+    const hits = rows.filter((r) => r.matchedTxnId === txnId || (r.matchCandidates ?? []).includes(txnId));
+    return Promise.all(
+      hits.map(async (r) => ({
+        _id: r._id,
+        fileName: r.fileName,
+        contentType: r.contentType ?? null,
+        status: r.status,
+        url: await ctx.storage.getUrl(r.storageId),
+        matched: r.matchedTxnId === txnId,
+        matchedBy: r.matchedBy,
+        matchedTxnId: r.matchedTxnId,
+        candidates: r.matchCandidates ?? [],
+        extracted: r.extracted,
+        matchNote: r.matchNote ?? null,
+      })),
+    );
+  },
+});
+
+/** One receipt's file URL, for the preview in the Data view. */
+export const receiptUrl = query({
+  args: { receiptId: v.id("receipts") },
+  handler: async (ctx, { receiptId }) => {
+    const r = await ctx.db.get(receiptId);
+    if (!r) return null;
+    return { url: await ctx.storage.getUrl(r.storageId), contentType: r.contentType ?? null, fileName: r.fileName };
+  },
+});
+
+/** Who did what on one package (prepared, signed, reopened, exported), newest first. */
+export const packageAudit = query({
+  args: { packageId: v.id("packages") },
+  handler: async (ctx, { packageId }) => {
+    const rows = await ctx.db.query("auditLog").order("desc").take(400);
+    return rows
+      .filter((r) => r.targetId === String(packageId))
+      .map((r) => ({ at: r.at, actor: r.actor, action: r.action, why: r.why }));
+  },
+});

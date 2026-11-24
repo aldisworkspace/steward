@@ -58,7 +58,19 @@ function summary(grant: GrantTerms, periodStart: string, periodEnd: string, row:
     invoiceTotalCents: pkg.invoiceTotalCents, lineCount: pkg.lines.length, excludedCount: pkg.excluded.length,
     checksPassed: pkg.checks.filter((c) => c.pass).length, checksTotal: pkg.checks.length,
     failing: pkg.checks.filter((c) => !c.pass).map((c) => c.id),
+    frequency: grant.billing?.frequency ?? "none",
+    dueDate: packageDueDate(grant, periodEnd),
   };
+}
+
+/** When the funder expects this package: period end + invoice terms, else the report due date. Display only. */
+function packageDueDate(grant: GrantTerms, periodEnd: string): string | null {
+  const days = grant.billing?.invoiceDueDays;
+  if (days != null && (grant.billing?.frequency ?? "none") !== "none") {
+    const [y, m, d] = periodEnd.split("-").map(Number);
+    return new Date(Date.UTC(y!, m! - 1, d! + days)).toISOString().slice(0, 10);
+  }
+  return grant.reportDue ?? null;
 }
 
 /** Every grant × billing period, derived from the terms and the data (live numbers unless signed). */
