@@ -41,7 +41,7 @@ function build(inp: Inputs, grant: GrantTerms, periodStart: string, periodEnd: s
       txnId: d.txnId, grantId: d.grantId, budgetLine: d.budgetLine, splits: d.splits as TieOutDecision["splits"],
       status: d.status, ruleHits: d.ruleHits, checks: d.checks as TieOutDecision["checks"], rationale: d.rationale,
     })),
-    receipts: inp.receipts.filter((r) => r.status === "ready").map((r) => ({ receiptId: String(r._id), fileName: r.fileName, matchedTxnId: r.matchedTxnId })),
+    receipts: inp.receipts.filter((r) => r.status === "ready").map((r) => ({ receiptId: String(r._id), fileName: r.fileName, matchedTxnId: r.matchedTxnId, extracted: r.extracted ?? null })),
     resolutions: inp.resolutions.map((r) => ({ txnId: r.txnId, resolution: r.resolution as Resolution, by: r.by })),
     priorPackages,
     receiptThresholdCents: inp.settings.receiptThresholdCents,

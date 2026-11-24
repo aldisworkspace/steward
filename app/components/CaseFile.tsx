@@ -206,7 +206,10 @@ function CaseInner({
   let todo: string;
   if (entry) {
     primaryLabel = blocked && !decision.grantId ? "Move to general funds" : "Approve the correction";
-    todo = `Steward drafted a journal entry that moves ${fmtUsd(Math.abs(txn.amountCents))} to ${stewardLabel}. Approve it, or override with a note to keep the bookkeeper's coding.`;
+    const debits = entryLines.filter((l) => l.debit > 0);
+    const moved = debits.reduce((a, l) => a + l.debit, 0) || Math.abs(txn.amountCents);
+    const dest = debits.length ? [...new Set(debits.map((l) => grantLineText(l.class, l.budgetLine, grantTerms)))].join(" and ") : stewardLabel;
+    todo = `Steward drafted a journal entry that moves ${fmtUsd(moved)} to ${dest}. Approve it, or override with a note to keep the bookkeeper's coding.`;
   } else if (fix === "not_allowed") {
     primaryLabel = decision.grantId ? `Move to ${fundTitle}` : "Move to general funds";
     todo = `This can't be billed to the grant. Move it to ${decision.grantId ? fundTitle : "general funds"}, or override with a documented reason.`;
@@ -661,7 +664,7 @@ function CaseInner({
 function ReceiptPreview({
   r,
 }: {
-  r: { _id: string; fileName: string; contentType: string | null; url: string | null; matched: boolean; extracted: { vendor: string | null; totalCents: number | null; date: string | null } | null };
+  r: { _id: string; fileName: string; contentType: string | null; url: string | null; matched: boolean; coversGroup?: boolean; extracted: { vendor: string | null; totalCents: number | null; date: string | null } | null };
 }) {
   const isPdf = r.contentType === "application/pdf" || r.fileName.toLowerCase().endsWith(".pdf");
   return (
@@ -681,7 +684,7 @@ function ReceiptPreview({
       ) : null}
       <figcaption className="mt-1 flex flex-wrap justify-between gap-x-2 text-xs text-ink-2">
         <span className="min-w-0 truncate">
-          {r.matched ? "Matched · " : "Possible match · "}
+          {r.coversGroup ? "Covers this split purchase · " : r.matched ? "Matched · " : "Possible match · "}
           {r.fileName}
         </span>
         {r.extracted?.totalCents != null && <span className="tabular">{fmtUsd(r.extracted.totalCents)}</span>}

@@ -5,6 +5,8 @@ import { computeInboxOpenMetrics } from "../lib/inboxOpenMetrics";
 import { isInboxResolved } from "../lib/inboxResolved";
 import { issueLabel } from "../lib/issueLabel";
 import { ruleLabel } from "../lib/ruleLabels";
+import { receiptCoverage } from "../lib/matchReceipts";
+import type { ReceiptExtract, Txn } from "../lib/types";
 
 const STATUS_RANK: Record<string, number> = { blocked: 0, needs_review: 1, auto: 2 };
 
@@ -330,8 +332,16 @@ export const auditFeed = query({
 export const caseReceipts = query({
   args: { txnId: v.string() },
   handler: async (ctx, { txnId }) => {
-    const rows = await ctx.db.query("receipts").collect();
-    const hits = rows.filter((r) => r.matchedTxnId === txnId || (r.matchCandidates ?? []).includes(txnId));
+    const [rows, txns] = await Promise.all([ctx.db.query("receipts").collect(), ctx.db.query("transactions").collect()]);
+    // A receipt matched to one row of a split purchase documents every row of that group.
+    const coverage = receiptCoverage(
+      rows.filter((r) => r.status === "ready").map((r) => ({ ...r, extracted: (r.extracted as ReceiptExtract | null) ?? null })),
+      txns as unknown as Txn[],
+    );
+    const covering = coverage.get(txnId)?.receipt._id;
+    const hits = rows.filter(
+      (r) => r.matchedTxnId === txnId || r._id === covering || (r.matchCandidates ?? []).includes(txnId),
+    );
     return Promise.all(
       hits.map(async (r) => ({
         _id: r._id,
@@ -339,7 +349,8 @@ export const caseReceipts = query({
         contentType: r.contentType ?? null,
         status: r.status,
         url: await ctx.storage.getUrl(r.storageId),
-        matched: r.matchedTxnId === txnId,
+        matched: r.matchedTxnId === txnId || r._id === covering,
+        coversGroup: r._id === covering && r.matchedTxnId !== txnId,
         matchedBy: r.matchedBy,
         matchedTxnId: r.matchedTxnId,
         candidates: r.matchCandidates ?? [],
