@@ -1330,3 +1330,35 @@ html:has(.ld) {
 .ld-404 .ld-cta-row {
   margin-top: 32px;
 }
+
+/* ---------- film ---------- */
+@media (min-width: 1024px) {
+  .ld-section--film {
+    min-height: 0;
+  }
+}
+
+.ld-film {
+  margin: 48px 0 0;
+}
+
+.ld-film__video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  background: var(--ld-bone);
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 1px var(--ld-line),
+    0 30px 80px -30px rgba(0, 0, 0, 0.8);
+}
+
+@media (max-width: 639px) {
+  .ld-film {
+    margin-top: 32px;
+  }
+  .ld-film__video {
+    border-radius: 12px;
+  }
+}

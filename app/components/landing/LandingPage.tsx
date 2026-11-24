@@ -130,6 +130,33 @@ export function LandingPage() {
           </div>
         </section>
 
+        {/* The film: one minute, sound on click (no autoplay). */}
+        <section id="film" className="ld-section ld-section--film" aria-labelledby="film-title">
+          <div className="ld-wrap">
+            <Eyebrow>The one-minute film</Eyebrow>
+            <h2 id="film-title" className="ld-h2 ld-h2--narrow">
+              Watch one invoice get <em className="ld-italic">checked.</em>
+            </h2>
+            <figure className="ld-film">
+              <video
+                className="ld-film__video"
+                controls
+                playsInline
+                preload="none"
+                poster="/demo/steward-demo-poster.jpg"
+                aria-describedby="film-caption"
+              >
+                <source src="/demo/steward-demo.mp4" type="video/mp4" />
+                Your browser can&rsquo;t play this video. <a href="/demo/steward-demo.mp4">Download it (MP4, 5 MB)</a>.
+              </video>
+              <figcaption id="film-caption" className="ld-micro">
+                62 seconds, with sound. A staff dinner is caught against the contract, then the October invoice ties
+                out to the cent. Synthetic demo data, fictional organization.
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
         {/* Loss framing: the cost of one cent. */}
         <section className="ld-section" aria-labelledby="returned-title">
           <div className="ld-wrap ld-split">
