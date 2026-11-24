@@ -32,6 +32,9 @@ async function seedV2(client: ConvexHttpClient, passcode: string | undefined) {
   const precedents = (JSON.parse(precedentsText) as Omit<Precedent, "id">[]).map((p) => ({ date: p.date, by: p.by, ruling: p.ruling, scope: p.scope }));
 
   // Keep already-extracted v2 grants; everything else (e.g. the legacy demo grants) is dropped.
+  const startedAt = Date.now();
+  // A fresh sample starts from drafts: earlier signatures (e.g. from a walkthrough) are dropped.
+  await client.mutation(api.packages.clearForDemoSeed, { passcode });
   const existing = await Promise.all(V2_GRANTS.map((f) => client.query(api.grants.getByFileName, { fileName: f })));
   const keepIds = existing.filter((g) => g?._id).map((g) => g!._id as Id<"grants">);
   await client.mutation(api.ingest.startGlWorkspace, {
@@ -63,7 +66,33 @@ async function seedV2(client: ConvexHttpClient, passcode: string | undefined) {
     }))));
   }
   await client.mutation(api.ingest.maybeAutoRunPipeline, { passcode });
-  return { glLines: gl.lines.length, glSkipped: gl.skipped.length, bankLines: bankLines.length, grantResults, receiptResults };
+  // Demo story: July-September are already filed, so the live package is October. Wait for Steward's
+  // run (it decides which lines are exceptions) inside the route budget, then file the history.
+  const history = await fileDemoHistory(client, passcode, startedAt);
+  return { glLines: gl.lines.length, glSkipped: gl.skipped.length, bankLines: bankLines.length, grantResults, receiptResults, history };
+}
+
+const HISTORY_THROUGH = "2026-09-30";
+const ROUTE_BUDGET_MS = 270_000;
+
+async function fileDemoHistory(client: ConvexHttpClient, passcode: string | undefined, startedAt: number) {
+  let quietSince: number | null = null;
+  while (Date.now() - startedAt < ROUTE_BUDGET_MS) {
+    const run = await client.query(api.dashboard.latestRun, {});
+    const settled = !!run && run.startedAt >= startedAt - 5_000 && run.status !== "running";
+    if (settled) {
+      quietSince ??= Date.now();
+      // A follow-up run can start right after the first; wait a few quiet seconds before filing.
+      if (Date.now() - quietSince > 4_000) {
+        const filed = await client.mutation(api.packages.seedDemoHistory, { through: HISTORY_THROUGH, passcode });
+        return { filed, runStatus: run.status };
+      }
+    } else {
+      quietSince = null;
+    }
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+  return { filed: [] as string[], runStatus: "still running", note: "History not filed: Steward's run outlasted the route budget." };
 }
 
 const DEMO_GRANTS = [
