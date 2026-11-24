@@ -9,7 +9,7 @@ import "./landing.css";
 
 const GITHUB = "https://github.com/aldisworkspace/steward";
 const DEMO_HREF = "/app";
-const PRIMARY = "Watch a package get ready";
+const PRIMARY = "Explore a sample package";
 
 function Eyebrow({ children }: { children: string }) {
   return (
@@ -123,7 +123,7 @@ export function LandingPage() {
                 </a>
               </div>
               <p className="ld-micro ld-enter" style={{ "--i": 3 } as CSSProperties}>
-                Synthetic demo data · no sign-up · about 2 minutes
+                Synthetic demo data · no sign-up · view only
               </p>
             </div>
             <div className="ld-hero__card">
@@ -296,11 +296,12 @@ export function LandingPage() {
               </li>
               <li className="ld-tests__pending">
                 <h3 className="ld-tests__title">
-                  Results for this version <span className="ld-tag ld-tag--pending">Pending</span>
+                  Published results <span className="ld-tag ld-tag--pending">Next hold-out</span>
                 </h3>
                 <p className="ld-body">
-                  Placeholder: the v2 evaluation hasn&rsquo;t run yet. Earlier scores were for a different,
-                  bank-first product and aren&rsquo;t shown here.
+                  Each sealed hold-out is opened once. We&rsquo;ve opened three; what they caught us missing
+                  was fixed with general rules, not special cases. A score on a set we&rsquo;ve already learned
+                  from wouldn&rsquo;t be honest, so the next independent result goes here, misses included.
                 </p>
               </li>
             </ul>
@@ -334,14 +335,14 @@ export function LandingPage() {
         <div className="ld-wrap">
           <div className="ld-close__band">
             <h2 id="close-title" className="ld-h2">
-              See a package go from 7 of 9 to <em className="ld-italic ld-ready-word">ready.</em>
+              See exactly what your reviewer <em className="ld-italic ld-ready-word">opens first.</em>
             </h2>
             <div>
               <Link href={DEMO_HREF} className="ld-btn ld-btn--primary">
                 {PRIMARY}
                 <Arrow />
               </Link>
-              <p className="ld-micro">Synthetic demo data · no sign-up · about 2 minutes</p>
+              <p className="ld-micro">Synthetic demo data · no sign-up · view only</p>
             </div>
           </div>
           <div className="ld-foot">
