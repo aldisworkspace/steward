@@ -297,11 +297,12 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     const g = glByRef.get(t.txnId);
 
     let grantId = c.grantId, budgetLine = c.budgetLine, splits = c.splits;
-    const sug = txnFindings.find((f) => f.suggestion)?.suggestion;
-    if (sug) {
+    const applySuggestion = (sug: NonNullable<Finding["suggestion"]>) => {
       if (sug.length === 1) { grantId = sug[0].grantId; budgetLine = sug[0].budgetLine; splits = undefined; }
       else { grantId = null; budgetLine = null; splits = sug.map((s) => ({ grantId: s.grantId, budgetLine: s.budgetLine, amount: s.amountCents })); }
-    }
+    };
+    const sugFinding = txnFindings.find((f) => f.suggestion);
+    if (sugFinding) applySuggestion(sugFinding.suggestion!);
 
     let note = "";
     const glLineValid = !!g?.class && !!input.grants.find((x) => x.grantId === g.class)?.budgetLines.some((l) => l.code === g.budgetLine);
@@ -377,6 +378,7 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
       concern: concernForApply,
       typed: input.typedPrecedents ?? [],
       grants: input.grants,
+      chargedGrantIds: [g?.class, c.grantId],
     });
     // Substantive findings first so the queue label (ruleHits[0]) names the real issue.
     // Open questions (R-NEEDS-DOCS / R-MODEL-REVIEW) go last: a deterministic fact such as a $0.01 receipt
@@ -387,6 +389,13 @@ export function verify(input: PipelineInput, codings: Map<string, Coding & { spl
     if (!splits) {
       grantId = precedentApply.grantId;
       budgetLine = precedentApply.budgetLine;
+    }
+    // A ruling cleared the finding whose correction moved the coding (e.g. the funder's prior approval is on
+    // file): the next remaining correction applies, else the coding the line had before that correction.
+    if (sugFinding && !precedentApply.forcedStatus && !precedentApply.findings.includes(sugFinding)) {
+      const next = precedentApply.findings.find((f) => f.suggestion);
+      if (next) applySuggestion(next.suggestion!);
+      else { grantId = c.grantId; budgetLine = c.budgetLine; splits = c.splits; }
     }
 
     let status: Status = c.confidence < 0.7 && !waived ? "needs_review" : "auto";

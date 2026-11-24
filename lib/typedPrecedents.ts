@@ -1,8 +1,9 @@
 import { vendorKey } from "./vendorKey";
 import type { DecisionCheck, Evidence, Finding, GrantTerms, Status, Txn, TypedPrecedent } from "./types";
 
-export function precedentMatchesTxn(p: TypedPrecedent, t: Txn, grantId: string | null): boolean {
-  if (p.scope !== "ALL" && p.scope !== (grantId ?? "")) return false;
+/** A ruling scoped to a grant applies to a line charged to it, by the bookkeeper or by Steward. */
+export function precedentMatchesTxn(p: TypedPrecedent, t: Txn, grantId: string | null, alsoCharged: (string | null | undefined)[] = []): boolean {
+  if (p.scope !== "ALL" && p.scope !== (grantId ?? "") && !alsoCharged.some((g) => !!g && g === p.scope)) return false;
   if (p.match.txnId && p.match.txnId !== t.txnId) return false;
   if (p.match.vendorKey && vendorKey(t.description) !== p.match.vendorKey) return false;
   return true;
@@ -19,6 +20,8 @@ export function applyTypedPrecedentsForTxn(args: {
   concern: { status: Status; reason: string } | null;
   typed: TypedPrecedent[];
   grants: GrantTerms[];
+  /** Other grants the line is charged to (the bookkeeper's claim, the model's proposal) for grant-scoped rulings. */
+  chargedGrantIds?: (string | null | undefined)[];
 }): {
   findings: Finding[];
   concern: { status: Status; reason: string } | null;
@@ -33,7 +36,7 @@ export function applyTypedPrecedentsForTxn(args: {
   let { findings, concern, grantId, budgetLine } = args;
   let forcedStatus: Status | undefined;
 
-  const matched = args.typed.filter((p) => precedentMatchesTxn(p, args.t, grantId));
+  const matched = args.typed.filter((p) => precedentMatchesTxn(p, args.t, grantId, args.chargedGrantIds));
 
   for (const p of matched) {
     const appliedLabel = `Applied ruling of ${p.date} (${p.by.replace(/\s*\(.*\)$/, "")})`;
@@ -63,7 +66,8 @@ export function applyTypedPrecedentsForTxn(args: {
       budgetLine = null;
       forcedStatus = "blocked";
     } else if (p.ruling === "prior_approval_granted") {
-      findings = findings.filter((f) => f.ruleId !== "R-PRIOR-APPROVAL");
+      // The funder's written approval covers a purchase over the threshold and a budget change over a line cap.
+      findings = findings.filter((f) => f.ruleId !== "R-PRIOR-APPROVAL" && f.ruleId !== "R-LINE-OVERRUN");
     } else if (p.ruling === "not_duplicate") {
       findings = findings.filter((f) => f.ruleId !== "R-DUPLICATE");
     }

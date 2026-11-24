@@ -204,10 +204,19 @@ function CaseInner({
   // One primary action per case, worded as what it does.
   let primaryLabel: string;
   let todo: string;
-  if (entry) {
-    primaryLabel = blocked && !decision.grantId ? "Move to general funds" : "Approve the correction";
-    const debits = entryLines.filter((l) => l.debit > 0);
-    const moved = debits.reduce((a, l) => a + l.debit, 0) || Math.abs(txn.amountCents);
+  const debits = entryLines.filter((l) => l.debit > 0);
+  const moved = debits.reduce((a, l) => a + l.debit, 0) || Math.abs(txn.amountCents);
+  const partial = moved < Math.abs(txn.amountCents);
+  const moveLabel = partial ? `Move ${fmtUsd(moved)} off the grant` : "Move to general funds";
+  if (fix === "approval") {
+    // Can't be billed until the funder approves. Way out: record the approval (a human resolution that keeps the
+    // bookkeeper's coding), or approve Steward's entry that moves the blocked portion off the grant.
+    primaryLabel = "Record funder approval";
+    todo = blocked
+      ? `This can't be billed until the funder approves it in writing. Record the approval reference to bill it as booked${entry ? `, or move ${partial ? `the ${fmtUsd(moved)} over the limit` : "it"} to general funds` : ""}.`
+      : "The contract needs the funder's written OK for this. Record the approval reference, or override with a note.";
+  } else if (entry) {
+    primaryLabel = blocked && !decision.grantId ? moveLabel : "Approve the correction";
     const dest = debits.length ? [...new Set(debits.map((l) => grantLineText(l.class, l.budgetLine, grantTerms)))].join(" and ") : stewardLabel;
     todo = `Steward drafted a journal entry that moves ${fmtUsd(moved)} to ${dest}. Approve it, or override with a note to keep the bookkeeper's coding.`;
   } else if (fix === "not_allowed") {
@@ -232,9 +241,6 @@ function CaseInner({
               ? "A receipt is on file, but Steward wants the support behind it (who received what). Confirm it's documented, or override with a note."
               : "A receipt is on file; confirm it covers this charge."
             : `Charges at or above the receipt threshold need a receipt before the funder will pay.`;
-  } else if (fix === "approval") {
-    primaryLabel = "Record funder approval";
-    todo = "The contract needs the funder's written OK for this. Record the approval reference, or override with a note.";
   } else if (fix === "payroll") {
     primaryLabel = "Accept Steward's split";
     todo = "Pay charged to the grant doesn't match the time sheet. Accept Steward's split, or override with a note.";
@@ -297,18 +303,43 @@ function CaseInner({
     await ack(`Receipt attached: ${file.name}`, "allow");
   }
 
+  function approveEntryNow(name: string) {
+    if (!entry) return;
+    void run(name, async () => {
+      await approve({ entryId: entry.id, by: app.actor, note: "Approved in review", passcode: app.passcode });
+      onResolved(txn.txnId);
+      app.toast(`Correction approved by ${shortName(app.actor)}`, () => {
+        void undoApprove({ entryId: entry.id, by: app.actor, passcode: app.passcode })
+          .then(() => onRestored(txn.txnId))
+          .catch((e) => app.fail(messageFromConvexError(e)));
+      });
+    });
+  }
+
   function onPrimary() {
     if (blockedReason || busy) return;
-    if (entry) {
+    if (fix === "approval") {
+      if (!approvalRef.trim()) {
+        document.getElementById(`approval-ref-${txn.txnId}`)?.focus();
+        setError("Add the funder's approval reference first.");
+        return;
+      }
+      // The approval keeps the bookkeeper's coding (an override with the approval as its note) and is
+      // recorded as a ruling for this line, so the next run no longer flags it.
       void run("primary", async () => {
-        await approve({ entryId: entry.id, by: app.actor, note: "Approved in review", passcode: app.passcode });
+        await overrideDecision({ txnId: txn.txnId, by: app.actor, note: `Funder approval on file: ${approvalRef.trim()}`, passcode: app.passcode,
+          precedentScope: "txn", rulingType: "prior_approval_granted", grantScope: gl?.class ?? decision.grantId ?? "ALL" });
         onResolved(txn.txnId);
-        app.toast(`Correction approved by ${shortName(app.actor)}`, () => {
-          void undoApprove({ entryId: entry.id, by: app.actor, passcode: app.passcode })
+        app.toast(`Funder approval recorded by ${shortName(app.actor)}`, () => {
+          void undoResolution({ txnId: txn.txnId, by: app.actor, passcode: app.passcode })
             .then(() => onRestored(txn.txnId))
             .catch((e) => app.fail(messageFromConvexError(e)));
         });
       });
+      return;
+    }
+    if (entry) {
+      approveEntryNow("primary");
       return;
     }
     if (fix === "receipt") {
@@ -323,15 +354,6 @@ function CaseInner({
       } else {
         fileRef.current?.click();
       }
-      return;
-    }
-    if (fix === "approval") {
-      if (!approvalRef.trim()) {
-        document.getElementById(`approval-ref-${txn.txnId}`)?.focus();
-        setError("Add the funder's approval reference first.");
-        return;
-      }
-      void run("primary", () => ack(`Funder approval on file: ${approvalRef.trim()}`, "prior_approval_granted"));
       return;
     }
     void run("primary", () => ack(`${primaryLabel}. ${found}.`, precedentFor()));
@@ -376,7 +398,7 @@ function CaseInner({
   });
 
   const statusTone = clean ? "green" : blocked ? "red" : "amber";
-  const statusText = resolved ? "Resolved" : clean ? "Clean" : blocked ? "Not allowed" : "Needs you";
+  const statusText = resolved ? "Resolved" : clean ? "Clean" : blocked ? (fix === "approval" ? "Can't bill yet" : "Not allowed") : "Needs you";
 
   return (
     <article className="flex min-h-full flex-col" aria-labelledby={`case-${txn.txnId}`}>
@@ -564,7 +586,7 @@ function CaseInner({
             </ul>
           )}
 
-          {fix === "approval" && !entry && (
+          {fix === "approval" && (
             <label className="mt-3 block max-w-[420px] text-sm text-ink-2">
               Funder approval reference (email, letter, date)
               <input
@@ -595,6 +617,11 @@ function CaseInner({
                 {primaryLabel}
                 <kbd className="ml-1 hidden rounded-[4px] border border-sheet/30 px-1 text-2xs font-normal sm:inline">A</kbd>
               </Button>
+              {fix === "approval" && entry && (
+                <Button disabled={!!blockedReason} busy={busy === "move"} onClick={() => approveEntryNow("move")}>
+                  {moveLabel}
+                </Button>
+              )}
               <Button variant="ghost" disabled={!!blockedReason} onClick={() => setOverrideOpen(true)}>
                 Override with a note
                 <kbd className="ml-1 hidden rounded-[4px] border border-rule px-1 text-2xs font-normal sm:inline">O</kbd>

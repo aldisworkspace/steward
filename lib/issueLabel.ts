@@ -19,9 +19,9 @@ export function issueLabel(ruleId: string | null | undefined, status: string): s
     case "R-PERIOD":
       return "Outside the grant period";
     case "R-PRIOR-APPROVAL":
-      return "Needs funder approval";
+      return blocked ? "No funder approval — can't bill yet" : "Needs funder approval";
     case "R-LINE-OVERRUN":
-      return "Over budget line";
+      return blocked ? "Over budget line — can't bill the excess" : "Over budget line";
     case "R-INDIRECT-RATE":
       return blocked ? "Indirect over the contract rate" : "Indirect doesn't match the rate";
     case "R-EFFORT":

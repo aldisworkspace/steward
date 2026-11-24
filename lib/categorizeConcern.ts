@@ -77,8 +77,10 @@ export function categorizeConcern(
         if (!clauseRefEquals(ref, p.clauseRef)) continue;
         return {
           ruleId: "R-PRIOR-APPROVAL",
-          // Missing prior approval is fixable with the funder; it is never "not allowed".
-          status: "needs_review",
+          // A purchase that needs the funder's prior approval can't be billed as booked until it is on file
+          // (blocked, with a way out: record the approval). A model that only asks whether approval applies
+          // (needs_review) stays a question.
+          status: concern.status === "blocked" ? "blocked" : "needs_review",
           message: concern.reason,
           evidence: [{ source: "contract", ref: p.clauseRef, note: p.rule }],
         };

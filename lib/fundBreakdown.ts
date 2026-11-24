@@ -40,11 +40,9 @@ function grantKeyFromId(grantId: string | null): string {
   return grantId ?? "general";
 }
 
-function segmentForOpen(
-  status: string,
-  ruleId: string | null | undefined,
-): "needs_you" | "not_allowed" {
-  return inboxCategory(ruleId, status) === "not_allowed" ? "not_allowed" : "needs_you";
+/** Money that can't be billed as booked follows the verified status (blocked), whatever the fix is. */
+function segmentForOpen(status: string): "needs_you" | "not_allowed" {
+  return status === "blocked" ? "not_allowed" : "needs_you";
 }
 
 function fmtDollars(cents: number): string {
@@ -107,7 +105,6 @@ export function computeFundBreakdown(args: {
   for (const t of outflows) {
     const d = byDecision.get(t.txnId);
     const status = d?.status ?? "auto";
-    const ruleId = d?.ruleHits[0] ?? null;
     const grantId = d?.grantId ?? null;
     const gk = grantKeyFromId(grantId);
     const cents = Math.abs(t.amountCents);
@@ -120,7 +117,7 @@ export function computeFundBreakdown(args: {
       cleanCents += cents;
       row.segmentCounts.clean += 1;
     } else {
-      const openSeg = segmentForOpen(status, ruleId);
+      const openSeg = segmentForOpen(status);
       row.segmentCounts[openSeg] += 1;
       if (openSeg === "not_allowed") {
         row.notAllowedCents += cents;

@@ -97,15 +97,24 @@ async function main() {
     assert.equal(cat.status, "needs_review");
     assert.equal(issueLabel(cat.ruleId, cat.status), "Needs documentation");
   });
-  await check("prior-approval clause is never a block", () => {
-    const cat = categorizeConcern(
+  // Status policy: a purchase that needs the funder's prior approval can't be billed as booked until it is on file
+  // (blocked, way out: record the approval). A model only asking whether approval applies stays a question.
+  await check("prior-approval clause: blocked when Steward says approval is missing, a question otherwise", () => {
+    const blockedCat = categorizeConcern(
       { status: "blocked", reason: "Equipment over threshold", clauseRef: "GA-2026-114 §5.1" },
       FIXTURE_GRANTS,
       bus,
       ["GA-2026-114"],
     );
-    assert.equal(cat.ruleId, "R-PRIOR-APPROVAL");
-    assert.equal(cat.status, "needs_review");
+    assert.equal(blockedCat.ruleId, "R-PRIOR-APPROVAL");
+    assert.equal(blockedCat.status, "blocked");
+    const question = categorizeConcern(
+      { status: "needs_review", reason: "Does this need approval?", clauseRef: "GA-2026-114 §5.1" },
+      FIXTURE_GRANTS,
+      bus,
+      ["GA-2026-114"],
+    );
+    assert.equal(question.status, "needs_review");
   });
 
   // --- narrative ----------------------------------------------------------

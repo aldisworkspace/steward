@@ -80,8 +80,10 @@ How to decide:
   duplicates, cumulative budget totals or line overruns — deterministic checks handle those across all rows.
 - Set a concern when the cost itself looks prohibited by the grant's unallowable list (alcohol, staff
   entertainment, fines, fundraising, lobbying...), when it is outside the grant period, when it needs prior
-  approval, or when its purpose genuinely does not fit any grant. Use "blocked" only when the grant terms
-  clearly prohibit it.
+  approval, or when its purpose genuinely does not fit any grant. Use "blocked" when the charge can't be billed as
+  booked: the grant terms clearly prohibit it (even only part of it, e.g. a glass of wine on an otherwise allowable
+  meal receipt: the whole line can't be claimed as booked), or it needs the funder's prior approval and none is on
+  file. Documentation gaps are never "blocked".
 - A prohibition concern needs positive evidence in the memo, receipt or account (e.g. "staff appreciation
   dinner", a bar tab, "gala"). Do not speculate that ordinary supplies or food "might have been for staff".
 - Every concern.reason must name the specific missing or contradicting fact and how it would change the coding

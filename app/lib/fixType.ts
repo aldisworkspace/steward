@@ -27,10 +27,14 @@ const AMOUNT = new Set([
 const APPROVAL = new Set(["R-PRIOR-APPROVAL", "R-LINE-OVERRUN"]);
 
 export function fixTypeOf(ruleId: string | null | undefined, status: string): FixType {
+  // Blocked because the funder hasn't approved it (prior approval, a line over its cap): the fix is the
+  // funder's approval, or moving the blocked portion off; grouped with approvals, not with prohibitions.
+  if (ruleId && APPROVAL.has(ruleId)) return "approval";
+  // Indirect above the computed amount: claim the computed amount (an amount fix).
+  if (ruleId === "R-INDIRECT-RATE") return "amount";
   if (status === "blocked" || ruleId === "R-PERIOD") return "not_allowed";
   if (ruleId && RECEIPT.has(ruleId)) return "receipt";
   if (ruleId && AMOUNT.has(ruleId)) return "amount";
-  if (ruleId && APPROVAL.has(ruleId)) return "approval";
   if (ruleId === "R-EFFORT") return "payroll";
   return "fund";
 }

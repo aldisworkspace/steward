@@ -55,12 +55,41 @@ export const UNALLOWABLE_TERM_PATTERNS: { id: string; txn: RegExp; termRule: Reg
     termRule: /lobby|legislat|advocacy|appropriations|influence/i, label: "lobbying" },
 ];
 
+/**
+ * Alcohol as it is itemised on a receipt (a bar tab or a meal receipt with a glass of wine). Only item names
+ * that are alcohol by themselves: "bar" and "ale" are left out because receipts print "granola bar", "ginger ale",
+ * and "root beer" / "ginger beer" are soft drinks.
+ */
+export const ALCOHOL_ITEM = /\b(wines?|(?<!root |ginger |birch )beers?|pinot|cabernet|merlot|chardonnay|sauvignon|riesling|malbec|zinfandel|ros[ée] wine|prosecco|champagne|cava|sangria|mimosa|margarita|cocktail|cocktails|martini|mojito|vodka|whisk(?:e)?y|bourbon|scotch|tequila|mezcal|rum|gin|liquor|ipa|lager|pilsner|stout|porter|hard (?:cider|seltzer)|sake|soju)\b/i;
+const ALCOHOL_TERM = /alcohol|liquor|wine|beer/i;
+
+/**
+ * The share of a charge that pays for alcohol itemised on its receipt, with its pro-rata share of tax and tip
+ * (alcohol items ÷ item subtotal × receipt total, then this line's share of a split receipt). Null when no
+ * item is alcohol; the whole line when the items carry no amounts to size it with.
+ */
+export function receiptAlcoholCents(t: Txn, cov: { receipt: ReceiptRecord; coveredCents: number } | undefined): { cents: number; items: string[] } | null {
+  const x = cov?.receipt.extracted;
+  if (!x || !cov) return null;
+  const hits = x.lineItems.filter((i) => ALCOHOL_ITEM.test(i.description));
+  if (!hits.length) return null;
+  const own = -t.amountCents;
+  const alcohol = hits.reduce((a, i) => a + Math.max(0, i.amountCents), 0);
+  const subtotal = x.lineItems.reduce((a, i) => a + Math.max(0, i.amountCents), 0);
+  const total = x.totalCents ?? cov.coveredCents;
+  if (alcohol <= 0 || subtotal <= 0 || total <= 0 || cov.coveredCents <= 0) return { cents: own, items: hits.map((i) => i.description) };
+  const onReceipt = Math.round((alcohol * total) / subtotal);
+  const cents = Math.min(own, Math.round((onReceipt * own) / cov.coveredCents));
+  return { cents, items: hits.map((i) => i.description) };
+}
+
 export function runRules(input: RuleInput): Finding[] {
   const { txns, gl, staff, grants, precedents, candidates } = input;
   const grantById = new Map(grants.map((g) => [g.grantId, g]));
   const txnById = new Map(txns.map((t) => [t.txnId, t]));
   const findings: Finding[] = [];
   const blockedOrDup = new Set<string>();
+  const coverage = receiptCoverage((input.receipts ?? []).filter((r) => r.extracted), txns);
 
   // R-DEPOSIT-MISMATCH: bank is the system of record for cash.
   for (const row of gl) {
@@ -109,6 +138,23 @@ export function runRules(input: RuleInput): Finding[] {
           suggestion: [{ grantId: null, budgetLine: null, amountCents: t.amountCents }] });
         break;
       }
+      // Alcohol itemised on the matched receipt (e.g. wine with an otherwise allowable meal): that share,
+      // with its tax and tip, can't be billed as booked → blocked, with the alcohol share moved off the grant.
+      const terms = g.unallowable.filter((u) => ALCOHOL_TERM.test(u.rule));
+      const alc = !blockedOrDup.has(t.txnId) && terms.length ? receiptAlcoholCents(t, coverage.get(t.txnId)) : null;
+      if (alc && alc.cents > 0) {
+        const own = -t.amountCents;
+        const whole = alc.cents >= own;
+        const r = coverage.get(t.txnId)!.receipt;
+        findings.push({ ruleId: "R-UNALLOWABLE-ALCOHOL_STAFF", txnId: t.txnId, status: "blocked",
+          message: `The receipt lists alcohol (${alc.items.join(", ")}). The ${g.program?.trim() || g.grantId} grant doesn't allow alcohol (${terms.map((u) => u.clauseRef).join("; ")}), even with an otherwise allowable meal, so ${whole ? "this charge" : `${usd(alc.cents)} of it (the alcohol with its share of tax and tip)`} can't be billed as booked. Move ${whole ? "it" : "that share"} to unrestricted funds.`,
+          evidence: [...terms.map<Evidence>((u) => ({ source: "contract", ref: u.clauseRef, note: u.rule })),
+                     { source: "receipt", ref: r.receiptId, note: receiptNote(r) }],
+          suggestion: whole
+            ? [{ grantId: null, budgetLine: null, amountCents: t.amountCents }]
+            : [{ grantId: c!.grantId, budgetLine: c!.budgetLine, amountCents: t.amountCents + alc.cents }, { grantId: null, budgetLine: null, amountCents: -alc.cents }],
+          exposureCents: alc.cents });
+      }
     }
 
     // R-PRIOR-APPROVAL: single purchases at or above a contract threshold.
@@ -117,10 +163,14 @@ export function runRules(input: RuleInput): Finding[] {
         if (pa.thresholdUsd == null || -t.amountCents < pa.thresholdUsd * 100) continue;
         if (/stipend|payout/i.test(text(t))) continue;
         const prior = precedents.filter((p) => p.scope === g.grantId && /prior approval/i.test(p.ruling));
-        findings.push({ ruleId: "R-PRIOR-APPROVAL", txnId: t.txnId, status: "needs_review",
-          message: `${usd(t.amountCents)} single purchase meets the ${usd(pa.thresholdUsd * 100)} prior-approval threshold (${pa.clauseRef}). No approval on file — request it from the funder before charging, or move to unrestricted.`,
+        // Can't be billed as booked until the funder approves: blocked, held off the grant meanwhile. The way out
+        // is to record the funder's written approval (a human resolution), which keeps the bookkeeper's coding.
+        findings.push({ ruleId: "R-PRIOR-APPROVAL", txnId: t.txnId, status: "blocked",
+          message: `${usd(t.amountCents)} single purchase meets the ${usd(pa.thresholdUsd * 100)} prior-approval threshold (${pa.clauseRef}). No approval on file, so it can't be billed yet. Record the funder's written approval, or move it to unrestricted funds.`,
           evidence: [{ source: "contract", ref: pa.clauseRef, note: pa.rule },
-                     ...prior.map<Evidence>((p) => ({ source: "precedent", ref: p.id, note: `${p.date} ${p.by}: ${p.ruling}` }))] });
+                     ...prior.map<Evidence>((p) => ({ source: "precedent", ref: p.id, note: `${p.date} ${p.by}: ${p.ruling}` }))],
+          suggestion: [{ grantId: null, budgetLine: null, amountCents: t.amountCents }],
+          exposureCents: -t.amountCents });
       }
     }
   }
@@ -177,9 +227,16 @@ export function runRules(input: RuleInput): Finding[] {
       for (const t of charged) {
         running += -t.amountCents;
         if (running > cap) {
-          findings.push({ ruleId: "R-LINE-OVERRUN", txnId: t.txnId, status: "needs_review",
-            message: `This charge takes ${g.grantId} line ${line.code} (${line.name}) to ${usd(running)} vs budget ${usd(line.amount * 100)} — over the ${g.lineVarianceLimitPct}% variance allowed without approval (cap ${usd(cap)}).`,
-            evidence: [{ source: "contract", ref: `${g.grantId} budget ${line.code}`, note: `budget ${usd(line.amount * 100)}, variance limit ${g.lineVarianceLimitPct}%` }] });
+          // Only the portion over the cap (budget + allowed variance) can't be billed without a budget revision.
+          const own = -t.amountCents;
+          const over = Math.min(own, running - cap);
+          findings.push({ ruleId: "R-LINE-OVERRUN", txnId: t.txnId, status: "blocked",
+            message: `This charge takes ${g.grantId} line ${line.code} (${line.name}) to ${usd(running)} vs budget ${usd(line.amount * 100)} — over the ${g.lineVarianceLimitPct}% variance allowed without approval (cap ${usd(cap)}). ${over >= own ? "This charge" : `${usd(over)} of it`} can't be billed without the funder's approval of a budget change. Record that approval, or move the excess to unrestricted funds.`,
+            evidence: [{ source: "contract", ref: `${g.grantId} budget ${line.code}`, note: `budget ${usd(line.amount * 100)}, variance limit ${g.lineVarianceLimitPct}%` }],
+            suggestion: over >= own
+              ? [{ grantId: null, budgetLine: null, amountCents: t.amountCents }]
+              : [{ grantId: g.grantId, budgetLine: line.code, amountCents: t.amountCents + over }, { grantId: null, budgetLine: null, amountCents: -over }],
+            exposureCents: over });
           break;
         }
       }
