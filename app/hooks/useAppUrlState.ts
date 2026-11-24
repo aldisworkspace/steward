@@ -99,6 +99,8 @@ export function useAppUrlState() {
     (mutate: (p: URLSearchParams) => void, mode: "replace" | "push" = "replace") => {
       const p = new URLSearchParams(searchParams.toString());
       mutate(p);
+      // The demo key is read once into local storage; never write it back into the address bar.
+      p.delete("key");
       const q = p.toString();
       const href = q ? `${pathname}?${q}` : pathname;
       if (mode === "push") router.push(href, { scroll: false });
