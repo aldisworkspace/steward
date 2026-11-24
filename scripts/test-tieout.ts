@@ -175,5 +175,20 @@ check("v2 GL July package builds and ties (bookkeeper coding, no review yet)", (
   console.log(`     July invoice ${p.invoiceTotalCents} cents; indirect ${p.indirect.computedCents} computed vs ${p.indirect.claimedCents} claimed; failing: ${p.checks.filter((c) => !c.pass).map((c) => c.id).join(", ")}`);
 });
 
+check("one receipt documents its whole split group (RECEIPTS passes for every row)", () => {
+  const i = base();
+  // One Costco purchase booked as two GL rows (same date, vendor, type, Num), one receipt for the total.
+  i.lines.push(gl("L8", "2026-07-20", "Costco", -9000, "C3", { docRef: "4471" }), gl("L9", "2026-07-20", "Costco", -8000, "C4", { docRef: "4471" }));
+  i.decisions = i.lines.map(auto);
+  const extracted = { vendor: "Costco", date: "2026-07-20", totalCents: 17000, lineItems: [], purposeText: null };
+  i.receipts = [...i.receipts, { receiptId: "R3", matchedTxnId: "L8", extracted }];
+  const c = get(buildPackage(i), "RECEIPTS");
+  assert.equal(c.pass, true, c.detail);
+  i.receipts = i.receipts.filter((r) => r.receiptId !== "R3").concat({ receiptId: "R3", matchedTxnId: "L8", extracted: { ...extracted, totalCents: 9000 } });
+  const single = get(buildPackage(i), "RECEIPTS");
+  assert.equal(single.pass, false, "a receipt for one row must not document its sibling");
+  assert.match(single.detail, /L9/);
+});
+
 if (failures) { console.log(`\n${failures} tie-out check(s) failed`); process.exit(1); }
 console.log("\nAll tie-out checks passed");

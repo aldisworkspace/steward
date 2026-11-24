@@ -7,7 +7,8 @@
  */
 import { issueLabel } from "./issueLabel";
 import { isPayrollTxn } from "./payrollMatch";
-import type { GrantTerms, Txn } from "./types";
+import { receiptCoverage } from "./matchReceipts";
+import type { GrantTerms, ReceiptExtract, Txn } from "./types";
 
 export const DEFAULT_RECEIPT_THRESHOLD = 75_00;
 
@@ -24,7 +25,9 @@ export interface TieOutDecision {
   rationale?: string;
 }
 export interface TieOutResolution { txnId: string; resolution: Resolution; by: string }
-export interface TieOutReceipt { receiptId: string; fileName?: string; matchedTxnId: string | null }
+export interface TieOutReceipt { receiptId: string; fileName?: string; matchedTxnId: string | null;
+  /** Extracted receipt (total) lets one receipt document a whole split group of GL rows. */
+  extracted?: ReceiptExtract | null }
 export interface PriorPackage {
   periodStart: string; periodEnd: string;
   status: "draft" | "ready_for_review" | "signed" | "exported";
@@ -121,7 +124,8 @@ export function buildPackage(input: BuildPackageInput): BillingPackage {
   const dById = new Map(input.decisions.map((d) => [d.txnId, d]));
   const rById = new Map(input.resolutions.map((r) => [r.txnId, r]));
   const receiptByTxn = new Map<string, TieOutReceipt>();
-  for (const r of input.receipts) if (r.matchedTxnId) receiptByTxn.set(r.matchedTxnId, r);
+  // A receipt documents its matched line, or the whole split group it was matched to (see receiptCoverage).
+  for (const [lineId, cov] of receiptCoverage(input.receipts, input.lines)) receiptByTxn.set(lineId, cov.receipt);
   const glFirst = input.lines.some((t) => t.source === "gl");
 
   const lines: PackageLine[] = [];
