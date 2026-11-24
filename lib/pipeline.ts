@@ -529,14 +529,15 @@ export function documentationWaiver(
 
 /**
  * Positive consistency for the materiality waiver. With no receipt and no memo there is nothing to contradict
- * (thin documentation, which materiality may skip). With a receipt or memo, the model must not report that it
+ * (thin documentation, which materiality may skip), whatever the model says. With a receipt or memo, the model must not report that it
  * contradicts the coding (evidenceFit "contradicts"); when it gives no evidenceFit, a concern raised with
  * confidence under 0.7 on a documented line means Steward could not reconcile the evidence with the coding.
  */
 export function materialityConsistent(t: Txn, c: Pick<Coding, "concern" | "confidence" | "evidenceFit">, cov: ReceiptCoverage<ReceiptRecord> | undefined): boolean {
-  if (c.evidenceFit === "contradicts") return false;
+  // Only a receipt or memo can contradict the coding; vendor history or a missing note cannot.
   const documented = !!cov || !!t.memo.trim();
   if (!documented) return true;
+  if (c.evidenceFit === "contradicts") return false;
   if (c.evidenceFit === "consistent" || c.evidenceFit === "thin") return true;
   return !c.concern || c.confidence >= 0.7;
 }

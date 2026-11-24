@@ -276,6 +276,7 @@ async function main() {
     const cov = { receipt: { receiptId: "RZ", fileName: "amz.pdf", extracted: rx("Amazon", "2026-08-12", 30314, ["Bluetooth speaker", "Desk organizer", "Soccer balls"]), matchedTxnId: "L0130", matchScore: 1, matchedBy: "auto" as const }, lineIds: ["L0130"], coveredCents: 14607 };
     const q = { status: "needs_review" as const, reason: "Receipt shows a speaker and a desk organizer", clauseRef: null };
     assert.equal(materialityConsistent(line, { concern: q, confidence: 0.75 }, undefined), true, "no receipt, no memo: thin");
+    assert.equal(materialityConsistent(line, { concern: q, confidence: 0.4, evidenceFit: "contradicts" }, undefined), true, "vendor history alone can't contradict");
     assert.equal(materialityConsistent(line, { concern: q, confidence: 0.55 }, cov), false, "documented + unsure concern");
     assert.equal(materialityConsistent(line, { concern: null, confidence: 0.9, evidenceFit: "contradicts" }, cov), false);
     assert.equal(materialityConsistent(line, { concern: q, confidence: 0.55, evidenceFit: "consistent" }, cov), true);

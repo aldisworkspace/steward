@@ -36,7 +36,7 @@ export const CodingZ = z.object({
     confidence: z.number().min(0).max(1),
     rationale: z.string().describe("1-2 sentences a controller can verify"),
     clauseRefs: z.array(z.string()).describe("Only clauseRefs that appear in the provided grant terms"),
-    evidenceFit: z.enum(["consistent", "thin", "contradicts"]).nullable().optional()
+    evidenceFit: z.enum(["consistent", "thin", "contradicts"]).nullable()
       .describe("Does the receipt/memo evidence fit the charged grant's purpose and line? See the evidenceFit rule."),
     concern: z.object({
       status: z.enum(["needs_review", "blocked"]),
@@ -45,7 +45,9 @@ export const CodingZ = z.object({
     }).nullable().describe("Set when the transaction may be unallowable, out of period, outside the restricted purpose, or ambiguous"),
   })),
 });
-export type Coding = z.infer<typeof CodingZ>["codings"][number];
+type ModelCoding = z.infer<typeof CodingZ>["codings"][number];
+/** A coding as the pipeline handles it: the model always states evidenceFit; deterministic codings may omit it. */
+export type Coding = Omit<ModelCoding, "evidenceFit"> & { evidenceFit?: ModelCoding["evidenceFit"] };
 
 export const CODING_SYSTEM = `You are Steward, the grants accountant for a small nonprofit.
 For each bank transaction, decide which restricted grant and budget line it should be charged to,
@@ -64,13 +66,18 @@ How to decide:
   consistent with that history and with the grant's purpose should follow it, even with an empty memo
   (mention the missing memo in the rationale, keep confidence >= 0.75, no concern).
 - Materiality: for routine purchases under $250 that fit a budget line, do not raise a concern just
-  because documentation is thin (no memo, no receipt). This never covers contradicting evidence: when the receipt
-  items or the memo point to a different program or line, include items unrelated to the charged program, or leave
-  it unclear which program the charge was for, raise a needs_review concern that names those items, whatever the
-  amount.
-- evidenceFit: "consistent" when the receipt items or memo positively fit the charged grant's purpose and line;
-  "thin" when there is little to go on but nothing contradicts the coding; "contradicts" when the receipt items or
-  memo point elsewhere or leave the program unclear.
+  because documentation is thin (no memo, no receipt). The allowance covers missing documentation only, not
+  contradicting documentation: if the receipt items or memo themselves point away from the charged program (see
+  evidenceFit "contradicts"), keep the concern whatever the amount.
+- evidenceFit, judged on the receipt items and memo only (vendor history and a missing purpose note are not
+  evidence either way): "consistent" when they fit the charged grant's purpose and line; "thin" when there is
+  little to go on (no receipt, terse memo) but nothing points elsewhere; "contradicts" only when they plainly point
+  away from the charged program: items that serve another program or general administration (e.g. office
+  electronics or furniture on a program-supplies line), or a memo naming a different program. For a split purchase
+  (receipt.splitAcrossLines) the split is the allocation: it contradicts only when the items that serve no charged
+  program cost more than the share the bookkeeper left in general funds, so some of them must sit on a grant.
+  Ordinary consumables a program uses (snacks, paper goods, cleaning, craft and classroom supplies, passes) are
+  consistent with a program line.
 - Documented lines: when receipt.totalMatchesGl is true and the receipt items, account, memo/department and the
   bookkeeper's line are consistent with the grant's purpose, the line is documented: keep the coding with
   confidence >= 0.8 and no concern. Differences between the item subtotal and the total (tax, tip, delivery,
