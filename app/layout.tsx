@@ -1,24 +1,20 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Newsreader, Public_Sans } from "next/font/google";
+import { Geist, Newsreader } from "next/font/google";
 import "./globals.css";
 
-const publicSans = Public_Sans({
-  variable: "--font-public-sans",
+// App UI: Geist (shared with the landing) for interface and tabular money.
+const geist = Geist({
+  variable: "--font-geist",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
   display: "swap",
 });
 
+// Display moments and verbatim contract quotes; italic carries the accent word.
 const newsreader = Newsreader({
   variable: "--font-newsreader",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
-});
-
-const bricolage = Bricolage_Grotesque({
-  variable: "--font-bricolage",
-  subsets: ["latin"],
-  weight: ["600", "700"],
+  weight: ["400", "500"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 
@@ -35,7 +31,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${publicSans.variable} ${newsreader.variable} ${bricolage.variable} h-full`}>
+    <html lang="en" className={`${geist.variable} ${newsreader.variable} h-full`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
